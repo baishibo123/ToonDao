@@ -89,10 +89,47 @@ export async function errorDetail(res: Response): Promise<string> {
   }
 }
 
+/**
+ * A failed `fetch` from a browser is deliberately opaque: the same "Failed to
+ * fetch" covers nothing listening on the port, DNS failure, TLS refusal, and a
+ * CORS preflight rejection. The browser will not tell us which, so this message
+ * does not pretend to know — it names the two or three real possibilities, most
+ * likely first, and includes the port so it can be checked directly.
+ */
 export function asProviderError(err: unknown, url: string): ProviderError {
   if (err instanceof DOMException && err.name === "AbortError") throw err;
   const reason = err instanceof Error ? err.message : String(err);
+
+  let host = "";
+  let port = "";
+  let isLocal = false;
+  try {
+    const parsed = new URL(url);
+    host = parsed.hostname;
+    port = parsed.port || (parsed.protocol === "https:" ? "443" : "80");
+    isLocal = host === "localhost" || host === "127.0.0.1" || host === "[::1]";
+  } catch {
+    /* keep the generic message below */
+  }
+
+  const causes = isLocal
+    ? [
+        `nothing is listening on port ${port}`,
+        "the server is running but does not send CORS headers for a browser client",
+      ]
+    : [
+        "the base URL is wrong",
+        "the endpoint does not send CORS headers for a browser client",
+        "the network or TLS handshake failed",
+      ];
+
+  const hint = isLocal
+    ? port === "8787"
+      ? " To start the bundled dev server: npm run dev:mock"
+      : " Check that your local runtime is up and serving an OpenAI-compatible API at this base URL."
+    : "";
+
   return new ProviderError(
-    `Could not reach ${url} (${reason}). Check the base URL, and that the endpoint sends CORS headers for a browser client.`,
+    `Could not reach ${url} — ${reason}. A browser cannot tell these apart, so it is one of: ${causes.join("; ")}.${hint}`,
   );
 }

@@ -48,12 +48,51 @@ function assembleContext(node) {
 
 Reply #N paragraph six mentions the model one last time and then stops.`;
 
+const LANDING_PAGE = `<!doctype html>
+<meta charset="utf-8">
+<title>ToonDao mock LLM</title>
+<style>
+  body { font: 15px/1.6 ui-sans-serif, system-ui, sans-serif; max-width: 34rem;
+         margin: 12vh auto; padding: 0 1.5rem; color: #201c18; }
+  code { font: 13px ui-monospace, Menlo, monospace; background: #f1ece4;
+         padding: .1em .35em; border-radius: 4px; }
+  a { color: #2b6cb0; }
+  .note { color: #5f574e; }
+  pre { background: #f7f4ef; padding: .8rem 1rem; border-radius: 8px;
+        overflow-x: auto; font: 13px ui-monospace, Menlo, monospace; }
+</style>
+<h1>This is the mock LLM, not the app.</h1>
+<p>You have reached the fake model provider. It only answers
+<code>POST</code> requests, and it has nothing to show a browser.</p>
+<p><strong>The app is at <a href="http://localhost:5173">localhost:5173</a></strong>
+— started separately, in another terminal:</p>
+<pre>npm run dev</pre>
+<p class="note">Both need to be running: <code>npm run dev</code> serves the UI,
+this server stands in for the model. In the app: <b>Settings &rarr; Provider
+&rarr; Active &rarr; &ldquo;Mock server (dev, no key)&rdquo;</b>${
+  PORT === 8787
+    ? " &mdash; already pointed here, nothing to edit."
+    : `, then set its Base URL to <code>http://localhost:${PORT}/v1</code>.`
+}</p>
+<p class="note">If <code>npm run dev</code> printed a different port because 5173
+was taken, use the one it printed.</p>
+`;
+
 let counter = 0;
 
 const server = createServer((req, res) => {
   if (req.method === "OPTIONS") {
     res.writeHead(204, CORS);
     res.end();
+    return;
+  }
+
+  // This server is a stand-in for the *model provider*, not for the app. Opening
+  // it in a browser is an easy mistake to make, so say so instead of streaming a
+  // wall of SSE frames at whoever did.
+  if (req.method !== "POST") {
+    res.writeHead(200, { ...CORS, "Content-Type": "text/html; charset=utf-8" });
+    res.end(LANDING_PAGE);
     return;
   }
 
@@ -111,8 +150,19 @@ server.on("error", (err) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`mock llm listening on http://localhost:${PORT}`);
-  console.log(`request log: ${LOG}`);
+  console.log(`Mock LLM listening on http://localhost:${PORT}`);
+  console.log(`Request log:      ${LOG}`);
+  console.log("");
+  console.log("This is the model provider stand-in, not the app.");
+  console.log("Run `npm run dev` in another terminal and open that URL instead");
+  console.log("(usually http://localhost:5173).");
+  console.log("");
+  console.log("Then: Settings -> Provider -> Active -> \"Mock server (dev, no key)\"");
+  console.log(
+    PORT === 8787
+      ? "  (already pointed at http://localhost:8787/v1 — nothing to edit)"
+      : `  then set its Base URL to http://localhost:${PORT}/v1`,
+  );
 });
 
 function safeParse(text) {

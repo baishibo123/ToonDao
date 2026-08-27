@@ -3,6 +3,7 @@ import type {
   Conversation,
   ConversationNode,
   PromptTemplate,
+  ProviderConfig,
   Settings,
   TemplateId,
   TemplateSet,
@@ -64,10 +65,25 @@ export const DEFAULT_SETTINGS: Settings = {
       id: "local",
       kind: "openai-compatible",
       label: "Local / relay (中转)",
+      // Ollama's default. llama.cpp is :8080, LM Studio :1234, vLLM :8000 —
+      // all OpenAI-compatible, so only the base URL changes.
       baseUrl: "http://localhost:11434/v1",
       apiKey: "",
       model: "llama3.1",
       knownModels: [],
+    },
+    {
+      // Pre-wired for `npm run dev:mock`. Present so that trying the app
+      // without a key is "pick this provider" and nothing else — telling
+      // someone to select a preset and *also* retype its base URL is one
+      // un-obvious step away from a bare "failed to fetch".
+      id: "mock",
+      kind: "openai-compatible",
+      label: "Mock server (dev, no key)",
+      baseUrl: "http://localhost:8787/v1",
+      apiKey: "",
+      model: "mock-1",
+      knownModels: ["mock-1"],
     },
   ],
   activeProviderId: "openai",
@@ -97,9 +113,39 @@ export async function ensureSeeded(): Promise<void> {
       await db.settings.put(DEFAULT_SETTINGS);
     } else {
       // Fill in fields added by a later version without clobbering user edits.
-      await db.settings.put({ ...DEFAULT_SETTINGS, ...settings });
+      // `providers` needs a per-id merge rather than the shallow spread: the
+      // stored array would otherwise replace the defaults wholesale, so a
+      // preset added in a later version could never reach an existing profile.
+      await db.settings.put({
+        ...DEFAULT_SETTINGS,
+        ...settings,
+        providers: mergeProviders(settings.providers ?? []),
+      });
     }
   });
+}
+
+/**
+ * Keep every provider the user has (with their edited URLs, keys and models),
+ * add any default preset they do not have yet, and preserve the default
+ * ordering so the list does not reshuffle between versions.
+ */
+export function mergeProviders(stored: ProviderConfig[]): ProviderConfig[] {
+  const byId = new Map(stored.map((provider) => [provider.id, provider]));
+  const merged: ProviderConfig[] = [];
+  for (const preset of DEFAULT_SETTINGS.providers) {
+    const existing = byId.get(preset.id);
+    merged.push(
+      existing
+        ? // Adopt new knownModels, but never overwrite what the user typed.
+          { ...preset, ...existing, knownModels: existing.knownModels?.length ? existing.knownModels : preset.knownModels }
+        : preset,
+    );
+    byId.delete(preset.id);
+  }
+  // Anything the user added themselves keeps its place at the end.
+  for (const custom of byId.values()) merged.push(custom);
+  return merged;
 }
 
 export async function loadTemplateSet(): Promise<TemplateSet> {

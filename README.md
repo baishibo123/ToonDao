@@ -23,9 +23,12 @@ Add a provider base URL and key in Settings and you are running.
 npm run dev:mock
 ```
 
-Starts a tiny OpenAI-compatible SSE server on `localhost:8787`. Point the
-"Local / relay (中转)" provider at `http://localhost:8787/v1` and everything
-works — streaming, all four gestures, the tree. It speaks the real wire format,
+Starts a tiny OpenAI-compatible SSE server on `localhost:8787`. Then in the app:
+**Settings → Provider → Active → "Mock server (dev, no key)"**. That preset is
+already pointed at `http://localhost:8787/v1`, so there is nothing to edit and
+no key to enter — streaming, all four gestures and the tree all work.
+
+It speaks the real wire format,
 so it exercises the actual adapter rather than a mock inside the app, and it
 appends every request body to `dev/requests.jsonl`. That log is how the
 acceptance scenarios in this repo were checked: you can read it to confirm that
