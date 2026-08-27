@@ -34,6 +34,8 @@ const GESTURE_COPY: Record<
 export function Composer() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [text, setText] = useState("");
+  /** null means "whatever this branch inherits" (§8 P3). */
+  const [modelOverride, setModelOverride] = useState<string | null>(null);
 
   const conversationId = useStore((s) => s.conversationId);
   const activeNodeId = useStore((s) => s.activeNodeId);
@@ -44,6 +46,9 @@ export function Composer() {
   const assemble = useStore((s) => s.assemble);
   const templates = useStore((s) => s.templates);
   const systemPrompt = useStore((s) => s.settings.systemPrompt);
+  const modelForBranch = useStore((s) => s.modelForBranch);
+  const providers = useStore((s) => s.settings.providers);
+  const activeProviderId = useStore((s) => s.settings.activeProviderId);
 
   const pending = useUI((s) => s.pending);
   const setPending = useUI((s) => s.setPending);
@@ -101,6 +106,24 @@ export function Composer() {
     return () => window.removeEventListener("resize", fit);
   }, [text]);
 
+  const inheritedModel = modelForBranch(plan.parentId);
+  const provider = providers.find((p) => p.id === activeProviderId);
+  const modelOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const name of [
+      ...(provider?.knownModels ?? []),
+      ...(provider ? [provider.model] : []),
+      ...(inheritedModel ? [inheritedModel] : []),
+    ]) {
+      if (name && !seen.has(name)) {
+        seen.add(name);
+        out.push(name);
+      }
+    }
+    return out;
+  }, [provider, inheritedModel]);
+
   const send = () => {
     if (!sendable) return;
     void submit({
@@ -108,9 +131,11 @@ export function Composer() {
       parentId: plan.parentId,
       policy: plan.policy,
       origin: plan.origin,
+      ...(modelOverride ? { model: modelOverride } : {}),
     });
     setText("");
     setPending(null);
+    setModelOverride(null);
   };
 
   const gesture = pending ? GESTURE_COPY[pending.kind] : null;
@@ -235,6 +260,28 @@ export function Composer() {
 
           {plan.forks ? (
             <span className="msg__branchcount">branches off the source message</span>
+          ) : null}
+
+          {modelOptions.length > 0 ? (
+            <label className="modelpick" title="Model for this branch onwards">
+              <span className="modelpick__label">model</span>
+              <select
+                className="modelpick__select"
+                value={modelOverride ?? ""}
+                onChange={(e) => setModelOverride(e.target.value || null)}
+              >
+                <option value="">
+                  {inheritedModel ? `${inheritedModel} (inherited)` : "provider default"}
+                </option>
+                {modelOptions
+                  .filter((name) => name !== inheritedModel)
+                  .map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+              </select>
+            </label>
           ) : null}
 
           <span className="composer__hint">

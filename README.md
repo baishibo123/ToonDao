@@ -50,8 +50,10 @@ user cannot see what the model sees, the premise collapses.
 | `src/lib/draft.ts` | **The only place a `ContextPolicy` is constructed for a new node.** Gesture → policy, one mapping. |
 | `src/components/Markdown.tsx` | Block-anchored renderer. Emits the `data-src-*` attributes `anchor.ts` reads back. |
 | `src/lib/templates.ts` | Seed templates. User-editable, stored in IndexedDB, never read from a call site. |
+| `src/lib/treeLayout.ts` | Turn grouping and d3-hierarchy layout for the floating tree. Pure. |
+| `src/lib/transfer.ts` | JSON export/import with full tree fidelity. |
 | `src/providers/` | One `Provider` interface; OpenAI-compatible and native Anthropic adapters behind it. |
-| `test/` | 95 tests. Acceptance scenarios from §9 of the spec are asserted against assembled payloads. |
+| `test/` | 153 tests. Acceptance scenarios from §9 are asserted against assembled payloads, not vibes. |
 
 Two invariants worth preserving, both checkable with grep:
 
@@ -165,6 +167,50 @@ threading it through a module-level variable would break purity, so it arrives a
 quote is rendered "as a `>` blockquote".** §4 wins — it is the section that
 defines the templates, and a blockquote is what the gesture it borrows from
 looks like.
+
+---
+
+**An export never contains an API key.** Export files get put in Dropbox and
+attached to issues. Base URLs and model names do come along, so an import is one
+paste away from working again.
+
+**An id collision rewrites the whole import together, not the colliding parts.**
+Partially remapping would silently re-parent nodes onto the wrong tree, which is
+precisely the corruption a data-fidelity feature must not introduce. When
+anything collides, every id in the bundle is given a fresh one and the tree
+shape is preserved intact.
+
+**Keyboard shortcuts are modified with Shift as well as Cmd/Ctrl.** The
+unshifted combinations belong to the browser — ⌘T opens a tab, ⌘N a window. A
+shortcut that has to fight the browser is not a shortcut.
+
+**A per-branch model override is stored on the user node and inherited by
+walking up the lineage.** That is what makes it per-*branch*: a branch made
+under a node that switched models keeps that model, a branch made above it does
+not, and everything else falls through to the provider default.
+
+**A click on a rendered link does not open the selection toolbar.** §5.1 asks
+for click-to-term on assistant messages, but a toolbar covering a link makes
+rendered links unusable, and §5.5 asks that ordinary use stay ordinary.
+
+---
+
+## Keyboard
+
+| | |
+|---|---|
+| `Enter` / `Shift+Enter` | Send / newline |
+| `Esc` | Drop the pending gesture, then close whatever is open, then stop generating |
+| `⌘⇧T` | Show/hide the tree |
+| `⌘⇧N` | New conversation |
+| `⌘⇧I` | Inspect the payload of the current message |
+| `⌘⇧,` | Settings |
+| `⌥↑` / `⌥↓` | Previous / next sibling branch |
+| `⌥⌫` | Stop generating |
+| `?` | Shortcut list |
+
+Inside the tree panel, arrow keys walk parent/child/sibling and `Enter`
+navigates to a card.
 
 ---
 

@@ -46,6 +46,9 @@ interface UIState {
   settingsOpen: boolean;
   setSettingsOpen: (open: boolean) => void;
 
+  shortcutsOpen: boolean;
+  setShortcutsOpen: (open: boolean) => void;
+
   treeOpen: boolean;
   setTreeOpen: (open: boolean) => void;
 
@@ -91,6 +94,9 @@ export const useUI = create<UIState>((set, get) => ({
 
   settingsOpen: false,
   setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
+
+  shortcutsOpen: false,
+  setShortcutsOpen: (shortcutsOpen) => set({ shortcutsOpen }),
 
   treeOpen: true,
   setTreeOpen: (treeOpen) => set({ treeOpen }),

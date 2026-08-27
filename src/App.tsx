@@ -9,6 +9,8 @@ import { SelectionPopover } from "@/components/SelectionPopover";
 import { TreePanel } from "@/components/tree/TreePanel";
 import { useSelectionWatcher } from "@/hooks/useSelectionWatcher";
 import { useTermHover } from "@/hooks/useTermHover";
+import { useShortcuts } from "@/hooks/useShortcuts";
+import { Shortcuts } from "@/components/Shortcuts";
 
 export default function App() {
   const ready = useStore((s) => s.ready);
@@ -18,23 +20,15 @@ export default function App() {
   const conversationId = useStore((s) => s.conversationId);
   const conversations = useStore((s) => s.conversations);
   const renameConversation = useStore((s) => s.renameConversation);
-  const setSettingsOpen = useUI((s) => s.setSettingsOpen);
-  const settingsOpen = useUI((s) => s.settingsOpen);
+  const setShortcutsOpen = useUI((s) => s.setShortcutsOpen);
 
   useSelectionWatcher();
   useTermHover();
+  useShortcuts();
 
   useEffect(() => {
     void init();
   }, [init]);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && settingsOpen) setSettingsOpen(false);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [settingsOpen, setSettingsOpen]);
 
   if (!ready) return <div className="boot">opening…</div>;
 
@@ -64,6 +58,15 @@ export default function App() {
           <span className="topbar__meta">
             {nodeCount} node{nodeCount === 1 ? "" : "s"}
           </span>
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm"
+            onClick={() => setShortcutsOpen(true)}
+            title="Keyboard shortcuts (?)"
+            aria-label="Keyboard shortcuts"
+          >
+            ?
+          </button>
         </header>
         <Transcript />
         <Composer />
@@ -71,6 +74,7 @@ export default function App() {
       <TreePanel />
       <SelectionPopover />
       <Settings />
+      <Shortcuts />
     </div>
   );
 }

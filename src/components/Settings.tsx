@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useStore } from "@/store/useStore";
 import { useUI } from "@/store/useUI";
 import type { ProviderConfig } from "@/types";
+import { TemplateEditor } from "@/components/TemplateEditor";
+import { DataPane } from "@/components/DataPane";
 
 export function Settings() {
   const open = useUI((s) => s.settingsOpen);
@@ -221,6 +223,16 @@ export function Settings() {
                 Adjustable per use in the popover before sending.
               </p>
             </div>
+          </section>
+
+          <section className="pane">
+            <h3 className="pane__title">Prompt templates</h3>
+            <TemplateEditor />
+          </section>
+
+          <section className="pane">
+            <h3 className="pane__title">Your data</h3>
+            <DataPane />
           </section>
         </div>
       </div>

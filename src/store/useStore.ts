@@ -16,6 +16,7 @@ import { DEFAULT_TEMPLATES } from "@/lib/templates";
 import { assembleContext, formatPayload } from "@/lib/assembleContext";
 import { createProvider } from "@/providers";
 import { newId } from "@/lib/id";
+import { buildBundle, parseBundle } from "@/lib/transfer";
 import { deepestLeaf, rootsOf, subtreeIds, type NodeMap } from "@/lib/tree";
 
 export interface SubmitRequest {
@@ -24,6 +25,8 @@ export interface SubmitRequest {
   parentId: NodeId | null;
   policy: ContextPolicy;
   origin: BranchOrigin | null;
+  /** Per-branch model override. Absent means inherit from the branch. */
+  model?: string;
 }
 
 interface AppState {
@@ -61,6 +64,13 @@ interface AppState {
   updateSettings: (patch: Partial<Settings>) => Promise<void>;
   updateTemplate: (id: TemplateId, body: string) => Promise<void>;
   resetTemplate: (id: TemplateId) => Promise<void>;
+
+  exportAll: () => Promise<string>;
+  exportConversation: (id: string) => Promise<string>;
+  importBundle: (raw: string) => Promise<{ conversations: number; nodes: number; remapped: boolean }>;
+
+  /** Model for the next send, inherited down the branch (§8 P3). */
+  modelForBranch: (nodeId: NodeId | null) => string | undefined;
 
   nodeStore: () => NodeStore;
   assemble: (node: ConversationNode) => ChatMessage[];
@@ -222,6 +232,9 @@ export const useStore = create<AppState>((set, get) => ({
       status: "complete",
       origin: request.origin,
       contextPolicy: request.policy,
+      // The override is recorded on the user node, which is what makes it
+      // per-*branch* rather than global: descendants inherit it by walking up.
+      ...(request.model ? { model: request.model } : {}),
     };
 
     await commitNode(set, get, userNode);
@@ -240,6 +253,7 @@ export const useStore = create<AppState>((set, get) => ({
       preview,
       origin: { kind: "continuation", sourceNodeId: userNode.id },
       policy: request.policy,
+      model: request.model ?? get().modelForBranch(request.parentId),
     });
 
     await touchConversation(set, get, conversationId, request.text);
@@ -260,6 +274,8 @@ export const useStore = create<AppState>((set, get) => ({
       preview: parent.assembledPreview ?? formatPayload(messages),
       origin: { kind: "regenerate", sourceNodeId: assistantNodeId },
       policy: parent.contextPolicy,
+      // A retry re-asks the same question, so it re-uses the same model.
+      model: target.model ?? get().modelForBranch(parent.id),
     });
   },
 
@@ -318,6 +334,90 @@ export const useStore = create<AppState>((set, get) => ({
   resetTemplate: async (id) => {
     await get().updateTemplate(id, DEFAULT_TEMPLATES[id]);
   },
+
+  /**
+   * Walk up the lineage for the nearest recorded model. A branch made under a
+   * node that overrode the model keeps that model; a branch made above it does
+   * not. Falling through to the provider default is the ordinary case.
+   */
+  modelForBranch: (nodeId) => {
+    const { nodes, settings } = get();
+    let cursor = nodeId;
+    const seen = new Set<NodeId>();
+    while (cursor) {
+      if (seen.has(cursor)) break;
+      seen.add(cursor);
+      const node: ConversationNode | undefined = nodes[cursor];
+      if (!node) break;
+      if (node.role === "user" && node.model) return node.model;
+      cursor = node.parentId;
+    }
+    return settings.providers.find((p) => p.id === settings.activeProviderId)?.model;
+  },
+
+  exportAll: async () => {
+    const [conversations, nodes, templates] = await Promise.all([
+      db.conversations.toArray(),
+      db.nodes.toArray(),
+      loadTemplateSet(),
+    ]);
+    return JSON.stringify(
+      buildBundle({ conversations, nodes, templates, settings: get().settings }),
+      null,
+      2,
+    );
+  },
+
+  exportConversation: async (id) => {
+    const [conversation, nodes, templates] = await Promise.all([
+      db.conversations.get(id),
+      db.nodes.where("conversationId").equals(id).toArray(),
+      loadTemplateSet(),
+    ]);
+    return JSON.stringify(
+      buildBundle({
+        conversations: conversation ? [conversation] : [],
+        nodes,
+        templates,
+        settings: get().settings,
+      }),
+      null,
+      2,
+    );
+  },
+
+  importBundle: async (raw) => {
+    const [existingConversations, existingNodes] = await Promise.all([
+      db.conversations.toCollection().primaryKeys(),
+      db.nodes.toCollection().primaryKeys(),
+    ]);
+    const parsed = parseBundle(raw, {
+      conversations: new Set(existingConversations.map(String)),
+      nodes: new Set(existingNodes.map(String)),
+    });
+
+    await db.transaction("rw", db.conversations, db.nodes, db.templates, async () => {
+      await db.conversations.bulkPut(parsed.conversations);
+      await db.nodes.bulkPut(parsed.nodes);
+      for (const [id, body] of Object.entries(parsed.templates)) {
+        if (body) await db.templates.put({ id: id as TemplateId, body, updatedAt: Date.now() });
+      }
+    });
+
+    const [conversations, templates] = await Promise.all([
+      db.conversations.orderBy("updatedAt").reverse().toArray(),
+      loadTemplateSet(),
+    ]);
+    set({ conversations, templates });
+    if (parsed.conversations[0]) {
+      await get().selectConversation(parsed.conversations[0].id);
+    }
+    return {
+      conversations: parsed.conversations.length,
+      nodes: parsed.nodes.length,
+      remapped: parsed.remapped,
+    };
+  },
 }));
 
 /* ------------------------------------------------------------------ */
@@ -334,6 +434,8 @@ interface StreamRequest {
   preview: string;
   origin: BranchOrigin;
   policy: ContextPolicy;
+  /** Resolved per-branch model; falls back to the provider default. */
+  model?: string;
 }
 
 /** Persist mid-stream at most this often, so a crash loses at most this much. */
@@ -350,7 +452,7 @@ async function runStream(set: Setter, get: Getter, req: StreamRequest): Promise<
     childrenIds: [],
     role: "assistant",
     content: "",
-    model: config?.model,
+    model: req.model ?? config?.model,
     createdAt: Date.now(),
     status: "streaming",
     origin: req.origin,
@@ -386,7 +488,7 @@ async function runStream(set: Setter, get: Getter, req: StreamRequest): Promise<
   try {
     const provider = createProvider(config);
     for await (const delta of provider.streamChat(req.messages, {
-      model: config.model,
+      model: req.model ?? config.model,
       temperature: settings.temperature,
       maxTokens: settings.maxTokens,
       signal: controller.signal,
