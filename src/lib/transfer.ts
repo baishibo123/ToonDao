@@ -280,6 +280,14 @@ function parseOrigin(
   };
 }
 
+/**
+ * Reconstruct a policy from an export file.
+ *
+ * This is deserialization, not authoring: `planSubmission()` in draft.ts stays
+ * the only place a policy is *chosen* for a new node. Anything unrecognised
+ * degrades to full-ancestry rather than throwing, so one field invented by a
+ * future version cannot cost the user their conversation.
+ */
 function parsePolicy(
   value: unknown,
   mapNode: (id: string) => string,

@@ -57,11 +57,35 @@ user cannot see what the model sees, the premise collapses.
 
 Two invariants worth preserving, both checkable with grep:
 
-- `assembleContext()` is the sole constructor of prompts. No component builds a
-  message array.
-- `planSubmission()` in `draft.ts` is the sole constructor of policies for new
-  nodes. The composer, the selection toolbar and the concept popover all route
+- **`assembleContext()` is the sole constructor of prompts.** No component builds
+  a message array.
+  ```bash
+  grep -rnE "ChatMessage\[\]|role: \"(user|assistant|system)\"" src
+  ```
+  Every surviving hit should be one of: `assembleContext.ts` itself; a provider
+  adapter reshaping an already-assembled array for its vendor's wire format; a
+  type annotation; or `parsePayload()`, which renders a *stored* preview in the
+  inspector and is display-only.
+
+- **`planSubmission()` in `draft.ts` is the sole constructor of policies for new
+  nodes.** The composer, the selection toolbar and the concept popover all route
   through it, so they cannot drift into inventing policies of their own.
+  ```bash
+  grep -rnE "kind: \"(full-ancestry|windowed|truncated|isolated|quoted)\"" src
+  ```
+  Hits outside `draft.ts` should only be `transfer.ts`, which *deserializes*
+  policies from an export file rather than choosing them.
+
+## Running the tests
+
+```bash
+npm test
+```
+
+`test/acceptance.test.ts` is the §9 checklist, one `describe` per scenario, each
+asserted against the payload `assembleContext()` actually produces. Scenario 5
+(anchor integrity) lives in `test/anchor.dom.test.tsx`, where it is driven
+through real DOM Ranges over the real renderer.
 
 ---
 

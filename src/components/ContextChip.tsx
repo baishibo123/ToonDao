@@ -109,7 +109,14 @@ export function Inspector({ policy, messages, historical }: InspectorProps) {
   );
 }
 
-/** Inverse of formatPayload(). Kept next to its use so the two stay in step. */
+/**
+ * Inverse of formatPayload(), for rendering a stored `assembledPreview`.
+ *
+ * DISPLAY ONLY. This produces ChatMessage-shaped values for the inspector to
+ * lay out; it is not a prompt and must never be handed to a provider.
+ * assembleContext() is the only thing allowed to build a payload that gets sent
+ * (§12). Kept next to its use so the two stay in step.
+ */
 export function parsePayload(text: string): ChatMessage[] {
   if (!text.trim()) return [];
   return text
