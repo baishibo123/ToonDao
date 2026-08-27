@@ -30,3 +30,6 @@ out/
 .vite/
 coverage/
 *.tsbuildinfo
+
+# Mock server request log
+dev/requests.jsonl

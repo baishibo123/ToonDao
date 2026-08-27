@@ -17,6 +17,20 @@ npm run dev
 No backend, no auth, no accounts. Everything lives in IndexedDB in your browser.
 Add a provider base URL and key in Settings and you are running.
 
+### Trying it without a key
+
+```bash
+npm run dev:mock
+```
+
+Starts a tiny OpenAI-compatible SSE server on `localhost:8787`. Point the
+"Local / relay (中转)" provider at `http://localhost:8787/v1` and everything
+works — streaming, all four gestures, the tree. It speaks the real wire format,
+so it exercises the actual adapter rather than a mock inside the app, and it
+appends every request body to `dev/requests.jsonl`. That log is how the
+acceptance scenarios in this repo were checked: you can read it to confirm that
+the payload the context inspector claims is the payload that actually went out.
+
 ---
 
 ## The two graphs
