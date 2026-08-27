@@ -25,3 +25,8 @@ dist/
 build/
 out/
 .cache/
+
+# Vite / test
+.vite/
+coverage/
+*.tsbuildinfo

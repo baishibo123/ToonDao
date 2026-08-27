@@ -1,0 +1,561 @@
+import { describe, expect, it } from "vitest";
+import { assembleContext, asProse, lineageChain } from "@/lib/assembleContext";
+import { DEFAULT_TEMPLATES } from "@/lib/templates";
+import { TreeFixture } from "./helpers";
+import type { TemplateSet } from "@/types";
+
+const T: TemplateSet = DEFAULT_TEMPLATES;
+
+describe("full-ancestry", () => {
+  it("walks parentId to root and reverses", () => {
+    const t = new TreeFixture();
+    t.linear(3);
+    const leaf = t.all().at(-1)!;
+    const next = t.add("user", "question turn 4", leaf.id);
+
+    const msgs = assembleContext(next, t, T);
+    expect(msgs.map((m) => m.role)).toEqual([
+      "user", "assistant", "user", "assistant", "user", "assistant", "user",
+    ]);
+    expect(msgs.at(0)!.content).toBe("question turn 1");
+    expect(msgs.at(-1)!.content).toBe("question turn 4");
+  });
+
+  it("prepends the global system prompt when one is set", () => {
+    const t = new TreeFixture();
+    const u = t.add("user", "hi", null);
+    const msgs = assembleContext(u, t, T, { systemPrompt: "  be terse  " });
+    expect(msgs[0]).toEqual({ role: "system", content: "be terse" });
+    expect(msgs).toHaveLength(2);
+  });
+
+  it("omits the system message when the prompt is blank", () => {
+    const t = new TreeFixture();
+    const u = t.add("user", "hi", null);
+    expect(assembleContext(u, t, T, { systemPrompt: "   " })).toHaveLength(1);
+  });
+
+  it("follows only the node's own branch, not sibling branches", () => {
+    const t = new TreeFixture();
+    const u1 = t.add("user", "q1", null);
+    const a1 = t.add("assistant", "a1", u1.id);
+    const branchA = t.add("user", "branch A", a1.id);
+    t.add("assistant", "reply A", branchA.id);
+    const branchB = t.add("user", "branch B", a1.id);
+
+    const msgs = assembleContext(branchB, t, T);
+    expect(msgs.map((m) => m.content)).toEqual(["q1", "a1", "branch B"]);
+    expect(JSON.stringify(msgs)).not.toContain("branch A");
+  });
+
+  it("resolves an assistant node to the payload that produced it", () => {
+    const t = new TreeFixture();
+    const u1 = t.add("user", "q1", null);
+    const a1 = t.add("assistant", "a1", u1.id);
+
+    // The payload sent to generate a1 was everything up to and including u1.
+    expect(assembleContext(a1, t, T)).toEqual(assembleContext(u1, t, T));
+    expect(assembleContext(a1, t, T).map((m) => m.content)).toEqual(["q1"]);
+  });
+
+  it("does not hang on a cyclic parent chain", () => {
+    const t = new TreeFixture();
+    const a = t.add("user", "a", null);
+    const b = t.add("assistant", "b", a.id);
+    a.parentId = b.id; // corrupt on purpose
+    expect(assembleContext(a, t, T).length).toBeLessThanOrEqual(2);
+  });
+});
+
+describe("windowed (§5.1 concept lens)", () => {
+  it("ACCEPTANCE 1: keeps exactly turns 5-6 of a 6-turn conversation", () => {
+    const t = new TreeFixture();
+    t.linear(6);
+    const turn6Assistant = t.all().at(-1)!;
+
+    const lens = t.add(
+      "user",
+      "monotonicity",
+      turn6Assistant.id,
+      { kind: "windowed", turns: 2, upToNodeId: turn6Assistant.id },
+      "concept-lens",
+    );
+
+    const msgs = assembleContext(lens, t, T);
+    expect(msgs).toHaveLength(1);
+    const body = msgs[0].content;
+
+    expect(body).toContain("User: question turn 5");
+    expect(body).toContain("Assistant: answer turn 5");
+    expect(body).toContain("User: question turn 6");
+    expect(body).toContain("Assistant: answer turn 6");
+
+    // The whole point: turn 1 is gone.
+    expect(body).not.toContain("turn 1");
+    expect(body).not.toContain("turn 2");
+    expect(body).not.toContain("turn 3");
+    expect(body).not.toContain("turn 4");
+
+    expect(body).toContain("And this is the concept I'm curious about:");
+    expect(body).toContain("monotonicity");
+  });
+
+  it("honours turn counts across the 1-5 configurable range", () => {
+    const t = new TreeFixture();
+    t.linear(6);
+    const src = t.all().at(-1)!;
+
+    for (const turns of [1, 2, 3, 4, 5]) {
+      const lens = t.add(
+        "user",
+        "concept",
+        src.id,
+        { kind: "windowed", turns, upToNodeId: src.id },
+        "concept-lens",
+      );
+      const body = assembleContext(lens, t, T)[0].content;
+      const included = [1, 2, 3, 4, 5, 6].filter((n) =>
+        body.includes(`question turn ${n}`),
+      );
+      expect(included).toEqual(
+        [1, 2, 3, 4, 5, 6].slice(6 - turns),
+      );
+    }
+  });
+
+  it("clamps to the available history without producing an orphan turn", () => {
+    const t = new TreeFixture();
+    t.linear(1);
+    const src = t.all().at(-1)!;
+    const lens = t.add(
+      "user",
+      "concept",
+      src.id,
+      { kind: "windowed", turns: 5, upToNodeId: src.id },
+      "concept-lens",
+    );
+    const body = assembleContext(lens, t, T)[0].content;
+    expect(body).toContain("User: question turn 1");
+    expect(body).toContain("Assistant: answer turn 1");
+  });
+
+  it("never opens the window on an orphan assistant message", () => {
+    const t = new TreeFixture();
+    t.linear(3);
+    const src = t.all().at(-1)!;
+    // turns=1 over a chain ending ...user6,assistant6 gives a clean pair;
+    // force the odd case by windowing to a user node instead.
+    const userNode = t.all().at(-2)!;
+    const lens = t.add(
+      "user",
+      "concept",
+      userNode.id,
+      { kind: "windowed", turns: 1, upToNodeId: userNode.id },
+      "concept-lens",
+    );
+    const body = assembleContext(lens, t, T)[0].content;
+    const firstLine = body
+      .split("\n")
+      .find((l) => l.startsWith("User:") || l.startsWith("Assistant:"));
+    expect(firstLine!.startsWith("User:")).toBe(true);
+    expect(src.id).toBeTruthy();
+  });
+
+  it("§11 Q1: a follow-up under a windowed node uses its own subtree ancestry", () => {
+    const t = new TreeFixture();
+    t.linear(6);
+    const src = t.all().at(-1)!;
+    const lens = t.add(
+      "user",
+      "monotonicity",
+      src.id,
+      { kind: "windowed", turns: 2, upToNodeId: src.id },
+      "concept-lens",
+    );
+    const lensReply = t.add("assistant", "about monotonicity", lens.id);
+    const followUp = t.add("user", "and now?", lensReply.id);
+
+    const msgs = assembleContext(followUp, t, T);
+    // Full ancestry from the root down — the window governed the initial prompt only.
+    expect(msgs.map((m) => m.content)).toEqual([
+      ...Array.from({ length: 6 }, (_, i) => [
+        `question turn ${i + 1}`,
+        `answer turn ${i + 1}`,
+      ]).flat(),
+      "monotonicity",
+      "about monotonicity",
+      "and now?",
+    ]);
+  });
+});
+
+describe("truncated (§5.2 structural crop)", () => {
+  const FIVE_PARAS = [
+    "Paragraph one sets up the problem.",
+    "Paragraph two introduces the lemma.",
+    "Paragraph three is where it goes wrong.",
+    "Paragraph four compounds the error.",
+    "Paragraph five concludes wrongly.",
+  ].join("\n\n");
+
+  it("ACCEPTANCE 2: payload holds paragraphs 1-2 and zero tokens from 3-5", () => {
+    const t = new TreeFixture();
+    const u1 = t.add("user", "explain the proof", null);
+    const a1 = t.add("assistant", FIVE_PARAS, u1.id);
+
+    const cutAfterPara2 = FIVE_PARAS.indexOf("Paragraph three");
+    const crop = t.add(
+      "user",
+      "",
+      a1.id,
+      { kind: "truncated", upToNodeId: a1.id, charOffset: cutAfterPara2 },
+      "structural-crop",
+    );
+
+    const msgs = assembleContext(crop, t, T);
+    expect(msgs).toHaveLength(1);
+    const body = msgs[0].content;
+
+    expect(body).toContain("Paragraph one sets up the problem.");
+    expect(body).toContain("Paragraph two introduces the lemma.");
+    expect(body).not.toContain("Paragraph three");
+    expect(body).not.toContain("Paragraph four");
+    expect(body).not.toContain("Paragraph five");
+    expect(body).toContain("I stopped reading right here.");
+  });
+
+  it("never mutates the source node's content", () => {
+    const t = new TreeFixture();
+    const u1 = t.add("user", "explain", null);
+    const a1 = t.add("assistant", FIVE_PARAS, u1.id);
+    const crop = t.add(
+      "user",
+      "",
+      a1.id,
+      { kind: "truncated", upToNodeId: a1.id, charOffset: 30 },
+      "structural-crop",
+    );
+    assembleContext(crop, t, T);
+    expect(t.get(a1.id)!.content).toBe(FIVE_PARAS);
+  });
+
+  it("keeps ancestry above the cropped message but excludes the message itself", () => {
+    const t = new TreeFixture();
+    t.linear(2);
+    const a2 = t.all().at(-1)!;
+    const crop = t.add(
+      "user",
+      "",
+      a2.id,
+      { kind: "truncated", upToNodeId: a2.id, charOffset: 6 },
+      "structural-crop",
+    );
+    const body = assembleContext(crop, t, T)[0].content;
+    expect(body).toContain("User: question turn 1");
+    expect(body).toContain("Assistant: answer turn 1");
+    expect(body).toContain("User: question turn 2");
+    expect(body).toContain("Assistant: answer"); // sliced to 6 chars
+    expect(body).not.toContain("answer turn 2");
+  });
+
+  it("clamps an out-of-range offset instead of throwing", () => {
+    const t = new TreeFixture();
+    const u1 = t.add("user", "q", null);
+    const a1 = t.add("assistant", "short", u1.id);
+    for (const charOffset of [-10, 0, 9999, Number.NaN]) {
+      const crop = t.add(
+        "user",
+        "",
+        a1.id,
+        { kind: "truncated", upToNodeId: a1.id, charOffset },
+        "structural-crop",
+      );
+      expect(() => assembleContext(crop, t, T)).not.toThrow();
+    }
+  });
+
+  it("appends the user's own note when they typed one", () => {
+    const t = new TreeFixture();
+    const u1 = t.add("user", "q", null);
+    const a1 = t.add("assistant", FIVE_PARAS, u1.id);
+    const crop = t.add(
+      "user",
+      "specifically the lemma step",
+      a1.id,
+      { kind: "truncated", upToNodeId: a1.id, charOffset: 40 },
+      "structural-crop",
+    );
+    expect(assembleContext(crop, t, T)[0].content).toContain(
+      "specifically the lemma step",
+    );
+  });
+});
+
+describe("isolated (§5.3)", () => {
+  it("ACCEPTANCE 3: after 10 turns the payload is exactly one user message", () => {
+    const t = new TreeFixture();
+    t.linear(10);
+    const turn10 = t.all().at(-1)!;
+
+    const iso = t.add(
+      "user",
+      "",
+      turn10.id,
+      { kind: "isolated", payload: "the map is not the territory" },
+      "isolated-selection",
+    );
+
+    const msgs = assembleContext(iso, t, T);
+    expect(msgs).toHaveLength(1);
+    expect(msgs[0].role).toBe("user");
+    expect(msgs[0].content).toContain("the map is not the territory");
+    expect(msgs[0].content).toContain("Treat the text above as the entire context.");
+    for (let i = 1; i <= 10; i++) {
+      expect(msgs[0].content).not.toContain(`question turn ${i}`);
+      expect(msgs[0].content).not.toContain(`answer turn ${i}`);
+    }
+  });
+
+  it("is still lineage-attached in Graph A while inheriting nothing in Graph B", () => {
+    const t = new TreeFixture();
+    t.linear(10);
+    const turn10 = t.all().at(-1)!;
+    const iso = t.add(
+      "user",
+      "",
+      turn10.id,
+      { kind: "isolated", payload: "one sentence" },
+      "isolated-selection",
+    );
+    // Graph A: a child of turn 10.
+    expect(iso.parentId).toBe(turn10.id);
+    expect(t.get(turn10.id)!.childrenIds).toContain(iso.id);
+    // Graph B: nothing.
+    expect(assembleContext(iso, t, T)).toHaveLength(1);
+  });
+
+  it("keeps the global system prompt but inherits no other framing", () => {
+    const t = new TreeFixture();
+    t.linear(4);
+    const leaf = t.all().at(-1)!;
+    const iso = t.add(
+      "user",
+      "",
+      leaf.id,
+      { kind: "isolated", payload: "sentence" },
+      "isolated-selection",
+    );
+    const msgs = assembleContext(iso, t, T, { systemPrompt: "you are curt" });
+    expect(msgs.map((m) => m.role)).toEqual(["system", "user"]);
+  });
+
+  it("acts as a context root: descendants do not re-inherit the excluded ancestry", () => {
+    const t = new TreeFixture();
+    t.linear(10);
+    const leaf = t.all().at(-1)!;
+    const iso = t.add(
+      "user",
+      "",
+      leaf.id,
+      { kind: "isolated", payload: "the map is not the territory" },
+      "isolated-selection",
+    );
+    const isoReply = t.add("assistant", "It means models are lossy.", iso.id);
+    const followUp = t.add("user", "why does that matter?", isoReply.id);
+
+    const msgs = assembleContext(followUp, t, T);
+    expect(msgs).toHaveLength(3);
+    expect(msgs[0].content).toContain("the map is not the territory");
+    expect(msgs[1].content).toBe("It means models are lossy.");
+    expect(msgs[2].content).toBe("why does that matter?");
+    expect(JSON.stringify(msgs)).not.toContain("question turn 1");
+  });
+
+  it("lineageChain still reports the true Graph A lineage above a context root", () => {
+    const t = new TreeFixture();
+    t.linear(3);
+    const leaf = t.all().at(-1)!;
+    const iso = t.add(
+      "user",
+      "",
+      leaf.id,
+      { kind: "isolated", payload: "x" },
+      "isolated-selection",
+    );
+    // Graph B walk stops at the context root...
+    expect(lineageChain(iso, t, { inclusive: true })).toHaveLength(1);
+    // ...but the parent pointer is intact, which is what the tree draws.
+    expect(iso.parentId).toBe(leaf.id);
+  });
+});
+
+describe("quoted (§5.4)", () => {
+  it("prepends the quote as a blockquote above the user's own words", () => {
+    const t = new TreeFixture();
+    t.linear(2);
+    const leaf = t.all().at(-1)!;
+    const q = t.add(
+      "user",
+      "this contradicts what you said earlier",
+      leaf.id,
+      { kind: "quoted", quote: "gradients vanish here", base: "full-ancestry" },
+      "quote-reply",
+    );
+    const msgs = assembleContext(q, t, T);
+    expect(msgs.map((m) => m.role)).toEqual([
+      "user", "assistant", "user", "assistant", "user",
+    ]);
+    expect(msgs.at(-1)!.content).toBe(
+      "> gradients vanish here\n\nthis contradicts what you said earlier",
+    );
+  });
+
+  it("quotes multi-line selections with a marker on every line", () => {
+    const t = new TreeFixture();
+    const u = t.add("user", "q", null);
+    const a = t.add("assistant", "a", u.id);
+    const q = t.add(
+      "user",
+      "why?",
+      a.id,
+      { kind: "quoted", quote: "line one\n\nline two", base: "full-ancestry" },
+      "quote-reply",
+    );
+    expect(assembleContext(q, t, T).at(-1)!.content).toBe(
+      "> line one\n>\n> line two\n\nwhy?",
+    );
+  });
+
+  it("supports a windowed base", () => {
+    const t = new TreeFixture();
+    t.linear(6);
+    const leaf = t.all().at(-1)!;
+    const q = t.add(
+      "user",
+      "why?",
+      leaf.id,
+      { kind: "quoted", quote: "that step", base: "windowed", turns: 1 },
+      "quote-reply",
+    );
+    const msgs = assembleContext(q, t, T);
+    expect(msgs.map((m) => m.content)).toEqual([
+      "question turn 6",
+      "answer turn 6",
+      "> that step\n\nwhy?",
+    ]);
+  });
+
+  it("keeps the quote visible to descendants", () => {
+    const t = new TreeFixture();
+    const u = t.add("user", "q", null);
+    const a = t.add("assistant", "a", u.id);
+    const q = t.add(
+      "user",
+      "why?",
+      a.id,
+      { kind: "quoted", quote: "that step", base: "full-ancestry" },
+      "quote-reply",
+    );
+    const r = t.add("assistant", "because", q.id);
+    const next = t.add("user", "ok", r.id);
+    expect(assembleContext(next, t, T).map((m) => m.content)).toEqual([
+      "q", "a", "> that step\n\nwhy?", "because", "ok",
+    ]);
+  });
+});
+
+describe("asProse", () => {
+  it("renders plain unadorned User:/Assistant: lines", () => {
+    expect(
+      asProse([
+        { role: "user", content: "hello" },
+        { role: "assistant", content: "hi" },
+      ]),
+    ).toBe("User: hello\n\nAssistant: hi");
+  });
+
+  it("does not JSON-encode or XML-wrap content", () => {
+    const out = asProse([{ role: "user", content: 'say "hi" <b>' }]);
+    expect(out).toBe('User: say "hi" <b>');
+  });
+});
+
+describe("ACCEPTANCE 4: quote extends, the other three fork", () => {
+  it("gives one source node four differently-typed children", () => {
+    const t = new TreeFixture();
+    t.linear(6);
+    const src = t.all().at(-1)!;
+
+    const quote = t.add(
+      "user", "why?", src.id,
+      { kind: "quoted", quote: "that step", base: "full-ancestry" },
+      "quote-reply",
+    );
+    const lens = t.add(
+      "user", "monotonicity", src.id,
+      { kind: "windowed", turns: 2, upToNodeId: src.id },
+      "concept-lens",
+    );
+    const crop = t.add(
+      "user", "", src.id,
+      { kind: "truncated", upToNodeId: src.id, charOffset: 6 },
+      "structural-crop",
+    );
+    const iso = t.add(
+      "user", "", src.id,
+      { kind: "isolated", payload: "a sentence" },
+      "isolated-selection",
+    );
+
+    expect(t.get(src.id)!.childrenIds).toEqual([quote.id, lens.id, crop.id, iso.id]);
+    expect(
+      [quote, lens, crop, iso].map((n) => n.origin!.kind),
+    ).toEqual(["quote-reply", "concept-lens", "structural-crop", "isolated-selection"]);
+
+    // Quote-reply carries the whole path; the other three each carry less.
+    expect(assembleContext(quote, t, T)).toHaveLength(13);
+    expect(assembleContext(lens, t, T)).toHaveLength(1);
+    expect(assembleContext(crop, t, T)).toHaveLength(1);
+    expect(assembleContext(iso, t, T)).toHaveLength(1);
+  });
+});
+
+describe("regenerate siblings", () => {
+  it("two retries of the same prompt assemble identical payloads", () => {
+    const t = new TreeFixture();
+    t.linear(2);
+    const leaf = t.all().at(-1)!;
+    const u = t.add("user", "final question", leaf.id);
+    const a1 = t.add("assistant", "first attempt", u.id);
+    const a2 = t.add("assistant", "second attempt", u.id, { kind: "full-ancestry" }, "regenerate");
+
+    expect(assembleContext(a1, t, T)).toEqual(assembleContext(a2, t, T));
+    expect(assembleContext(a1, t, T).at(-1)!.content).toBe("final question");
+  });
+});
+
+describe("determinism and purity", () => {
+  it("returns an identical array on repeated calls", () => {
+    const t = new TreeFixture();
+    t.linear(4);
+    const leaf = t.all().at(-1)!;
+    const n = t.add("user", "again", leaf.id);
+    expect(assembleContext(n, t, T)).toEqual(assembleContext(n, t, T));
+  });
+
+  it("does not mutate any node", () => {
+    const t = new TreeFixture();
+    t.linear(4);
+    const leaf = t.all().at(-1)!;
+    const target = t.add("user", "again", leaf.id);
+    const before = JSON.stringify(t.all());
+    assembleContext(target, t, T);
+    expect(JSON.stringify(t.all())).toBe(before);
+  });
+
+  it("survives a dangling parentId", () => {
+    const t = new TreeFixture();
+    const orphan = t.add("user", "hello", "does-not-exist");
+    expect(assembleContext(orphan, t, T).map((m) => m.content)).toEqual(["hello"]);
+  });
+});
