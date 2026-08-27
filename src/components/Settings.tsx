@@ -5,6 +5,26 @@ import type { ProviderConfig } from "@/types";
 import { TemplateEditor } from "@/components/TemplateEditor";
 import { DataPane } from "@/components/DataPane";
 
+/**
+ * A key field that says "blank for local" on a hosted provider is telling the
+ * user the opposite of the truth. Keyed on where the request actually goes.
+ */
+function keyPlaceholder(provider: ProviderConfig): string {
+  if (isLocalUrl(provider.baseUrl)) return "not needed for a local server";
+  if (provider.kind === "anthropic") return "sk-ant-…";
+  if (/openrouter\.ai/.test(provider.baseUrl)) return "sk-or-v1-…";
+  return "sk-…";
+}
+
+function isLocalUrl(baseUrl: string): boolean {
+  try {
+    const host = new URL(baseUrl).hostname;
+    return host === "localhost" || host === "127.0.0.1" || host === "[::1]" || host === "::1";
+  } catch {
+    return false;
+  }
+}
+
 export function Settings() {
   const open = useUI((s) => s.settingsOpen);
   const setOpen = useUI((s) => s.setSettingsOpen);
@@ -114,7 +134,7 @@ export function Settings() {
                       value={provider.apiKey}
                       spellCheck={false}
                       autoComplete="off"
-                      placeholder={provider.kind === "anthropic" ? "sk-ant-…" : "sk-… (blank for local)"}
+                      placeholder={keyPlaceholder(provider)}
                       onChange={(e) => patchProvider(provider.id, { apiKey: e.target.value })}
                     />
                     <button

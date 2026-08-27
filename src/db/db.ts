@@ -73,6 +73,28 @@ export const DEFAULT_SETTINGS: Settings = {
       knownModels: [],
     },
     {
+      // OpenRouter speaks the OpenAI wire format and returns
+      // `access-control-allow-origin: *` with `Authorization` in its allowed
+      // headers, so a browser client reaches it directly with no proxy. Model
+      // ids are namespaced by vendor, which is why `model` looks unlike the
+      // other presets. Verified against openrouter.ai/api/v1/models.
+      id: "openrouter",
+      kind: "openai-compatible",
+      label: "OpenRouter",
+      baseUrl: "https://openrouter.ai/api/v1",
+      apiKey: "",
+      model: "anthropic/claude-haiku-4.5",
+      knownModels: [
+        "anthropic/claude-haiku-4.5",
+        "anthropic/claude-sonnet-5",
+        "anthropic/claude-opus-5",
+        "anthropic/claude-fable-5",
+        "openai/gpt-5",
+        "google/gemini-3.5-flash",
+        "deepseek/deepseek-chat",
+      ],
+    },
+    {
       // Pre-wired for `npm run dev:mock`. Present so that trying the app
       // without a key is "pick this provider" and nothing else — telling
       // someone to select a preset and *also* retype its base URL is one

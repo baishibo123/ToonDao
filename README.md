@@ -17,6 +17,27 @@ npm run dev
 No backend, no auth, no accounts. Everything lives in IndexedDB in your browser.
 Add a provider base URL and key in Settings and you are running.
 
+### Hosted providers
+
+Three presets ship configured: **OpenAI-compatible**, **Anthropic** (native
+`/v1/messages`), and **OpenRouter**, which is the quickest way to reach many
+vendors through one key — it speaks the OpenAI wire format and returns
+`access-control-allow-origin: *`, so the browser talks to it directly with no
+proxy. Its model ids are vendor-namespaced (`anthropic/claude-haiku-4.5`), and
+the preset defaults to Haiku.
+
+Pick a provider under **Settings → Provider → Active**, paste your key into that
+provider's own **API key** field, and adjust **Model** if you want a different
+one. Base URL is editable for every provider, so any relay (中转) endpoint works
+too.
+
+Model ids go stale as vendors retire them. To check the OpenRouter preset
+against the live catalogue:
+
+```bash
+npm run check:models
+```
+
 ### Trying it without a key
 
 ```bash
