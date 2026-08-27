@@ -1,0 +1,234 @@
+/* ------------------------------------------------------------------
+   Tokens.
+
+   Visual direction (§6): the subject is lineage of attention, so the
+   artifact leans mycelial — dark loam, pale filaments, one warm accent
+   for inherited thought and a cold one for detached thought. The
+   boldness is spent on the edges; the nodes stay quiet.
+   ------------------------------------------------------------------ */
+
+:root {
+  --font-body: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-display: "Fraunces", "Iowan Old Style", Georgia, serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  --bg: #0d0c0b;
+  --bg-raised: #151412;
+  --bg-sunken: #090808;
+  --surface: #1c1a18;
+  --surface-hover: #232120;
+  --border: #2c2926;
+  --border-strong: #3d3934;
+
+  --text: #ece7e1;
+  --text-dim: #a29a91;
+  --text-faint: #6f6862;
+
+  /* Edge / policy hues. Each of the six origin kinds owns one. */
+  --hue-continuation: #8d857c;
+  --hue-lens: #d9a441;      /* inherited thought, warm */
+  --hue-crop: #d2664a;      /* something was thrown away */
+  --hue-isolated: #4fb3a5;  /* detached, cold */
+  --hue-quote: #9d84d6;     /* borrowed from the social convention */
+  --hue-regenerate: #5f5a54;
+
+  --accent: var(--hue-lens);
+  --danger: #d2664a;
+  --focus: #7fb6e8;
+
+  --radius: 8px;
+  --radius-sm: 5px;
+  --radius-lg: 14px;
+
+  --shadow-panel: 0 18px 50px -12px rgb(0 0 0 / 0.7), 0 2px 8px rgb(0 0 0 / 0.4);
+  --shadow-pop: 0 10px 30px -8px rgb(0 0 0 / 0.6);
+
+  --transition: 140ms cubic-bezier(0.2, 0, 0.2, 1);
+
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f7f4ef;
+    --bg-raised: #fffdfa;
+    --bg-sunken: #ece7df;
+    --surface: #fffdfa;
+    --surface-hover: #f1ece4;
+    --border: #ddd5c9;
+    --border-strong: #c4b9a9;
+
+    --text: #201c18;
+    --text-dim: #5f574e;
+    --text-faint: #8c8378;
+
+    --hue-continuation: #7b736a;
+    --hue-lens: #a2701a;
+    --hue-crop: #b04a2c;
+    --hue-isolated: #17796c;
+    --hue-quote: #6b4bb0;
+    --hue-regenerate: #a49a8e;
+
+    --focus: #2b6cb0;
+    --shadow-panel: 0 18px 44px -16px rgb(60 45 25 / 0.28), 0 2px 6px rgb(60 45 25 / 0.1);
+    --shadow-pop: 0 10px 26px -10px rgb(60 45 25 / 0.26);
+
+    color-scheme: light;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 14.5px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+button, input, textarea, select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+/* Quality floor: focus must always be visible. */
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+::selection {
+  background: color-mix(in oklab, var(--accent) 34%, transparent);
+  color: var(--text);
+}
+
+/* Scrollbars, quiet. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 6px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-track { background: transparent; }
+
+/* ------------------------------------------------------------------
+   Rendered markdown
+   ------------------------------------------------------------------ */
+
+.md > :first-child { margin-top: 0; }
+.md > :last-child { margin-bottom: 0; }
+
+.md p, .md ul, .md ol, .md blockquote, .md pre, .md .md-table-wrap {
+  margin: 0 0 0.85em;
+}
+
+.md h1, .md h2, .md h3, .md h4, .md h5, .md h6 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-variation-settings: "opsz" 30;
+  line-height: 1.25;
+  margin: 1.3em 0 0.5em;
+  letter-spacing: -0.01em;
+}
+.md h1 { font-size: 1.5em; }
+.md h2 { font-size: 1.3em; }
+.md h3 { font-size: 1.12em; }
+.md h4, .md h5, .md h6 { font-size: 1em; }
+
+.md ul, .md ol { padding-left: 1.4em; }
+.md li { margin: 0.2em 0; }
+.md li > p { margin: 0; }
+.md .md-task { list-style: none; margin-left: -1.2em; }
+.md .md-task input { margin-right: 0.5em; }
+
+.md blockquote {
+  border-left: 2px solid var(--border-strong);
+  padding: 0.1em 0 0.1em 0.9em;
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.md a { color: var(--focus); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+
+.md .md-inline-code {
+  font-family: var(--font-mono);
+  font-size: 0.87em;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.08em 0.32em;
+}
+
+.md .md-pre {
+  position: relative;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.85em 0.95em;
+  overflow-x: auto;
+}
+.md .md-code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  line-height: 1.55;
+  white-space: pre;
+}
+.md .md-code-lang {
+  position: absolute;
+  top: 0.35em;
+  right: 0.6em;
+  font-family: var(--font-mono);
+  font-size: 0.68em;
+  color: var(--text-faint);
+  user-select: none;
+}
+
+.md hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 1.4em 0;
+}
+
+.md .md-table-wrap { overflow-x: auto; }
+.md table { border-collapse: collapse; font-size: 0.94em; }
+.md th, .md td {
+  border: 1px solid var(--border);
+  padding: 0.35em 0.65em;
+  text-align: left;
+}
+.md th { background: var(--bg-sunken); font-weight: 600; }
+
+.md .md-image { max-width: 100%; border-radius: var(--radius); }
+
+.md .md-footnote { font-size: 0.9em; color: var(--text-dim); }
+.md .md-footnote-id { margin-right: 0.4em; color: var(--text-faint); }
