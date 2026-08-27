@@ -50,7 +50,7 @@ Reply #N paragraph six mentions the model one last time and then stops.`;
 
 let counter = 0;
 
-createServer((req, res) => {
+const server = createServer((req, res) => {
   if (req.method === "OPTIONS") {
     res.writeHead(204, CORS);
     res.end();
@@ -87,7 +87,30 @@ createServer((req, res) => {
       );
     }, 12);
   });
-}).listen(PORT, () => {
+});
+
+server.on("error", (err) => {
+  if (err.code === "EADDRINUSE") {
+    // Almost always a previous instance of this script still running. A stack
+    // trace tells you nothing useful about that, so don't print one.
+    console.error(
+      [
+        `Port ${PORT} is already in use.`,
+        "",
+        "Most likely another mock-llm is still running. Either use it as-is, or:",
+        `  lsof -nP -iTCP:${PORT} -sTCP:LISTEN     # see what holds it`,
+        "  pkill -f mock-llm.mjs                # stop it",
+        "",
+        `Or pick a different port:  PORT=8788 npm run dev:mock`,
+        "(then update the provider base URL in Settings to match)",
+      ].join("\n"),
+    );
+    process.exit(1);
+  }
+  throw err;
+});
+
+server.listen(PORT, () => {
   console.log(`mock llm listening on http://localhost:${PORT}`);
   console.log(`request log: ${LOG}`);
 });
