@@ -763,3 +763,175 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 }
 
 .composer__input { overflow-y: auto; }
+
+/* ------------------------------------------------------------------
+   Selection popover (§5.1 / §5.3 / §5.4)
+   ------------------------------------------------------------------ */
+
+.selpop {
+  position: fixed;
+  z-index: 50;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-pop);
+  overflow: hidden;
+  min-width: 250px;
+  max-width: 340px;
+  animation: pop 120ms cubic-bezier(0.2, 0, 0.2, 1);
+}
+@keyframes pop {
+  from { opacity: 0; transform: translateY(3px) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+
+.selpop__preview {
+  padding: 7px 11px 6px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-sunken);
+}
+.selpop__quote {
+  display: block;
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.45;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.selpop__meta {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-faint);
+  margin-top: 2px;
+}
+
+.selpop__actions { padding: 4px; }
+
+.selpop__action {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: var(--text-dim);
+  text-align: left;
+  transition: background var(--transition), color var(--transition);
+}
+.selpop__action:hover {
+  background: color-mix(in oklab, var(--kind) 13%, transparent);
+  color: var(--text);
+}
+.selpop__glyph {
+  flex: none;
+  width: 16px;
+  text-align: center;
+  color: var(--kind);
+  font-size: 12px;
+}
+
+/* Hover affordance for clickable terms (§5.1). Painted with the CSS Custom
+   Highlight API, so no wrapper elements are injected into React's DOM. */
+::highlight(toondao-term) {
+  text-decoration: underline 1.5px var(--accent);
+  text-underline-offset: 3px;
+  background: color-mix(in oklab, var(--accent) 10%, transparent);
+}
+
+/* ------------------------------------------------------------------
+   Crop rail (§5.2)
+   ------------------------------------------------------------------ */
+
+.croprail {
+  position: absolute;
+  inset: 0 0 0 -2px;
+  width: 16px;
+  cursor: crosshair;
+}
+
+.croprail__spine {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 6px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--border);
+  transition: background var(--transition);
+}
+.croprail:hover .croprail__spine { background: color-mix(in oklab, var(--hue-crop) 55%, var(--border)); }
+.croprail--pending .croprail__spine { background: var(--hue-crop); }
+
+.croprail__tick {
+  position: absolute;
+  left: 3px;
+  width: 8px;
+  height: 1px;
+  background: var(--border-strong);
+  opacity: 0;
+  transition: opacity var(--transition);
+}
+.croprail:hover .croprail__tick { opacity: 0.85; }
+.croprail__tick--on { background: var(--hue-crop); height: 2px; opacity: 1 !important; }
+
+.croprail__line {
+  position: absolute;
+  left: 8px;
+  width: calc(100vw);
+  max-width: 760px;
+  height: 0;
+  border-top: 1px dashed var(--hue-crop);
+  pointer-events: none;
+  z-index: 3;
+}
+.croprail__scissor {
+  position: absolute;
+  left: -13px;
+  top: -8px;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--hue-crop);
+  background: var(--bg);
+  padding: 1px;
+  border-radius: 2px;
+}
+.croprail__label {
+  position: absolute;
+  left: 14px;
+  top: -26px;
+  display: block;
+  max-width: 420px;
+  padding: 4px 9px;
+  border-radius: var(--radius-sm);
+  background: var(--hue-crop);
+  color: #fff;
+  font-size: 11.5px;
+  line-height: 1.35;
+  box-shadow: var(--shadow-pop);
+  white-space: nowrap;
+}
+.croprail__label em {
+  display: block;
+  font-style: normal;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  opacity: 0.82;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.croprail__kb {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 14px;
+  height: 14px;
+  font-size: 9px;
+  line-height: 1;
+  color: var(--text-faint);
+  opacity: 0;
+}
+.croprail__kb:focus-visible { opacity: 1; }

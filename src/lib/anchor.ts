@@ -288,7 +288,11 @@ export function cropBoundaries(source: string): CropBoundary[] {
 }
 
 function firstLine(text: string): string {
-  const line = text.split("\n", 1)[0]?.trim() ?? "";
+  const lines = text.split("\n");
+  // For a fenced block the first line is the fence and its info string, which
+  // tells the user nothing about what they are discarding.
+  const start = /^\s*(`{3,}|~{3,})/.test(lines[0] ?? "") ? 1 : 0;
+  const line = (lines[start] ?? lines[0] ?? "").trim();
   return line.length > 80 ? `${line.slice(0, 79)}…` : line;
 }
 

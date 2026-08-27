@@ -49,6 +49,7 @@ export function Composer() {
   const setPending = useUI((s) => s.setPending);
   const setConceptTurns = useUI((s) => s.setConceptTurns);
   const focusNonce = useUI((s) => s.composerFocusNonce);
+  const composerSeed = useUI((s) => s.composerSeed);
   const showDraftInspector = useUI((s) => s.openInspectors.has("__draft__"));
 
   const streaming = streamingNodeId !== null;
@@ -71,6 +72,17 @@ export function Composer() {
   useEffect(() => {
     textareaRef.current?.focus();
   }, [focusNonce, pending]);
+
+  useEffect(() => {
+    if (!composerSeed) return;
+    setText(composerSeed.text);
+    const el = textareaRef.current;
+    if (el) {
+      el.focus();
+      // Park the caret at the end so the user types straight into the gap.
+      requestAnimationFrame(() => el.setSelectionRange(el.value.length, el.value.length));
+    }
+  }, [composerSeed]);
 
   // Auto-grow. Measured from 0px rather than "auto": in dev the stylesheet
   // arrives after first paint, and measuring "auto" against unstyled layout

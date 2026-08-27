@@ -59,6 +59,10 @@ interface UIState {
 
   composerFocusNonce: number;
   focusComposer: () => void;
+
+  /** Text to drop into the composer, consumed once. For "Compare with…". */
+  composerSeed: { text: string; nonce: number } | null;
+  setComposerSeed: (text: string) => void;
 }
 
 export const useUI = create<UIState>((set, get) => ({
@@ -100,4 +104,8 @@ export const useUI = create<UIState>((set, get) => ({
 
   composerFocusNonce: 0,
   focusComposer: () => set((s) => ({ composerFocusNonce: s.composerFocusNonce + 1 })),
+
+  composerSeed: null,
+  setComposerSeed: (text) =>
+    set((s) => ({ composerSeed: { text, nonce: (s.composerSeed?.nonce ?? 0) + 1 } })),
 }));

@@ -6,6 +6,7 @@ import { BRANCH_META, branchColor } from "@/lib/policyMeta";
 import { useStore } from "@/store/useStore";
 import { useUI } from "@/store/useUI";
 import { childrenOf, siblingsOf } from "@/lib/tree";
+import { CropRail } from "@/components/CropRail";
 
 interface MessageViewProps {
   node: ConversationNode;
@@ -52,8 +53,13 @@ export const MessageView = memo(function MessageView({ node, turn, isLast }: Mes
       id={`msg-${node.id}`}
       data-node-id={node.id}
     >
-      {/* The gutter rail is where §5.2's crop handle lands in P1. */}
-      <div className="msg__rail" />
+      <div className="msg__rail">
+        {node.role === "assistant" &&
+        node.status !== "streaming" &&
+        node.content.length > 0 ? (
+          <CropRail node={node} contentRef={contentRef} />
+        ) : null}
+      </div>
 
       <div className="msg__body">
         <header className="msg__head">

@@ -5,6 +5,9 @@ import { Sidebar } from "@/components/Sidebar";
 import { Transcript } from "@/components/Transcript";
 import { Composer } from "@/components/Composer";
 import { Settings } from "@/components/Settings";
+import { SelectionPopover } from "@/components/SelectionPopover";
+import { useSelectionWatcher } from "@/hooks/useSelectionWatcher";
+import { useTermHover } from "@/hooks/useTermHover";
 
 export default function App() {
   const ready = useStore((s) => s.ready);
@@ -16,6 +19,9 @@ export default function App() {
   const renameConversation = useStore((s) => s.renameConversation);
   const setSettingsOpen = useUI((s) => s.setSettingsOpen);
   const settingsOpen = useUI((s) => s.settingsOpen);
+
+  useSelectionWatcher();
+  useTermHover();
 
   useEffect(() => {
     void init();
@@ -61,6 +67,7 @@ export default function App() {
         <Transcript />
         <Composer />
       </main>
+      <SelectionPopover />
       <Settings />
     </div>
   );
