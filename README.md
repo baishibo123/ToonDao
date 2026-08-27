@@ -107,6 +107,32 @@ duplicate every token. The context chip reports the true count — `1 message` �
 rather than a friendlier number, with the inlined turn count beside it. An
 honest 1 is worth more than a comfortable 4.
 
+**The tree lays out one card per *turn*, not one per message.** A user→assistant
+edge is always a `continuation` and always present, so drawing it doubles the
+depth of the tree while carrying no information. Collapsing the pair onto one
+card means every edge that survives is a *decision* — a continuation, a lens, a
+crop, an isolation, a quote — which is what §6 asks the edge typography to
+carry. It also answers §11 Q2 for free: retries are replies to the same user
+node, so they collapse into a variant stack on one card rather than fanning out
+as separate thoughts. The card has two bands, user above and assistant below, so
+an edge anchored to a character offset inside a reply leaves from the vertical
+position that offset corresponds to.
+
+**Auto-fit prioritises legibility over completeness.** A 15-turn conversation
+fits a 400px panel at about 30% zoom, where the cards are unreadable and the map
+stops being a map. The automatic fit fits the *width*, refuses to go below a
+legible scale, and scrolls so the current turn is in frame; depth is what you
+pan. An explicit `all` button fits everything for when you want the shape rather
+than the labels.
+
+**Off-path collapse is measured from the active path, not from the root.** §6
+asks for auto-collapse "below a depth threshold". Collapsing every off-path
+branch at its first level hides the entire rest of the conversation behind one
+badge; not collapsing turns a long conversation into spaghetti. Two levels of
+each off-path branch stay visible and the remainder becomes a count badge, so
+the map always shows where the current line of thought sits and what was tried
+around it.
+
 **A crop is anchored to a point, not a range.** `origin.anchor` for a
 `structural-crop` is zero-length at the cut offset. This keeps the invariant
 `anchor.text === content.slice(anchor.start, anchor.end)` true, and the

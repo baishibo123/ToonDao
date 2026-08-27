@@ -1,0 +1,318 @@
+/* ------------------------------------------------------------------
+   Floating tree panel (§6)
+
+   Not docked, not in the document flow. The nodes are deliberately quiet;
+   the boldness is spent on the edges.
+   ------------------------------------------------------------------ */
+
+.treepanel {
+  position: fixed;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  background: color-mix(in oklab, var(--bg-raised) 96%, transparent);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-panel);
+  overflow: hidden;
+  min-width: 300px;
+}
+
+.treepanel__head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 34px;
+  padding: 0 6px 0 9px;
+  flex: none;
+  border-bottom: 1px solid var(--border);
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+.treepanel__head:active { cursor: grabbing; }
+
+.treepanel__grip { color: var(--text-faint); font-size: 11px; letter-spacing: -1px; }
+.treepanel__title {
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 600;
+  font-variation-settings: "opsz" 14;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.treepanel__spacer { flex: 1; }
+
+.treepanel__body { flex: 1; position: relative; min-height: 0; overflow: hidden; }
+
+.treepanel__resize {
+  position: absolute;
+  bottom: 0;
+  width: 16px;
+  height: 16px;
+  touch-action: none;
+}
+.treepanel__resize--se { right: 0; cursor: nwse-resize; }
+.treepanel__resize--sw { left: 0; cursor: nesw-resize; }
+.treepanel__resize--se::after {
+  content: "";
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid var(--border-strong);
+  border-bottom: 1.5px solid var(--border-strong);
+}
+
+.treehandle {
+  position: fixed;
+  right: 18px;
+  top: 56px;
+  z-index: 40;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-pop);
+  font-family: var(--font-display);
+  font-size: 11.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.treehandle:hover { color: var(--text); border-color: var(--accent); }
+
+/* ------------------------------------------------------------------
+   Canvas
+   ------------------------------------------------------------------ */
+
+.treecanvas { position: absolute; inset: 0; }
+.treecanvas svg { display: block; cursor: grab; touch-action: none; }
+.treecanvas svg:active { cursor: grabbing; }
+.treecanvas svg:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+
+.treecanvas--empty {
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--text-faint);
+  line-height: 1.6;
+}
+
+.treecanvas__controls {
+  position: absolute;
+  right: 8px;
+  bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  pointer-events: auto;
+}
+.treecanvas__zoom {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-faint);
+}
+
+.treecanvas__stats {
+  position: absolute;
+  left: 10px;
+  bottom: 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-faint);
+  pointer-events: none;
+}
+
+/* ------------------------------------------------------------------
+   Cards — quiet on purpose
+   ------------------------------------------------------------------ */
+
+.treecard { cursor: pointer; }
+
+.treecard__body {
+  fill: var(--bg-sunken);
+  stroke: var(--border);
+  stroke-width: 1;
+  opacity: 0.4;
+  transition: opacity var(--transition), stroke var(--transition);
+}
+.treecard--onpath .treecard__body { opacity: 1; }
+.treecard--current .treecard__body {
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  fill: color-mix(in oklab, var(--accent) 9%, var(--bg-sunken));
+}
+.treecard:hover .treecard__body { stroke: var(--border-strong); opacity: 1; }
+.treecard--focused .treecard__body { stroke: var(--focus); stroke-width: 1.5; opacity: 1; }
+
+.treecard__ghost {
+  fill: var(--bg-sunken);
+  stroke: var(--hue-regenerate);
+  stroke-width: 0.75;
+  opacity: 0.3;
+}
+
+.treecard__spine { opacity: 0.45; }
+.treecard--onpath .treecard__spine { opacity: 1; }
+
+.treecard__divide { stroke: var(--border); stroke-width: 0.75; opacity: 0.7; }
+
+.treecard text { pointer-events: none; }
+
+.treecard__turn {
+  font-family: var(--font-display);
+  font-size: 9.5px;
+  font-weight: 700;
+  font-variation-settings: "opsz" 10;
+  fill: var(--text-faint);
+}
+.treecard--onpath .treecard__turn { fill: var(--text-dim); }
+
+.treecard__user {
+  font-family: var(--font-display);
+  font-size: 9.5px;
+  font-variation-settings: "opsz" 10;
+  fill: var(--text-dim);
+  opacity: 0.55;
+}
+.treecard--onpath .treecard__user { fill: var(--text); opacity: 1; }
+
+.treecard__reply {
+  font-family: var(--font-body);
+  font-size: 8.5px;
+  fill: var(--text-faint);
+  opacity: 0.6;
+}
+.treecard--onpath .treecard__reply { fill: var(--text-dim); opacity: 1; }
+.treecard__reply--pending { font-style: italic; opacity: 0.4; }
+
+.treecard__policy {
+  font-family: var(--font-mono);
+  font-size: 7px;
+  letter-spacing: 0.02em;
+  opacity: 0.7;
+}
+.treecard--onpath .treecard__policy { opacity: 1; }
+
+.treecard__variants {
+  font-family: var(--font-mono);
+  font-size: 7.5px;
+  fill: var(--hue-regenerate);
+  text-anchor: end;
+}
+
+.treecard__badge { cursor: pointer; }
+.treecard__badge rect {
+  fill: var(--surface);
+  stroke: var(--border-strong);
+  stroke-width: 1;
+}
+.treecard__badge text {
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  fill: var(--text-dim);
+  text-anchor: middle;
+}
+.treecard__badge:hover rect { stroke: var(--accent); }
+.treecard__badge:hover text { fill: var(--text); }
+.treecard__badge--collapse rect { opacity: 0.55; }
+
+.edge__cap { pointer-events: none; }
+
+/* ------------------------------------------------------------------
+   Hover preview + legend
+   ------------------------------------------------------------------ */
+
+.treehover {
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  right: 8px;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in oklab, var(--bg) 93%, transparent);
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--border);
+  pointer-events: none;
+  font-size: 11.5px;
+}
+.treehover__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  color: var(--text-faint);
+  margin-bottom: 3px;
+}
+.treehover__line {
+  margin: 1px 0;
+  color: var(--text-dim);
+  line-height: 1.45;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.treehover__line b {
+  font-family: var(--font-display);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-right: 5px;
+}
+.treehover__foot {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 5px;
+  flex-wrap: wrap;
+}
+.treehover__anchor {
+  font-size: 10.5px;
+  color: var(--text-faint);
+  font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.treelegend {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: color-mix(in oklab, var(--bg-raised) 97%, transparent);
+  padding: 8px 12px 12px;
+  overflow-y: auto;
+}
+.treelegend__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-bottom: 8px;
+}
+.treelegend__row {
+  display: grid;
+  grid-template-columns: 42px 92px 1fr;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  border-top: 1px solid color-mix(in oklab, var(--border) 60%, transparent);
+}
+.treelegend__label { font-size: 11.5px; color: var(--text); }
+.treelegend__blurb { font-size: 10.5px; color: var(--text-faint); line-height: 1.4; }

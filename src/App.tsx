@@ -6,6 +6,7 @@ import { Transcript } from "@/components/Transcript";
 import { Composer } from "@/components/Composer";
 import { Settings } from "@/components/Settings";
 import { SelectionPopover } from "@/components/SelectionPopover";
+import { TreePanel } from "@/components/tree/TreePanel";
 import { useSelectionWatcher } from "@/hooks/useSelectionWatcher";
 import { useTermHover } from "@/hooks/useTermHover";
 
@@ -67,6 +68,7 @@ export default function App() {
         <Transcript />
         <Composer />
       </main>
+      <TreePanel />
       <SelectionPopover />
       <Settings />
     </div>
