@@ -90,12 +90,37 @@
 
 /* ------------------------------------------------------------------
    Canvas
+
+   A trunk with branches off it, drawn as dots on lines. The nodes carry no
+   text: the shape is the information, and the words are one hover away.
    ------------------------------------------------------------------ */
 
 .treecanvas { position: absolute; inset: 0; }
 .treecanvas svg { display: block; cursor: grab; touch-action: none; }
 .treecanvas svg:active { cursor: grabbing; }
 .treecanvas svg:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+
+/* The fuzzy edge (§6). A tree taller than the panel does not get chopped off
+   at the border — it dissolves into it, which reads as "there is more" without
+   spending a scrollbar to say so. */
+.treecanvas--masked svg {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 22px,
+    #000 calc(100% - 22px),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 22px,
+    #000 calc(100% - 22px),
+    transparent 100%
+  );
+}
+
+.treecanvas__far { pointer-events: none; }
 
 .treecanvas--empty {
   display: grid;
@@ -133,100 +158,117 @@
 }
 
 /* ------------------------------------------------------------------
-   Cards — quiet on purpose
+   Edges — the boldness is spent here
    ------------------------------------------------------------------ */
 
-.treecard { cursor: pointer; }
-
-.treecard__body {
-  fill: var(--bg-sunken);
-  stroke: var(--border);
-  stroke-width: 1;
-  opacity: 0.4;
-  transition: opacity var(--transition), stroke var(--transition);
-}
-.treecard--onpath .treecard__body { opacity: 1; }
-.treecard--current .treecard__body {
-  stroke: var(--accent);
-  stroke-width: 1.5;
-  fill: color-mix(in oklab, var(--accent) 9%, var(--bg-sunken));
-}
-.treecard:hover .treecard__body { stroke: var(--border-strong); opacity: 1; }
-.treecard--focused .treecard__body { stroke: var(--focus); stroke-width: 1.5; opacity: 1; }
-
-.treecard__ghost {
-  fill: var(--bg-sunken);
-  stroke: var(--hue-regenerate);
-  stroke-width: 0.75;
+.edge {
   opacity: 0.3;
+  transition: opacity var(--transition);
+  pointer-events: none;
 }
+.edge--spine { opacity: 0.5; }
+.edge--onpath,
+.edge--spine.edge--onpath { opacity: 1; }
 
-.treecard__spine { opacity: 0.45; }
-.treecard--onpath .treecard__spine { opacity: 1; }
+/* Hovering the panel is the "show me everything" gesture: the soft copy fades
+   out and the off-path structure comes up with it. */
+.treecanvas:hover .edge { opacity: 0.62; }
+.treecanvas:hover .edge--onpath { opacity: 1; }
 
-.treecard__divide { stroke: var(--border); stroke-width: 0.75; opacity: 0.7; }
+.edge__cap { pointer-events: none; }
 
-.treecard text { pointer-events: none; }
+/* ------------------------------------------------------------------
+   Dots — one per turn
+   ------------------------------------------------------------------ */
 
-.treecard__turn {
-  font-family: var(--font-display);
-  font-size: 9.5px;
-  font-weight: 700;
-  font-variation-settings: "opsz" 10;
-  fill: var(--text-faint);
+.treedot { pointer-events: none; }
+
+.treedot__disc {
+  fill: var(--bg-sunken);
+  stroke-width: 1.5;
+  opacity: 0.45;
+  transition: opacity var(--transition);
 }
-.treecard--onpath .treecard__turn { fill: var(--text-dim); }
+.treedot--trunk .treedot__disc { stroke-width: 1.9; }
+.treedot--onpath .treedot__disc { opacity: 1; }
+.treecanvas:hover .treedot__disc { opacity: 0.9; }
+.treecanvas:hover .treedot--onpath .treedot__disc { opacity: 1; }
 
-.treecard__user {
-  font-family: var(--font-display);
-  font-size: 9.5px;
-  font-variation-settings: "opsz" 10;
-  fill: var(--text-dim);
-  opacity: 0.55;
-}
-.treecard--onpath .treecard__user { fill: var(--text); opacity: 1; }
+.treedot__core { opacity: 0.5; transition: opacity var(--transition); }
+.treedot--onpath .treedot__core { opacity: 1; }
 
-.treecard__reply {
-  font-family: var(--font-body);
-  font-size: 8.5px;
-  fill: var(--text-faint);
+/* Retries are the same thought tried twice, so they ring the dot rather than
+   fanning out as separate turns (§11 Q2). */
+.treedot__variants {
+  fill: none;
+  stroke: var(--hue-regenerate);
+  stroke-width: 0.8;
   opacity: 0.6;
 }
-.treecard--onpath .treecard__reply { fill: var(--text-dim); opacity: 1; }
-.treecard__reply--pending { font-style: italic; opacity: 0.4; }
 
-.treecard__policy {
-  font-family: var(--font-mono);
-  font-size: 7px;
-  letter-spacing: 0.02em;
-  opacity: 0.7;
+/* The one turn you are reading. */
+.treedot--current .treedot__disc {
+  stroke-width: 2.6;
+  fill: color-mix(in oklab, var(--accent) 16%, var(--bg-sunken));
 }
-.treecard--onpath .treecard__policy { opacity: 1; }
-
-.treecard__variants {
-  font-family: var(--font-mono);
-  font-size: 7.5px;
-  fill: var(--hue-regenerate);
-  text-anchor: end;
+.treedot__halo {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  opacity: 0.9;
+}
+.treedot__pulse {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1;
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: treedot-pulse 2.6s cubic-bezier(0.2, 0, 0.4, 1) infinite;
 }
 
-.treecard__badge { cursor: pointer; }
-.treecard__badge rect {
+@keyframes treedot-pulse {
+  0% { transform: scale(0.85); opacity: 0.45; }
+  70% { transform: scale(1.7); opacity: 0; }
+  100% { transform: scale(1.7); opacity: 0; }
+}
+
+.treedot--streaming .treedot__disc { animation: treedot-breathe 1.5s ease-in-out infinite; }
+@keyframes treedot-breathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.treedot--error .treedot__disc { stroke: var(--danger) !important; stroke-dasharray: 2 2; }
+
+@media (prefers-reduced-motion: reduce) {
+  .treedot__pulse,
+  .treedot--streaming .treedot__disc { animation: none; }
+  .treedot__pulse { opacity: 0.3; }
+}
+
+.treedot__badge rect {
   fill: var(--surface);
   stroke: var(--border-strong);
   stroke-width: 1;
 }
-.treecard__badge text {
+.treedot__badge text {
   font-family: var(--font-mono);
-  font-size: 8.5px;
+  font-size: 8px;
   fill: var(--text-dim);
   text-anchor: middle;
 }
-.treecard__badge:hover rect { stroke: var(--accent); }
-.treecard__badge:hover text { fill: var(--text); }
-.treecard__badge--collapse rect { opacity: 0.55; }
 
-.edge__cap { pointer-events: none; }
+/* ------------------------------------------------------------------
+   Hit targets — outside the focus mask, so a faded turn stays clickable
+   ------------------------------------------------------------------ */
+
+.treedot__target { cursor: pointer; }
+.treedot__focusring {
+  fill: none;
+  stroke: var(--focus);
+  stroke-width: 1.4;
+}
 
 /* ------------------------------------------------------------------
    Hover preview + legend
@@ -235,7 +277,6 @@
 .treehover {
   position: absolute;
   left: 8px;
-  top: 8px;
   right: 8px;
   padding: 7px 10px;
   border-radius: var(--radius-sm);
@@ -245,6 +286,9 @@
   pointer-events: none;
   font-size: 11.5px;
 }
+.treehover--top { top: 8px; }
+.treehover--bottom { bottom: 26px; }
+
 .treehover__head {
   display: flex;
   align-items: center;
@@ -305,6 +349,12 @@
   text-transform: uppercase;
   color: var(--text-faint);
   margin-bottom: 8px;
+}
+.treelegend__note {
+  margin: 0 0 8px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-faint);
 }
 .treelegend__row {
   display: grid;

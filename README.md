@@ -88,10 +88,10 @@ user cannot see what the model sees, the premise collapses.
 | `src/lib/draft.ts` | **The only place a `ContextPolicy` is constructed for a new node.** Gesture → policy, one mapping. |
 | `src/components/Markdown.tsx` | Block-anchored renderer. Emits the `data-src-*` attributes `anchor.ts` reads back. |
 | `src/lib/templates.ts` | Seed templates. User-editable, stored in IndexedDB, never read from a call site. |
-| `src/lib/treeLayout.ts` | Turn grouping and d3-hierarchy layout for the floating tree. Pure. |
+| `src/lib/treeLayout.ts` | Turn grouping, trunk/branch classification and the trunk layout. Pure, no layout library. |
 | `src/lib/transfer.ts` | JSON export/import with full tree fidelity. |
 | `src/providers/` | One `Provider` interface; OpenAI-compatible and native Anthropic adapters behind it. |
-| `test/` | 153 tests. Acceptance scenarios from §9 are asserted against assembled payloads, not vibes. |
+| `test/` | 180 tests. Acceptance scenarios from §9 are asserted against assembled payloads, not vibes. |
 
 Two invariants worth preserving, both checkable with grep:
 
@@ -171,23 +171,41 @@ duplicate every token. The context chip reports the true count — `1 message` �
 rather than a friendlier number, with the inlined turn count beside it. An
 honest 1 is worth more than a comfortable 4.
 
-**The tree lays out one card per *turn*, not one per message.** A user→assistant
+**The tree lays out one dot per *turn*, not one per message.** A user→assistant
 edge is always a `continuation` and always present, so drawing it doubles the
 depth of the tree while carrying no information. Collapsing the pair onto one
-card means every edge that survives is a *decision* — a continuation, a lens, a
+dot means every edge that survives is a *decision* — a continuation, a lens, a
 crop, an isolation, a quote — which is what §6 asks the edge typography to
 carry. It also answers §11 Q2 for free: retries are replies to the same user
-node, so they collapse into a variant stack on one card rather than fanning out
-as separate thoughts. The card has two bands, user above and assistant below, so
-an edge anchored to a character offset inside a reply leaves from the vertical
-position that offset corresponds to.
+node, so they collapse into a ring around one dot rather than fanning out as
+separate thoughts. The dot is split into two bands, user above and assistant
+below, so an edge anchored to a character offset inside a reply leaves the rim
+at the height that offset corresponds to.
 
-**Auto-fit prioritises legibility over completeness.** A 15-turn conversation
-fits a 400px panel at about 30% zoom, where the cards are unreadable and the map
-stops being a map. The automatic fit fits the *width*, refuses to go below a
-legible scale, and scrolls so the current turn is in frame; depth is what you
-pan. An explicit `all` button fits everything for when you want the shape rather
-than the labels.
+**Two of the six origin kinds are the trunk; the other four branch.** Replying
+to what the model said (`continuation`) and quoting a passage of it
+(`quote-reply`) *are* the conversation carrying on, so they run straight down a
+single vertical spine. A lens, a crop or an isolation is a departure from that
+line, so it leaves sideways on an arc and becomes a spine of its own —
+continuations extend it, a further gesture forks off it again, one column
+further out. Branches on branches, all the way down. The result is that a glance
+answers "where is the thread, and what came off it" with no labels at all: depth
+reads vertically (`y` is exactly `depth * ROW_GAP`, so equal turns line up
+across every branch) and departure reads horizontally.
+
+**Where a turn has two continuations, the trunk goes to the one you are
+reading.** Only one child can occupy the line, and the alternative — handing it
+to whichever was sent first — would leave you on a branch while reading the
+thread. The trunk is the thread you are actually in; the sibling keeps its
+continuation styling and hangs off as a branch.
+
+**A long tree is focused, not shrunk.** Fitting a 40-turn conversation into a
+400px panel puts it at 30% zoom, where the dots stop being distinguishable and
+the map stops being a map. The resting view refuses to go below 100%, parks on
+the turn you are in, and lets the rest overflow — where a focus mask fades and
+blurs it out, so the panel edge reads as "there is more" rather than as a crop.
+Hovering the panel dissolves the mask and eases the view out to the whole tree;
+leaving it puts you back. `here` and `all` pin either end of that for good.
 
 **Off-path collapse is measured from the active path, not from the root.** §6
 asks for auto-collapse "below a depth threshold". Collapsing every off-path

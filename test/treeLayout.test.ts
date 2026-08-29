@@ -1,16 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
-  CARD_HEIGHT,
-  CARD_WIDTH,
+  COLUMN_GAP,
   OFF_PATH_DEPTH,
-  USER_BAND_HEIGHT,
+  ROW_GAP,
+  TRUNK_RADIUS,
+  USER_BAND_FRACTION,
   buildGroups,
   groupIdOf,
+  isTrunkKind,
   layoutTree,
+  radiusFor,
 } from "@/lib/treeLayout";
 import { TreeFixture } from "./helpers";
 import type { NodeMap } from "@/lib/tree";
-import type { ConversationNode } from "@/types";
+import type { BranchKind, ContextPolicy, ConversationNode } from "@/types";
 
 function mapOf(t: TreeFixture): NodeMap {
   const out: NodeMap = {};
@@ -27,8 +30,28 @@ function run(t: TreeFixture, activeNodeId: string | null, expanded: string[] = [
   });
 }
 
+/** A turn added with one of the four gestures, plus its reply. */
+function gesture(
+  t: TreeFixture,
+  parentId: string,
+  kind: BranchKind,
+  label: string = kind,
+): ConversationNode {
+  const policies: Record<string, ContextPolicy> = {
+    "concept-lens": { kind: "windowed", turns: 2, upToNodeId: parentId },
+    "structural-crop": { kind: "truncated", upToNodeId: parentId, charOffset: 3 },
+    "isolated-selection": { kind: "isolated", payload: "x" },
+    "quote-reply": { kind: "quoted", quote: "q", base: "full-ancestry" },
+    continuation: { kind: "full-ancestry" },
+    regenerate: { kind: "full-ancestry" },
+  };
+  const user = t.add("user", label, parentId, policies[kind], kind);
+  t.add("assistant", `${label} reply`, user.id);
+  return user;
+}
+
 describe("turn grouping", () => {
-  it("puts an assistant node on its user node's card", () => {
+  it("puts an assistant node on its user node's turn", () => {
     const t = new TreeFixture();
     const u = t.add("user", "q", null);
     const a = t.add("assistant", "a", u.id);
@@ -37,14 +60,14 @@ describe("turn grouping", () => {
     expect(groupIdOf(nodes, a.id)).toBe(u.id);
   });
 
-  it("makes one card per turn, not one per message", () => {
+  it("makes one node per turn, not one per message", () => {
     const t = new TreeFixture();
     t.linear(6); // 12 nodes
     expect(buildGroups(mapOf(t), t.conversationId).size).toBe(6);
     expect(run(t, t.all().at(-1)!.id).nodes).toHaveLength(6);
   });
 
-  it("collapses retries onto one card rather than fanning them out (§11 Q2)", () => {
+  it("collapses retries onto one dot rather than fanning them out (§11 Q2)", () => {
     const t = new TreeFixture();
     const u = t.add("user", "q", null);
     t.add("assistant", "first try", u.id);
@@ -61,23 +84,16 @@ describe("turn grouping", () => {
     const t = new TreeFixture();
     t.linear(2);
     const src = t.all().at(-1)!;
-    const kinds = [
-      ["concept-lens", { kind: "windowed" as const, turns: 2, upToNodeId: src.id }],
-      ["structural-crop", { kind: "truncated" as const, upToNodeId: src.id, charOffset: 3 }],
-      ["isolated-selection", { kind: "isolated" as const, payload: "x" }],
-      [
-        "quote-reply",
-        { kind: "quoted" as const, quote: "q", base: "full-ancestry" as const },
-      ],
-    ] as const;
-
-    for (const [kind, policy] of kinds) {
-      const node = t.add("user", `ask ${kind}`, src.id, policy, kind);
-      t.add("assistant", "reply", node.id);
+    for (const kind of [
+      "concept-lens",
+      "structural-crop",
+      "isolated-selection",
+      "quote-reply",
+    ] as const) {
+      gesture(t, src.id, kind, `ask ${kind}`);
     }
 
     const layout = run(t, src.id);
-    const fromSource = layout.edges.filter((e) => e.id.startsWith(`${t.all()[2].id}->`));
     expect(new Set(layout.edges.map((e) => e.kind))).toEqual(
       new Set([
         "continuation",
@@ -87,7 +103,6 @@ describe("turn grouping", () => {
         "quote-reply",
       ]),
     );
-    expect(fromSource.length).toBeGreaterThan(0);
   });
 
   it("promotes an orphaned subtree to a root rather than dropping it", () => {
@@ -112,8 +127,133 @@ describe("turn grouping", () => {
   });
 });
 
+describe("trunk and branches (§6)", () => {
+  it("counts exactly continuation and quote-reply as trunk kinds", () => {
+    expect(isTrunkKind("continuation")).toBe(true);
+    expect(isTrunkKind("quote-reply")).toBe(true);
+    for (const kind of ["concept-lens", "structural-crop", "isolated-selection"] as const) {
+      expect(isTrunkKind(kind)).toBe(false);
+    }
+  });
+
+  it("keeps replying and quoting on one straight trunk", () => {
+    const t = new TreeFixture();
+    t.linear(3);
+    const quoted = gesture(t, t.all().at(-1)!.id, "quote-reply", "quote");
+    const quotedReply = t.all().at(-1)!;
+    gesture(t, quotedReply.id, "continuation", "carry on");
+
+    const layout = run(t, t.all().at(-1)!.id);
+    expect(layout.nodes).toHaveLength(5);
+    expect(new Set(layout.nodes.map((n) => n.x)).size).toBe(1);
+    expect(layout.nodes.every((n) => n.branchLevel === 0 && n.side === 0)).toBe(true);
+    expect(layout.edges.every((e) => e.isSpine)).toBe(true);
+    expect(layout.nodes.find((n) => n.id === quoted.id)!.isBranchRoot).toBe(false);
+  });
+
+  it("forks a lens, a crop and an isolation off the trunk", () => {
+    const t = new TreeFixture();
+    t.linear(2);
+    const src = t.all().at(-1)!;
+    const forks = (["concept-lens", "structural-crop", "isolated-selection"] as const).map(
+      (kind) => gesture(t, src.id, kind),
+    );
+
+    const layout = run(t, src.id);
+    const trunkX = layout.nodes.find((n) => n.branchLevel === 0)!.x;
+
+    for (const fork of forks) {
+      const node = layout.nodes.find((n) => n.id === fork.id)!;
+      expect(node.branchLevel).toBe(1);
+      expect(node.isBranchRoot).toBe(true);
+      expect(node.side).not.toBe(0);
+      expect(Math.abs(node.x - trunkX)).toBeGreaterThanOrEqual(COLUMN_GAP - 0.01);
+    }
+    expect(layout.edges.filter((e) => !e.isSpine)).toHaveLength(3);
+  });
+
+  it("alternates the side successive forks leave the trunk on", () => {
+    const t = new TreeFixture();
+    t.linear(2);
+    const src = t.all().at(-1)!;
+    const a = gesture(t, src.id, "concept-lens", "lens a");
+    const b = gesture(t, src.id, "concept-lens", "lens b");
+
+    const layout = run(t, src.id);
+    const sides = [a, b].map((g) => layout.nodes.find((n) => n.id === g.id)!.side);
+    expect(new Set(sides)).toEqual(new Set([-1, 1]));
+  });
+
+  it("branches a branch, one column further out and on the same side", () => {
+    const t = new TreeFixture();
+    t.linear(2);
+    const lens = gesture(t, t.all().at(-1)!.id, "concept-lens");
+    const lensReply = t.all().at(-1)!;
+    const carried = gesture(t, lensReply.id, "continuation", "carry the branch on");
+    const carriedReply = t.all().at(-1)!;
+    const deeper = gesture(t, carriedReply.id, "isolated-selection", "off the branch");
+
+    const layout = run(t, lensReply.id);
+    const at = (id: string) => layout.nodes.find((n) => n.id === id)!;
+
+    // A continuation off a branch stays on that branch's own spine.
+    expect(at(carried.id).branchLevel).toBe(1);
+    expect(at(carried.id).x).toBe(at(lens.id).x);
+    expect(at(carried.id).spineId).toBe(at(lens.id).spineId);
+
+    // A gesture off a branch forks again, outward.
+    expect(at(deeper.id).branchLevel).toBe(2);
+    expect(at(deeper.id).side).toBe(at(lens.id).side);
+    expect(Math.abs(at(deeper.id).x)).toBeGreaterThan(Math.abs(at(lens.id).x));
+    expect(at(deeper.id).radius).toBeLessThan(at(lens.id).radius);
+  });
+
+  it("gives the trunk to the continuation you are actually reading", () => {
+    const t = new TreeFixture();
+    t.linear(2);
+    const src = t.all().at(-1)!;
+    const first = gesture(t, src.id, "continuation", "one way");
+    const firstReply = t.all().at(-1)!;
+    const second = gesture(t, src.id, "continuation", "another way");
+    const secondReply = t.all().at(-1)!;
+
+    const onSecond = run(t, secondReply.id);
+    expect(onSecond.nodes.find((n) => n.id === second.id)!.branchLevel).toBe(0);
+    expect(onSecond.nodes.find((n) => n.id === first.id)!.branchLevel).toBe(1);
+
+    const onFirst = run(t, firstReply.id);
+    expect(onFirst.nodes.find((n) => n.id === first.id)!.branchLevel).toBe(0);
+    expect(onFirst.nodes.find((n) => n.id === second.id)!.branchLevel).toBe(1);
+  });
+
+  it("thins branches out with distance from the trunk", () => {
+    expect(radiusFor(0)).toBe(TRUNK_RADIUS);
+    expect(radiusFor(1)).toBeLessThan(radiusFor(0));
+    expect(radiusFor(2)).toBeLessThan(radiusFor(1));
+    expect(radiusFor(40)).toBeGreaterThan(0);
+  });
+
+  it("puts every turn on the row its depth earns, whatever branch it is on", () => {
+    const t = new TreeFixture();
+    t.linear(3);
+    const lens = gesture(t, t.all()[1].id, "concept-lens"); // off turn 1
+    const layout = run(t, t.all().at(-1)!.id);
+    const at = (id: string) => layout.nodes.find((n) => n.id === id)!;
+
+    // The lens is turn 1's child, so it sits on the same row as trunk turn 2.
+    const trunkTurn2 = layout.nodes.find((n) => n.branchLevel === 0 && n.turn === 2)!;
+    expect(at(lens.id).turn).toBe(2);
+    expect(at(lens.id).y).toBe(trunkTurn2.y);
+    // The whole box is shifted by the trunk root's radius, so every row lands
+    // on the same grid whatever branch it is on.
+    for (const node of layout.nodes) {
+      expect(node.y).toBeCloseTo(node.depth * ROW_GAP + TRUNK_RADIUS, 5);
+    }
+  });
+});
+
 describe("active path emphasis (§6)", () => {
-  it("marks exactly the root→current cards as on-path", () => {
+  it("marks exactly the root→current turns as on-path", () => {
     const t = new TreeFixture();
     t.linear(3);
     const a3 = t.all().at(-1)!;
@@ -126,13 +266,21 @@ describe("active path emphasis (§6)", () => {
     expect(layout.nodes.find((n) => n.id === fork.id)!.onActivePath).toBe(false);
   });
 
-  it("marks the card holding the active node as current, for either role", () => {
+  it("marks the turn holding the active node as current, for either role", () => {
     const t = new TreeFixture();
     t.linear(2);
     const [u1, , u2, a2] = t.all();
     expect(run(t, a2.id).nodes.find((n) => n.isCurrent)!.id).toBe(u2.id);
     expect(run(t, u2.id).nodes.find((n) => n.isCurrent)!.id).toBe(u2.id);
     expect(run(t, u1.id).nodes.find((n) => n.isCurrent)!.id).toBe(u1.id);
+  });
+
+  it("marks exactly one turn current, so the highlight is unambiguous", () => {
+    const t = new TreeFixture();
+    t.linear(4);
+    gesture(t, t.all()[1].id, "concept-lens");
+    const layout = run(t, t.all().at(-1)!.id);
+    expect(layout.nodes.filter((n) => n.isCurrent)).toHaveLength(1);
   });
 
   it("marks an edge on-path only when both ends are", () => {
@@ -149,6 +297,7 @@ describe("active path emphasis (§6)", () => {
 
 describe("anchor-positioned edge exits (§6)", () => {
   const LONG = "x".repeat(1000);
+  const DIAMETER = TRUNK_RADIUS * 2;
 
   function exitFor(anchorStart: number) {
     const t = new TreeFixture();
@@ -170,20 +319,18 @@ describe("anchor-positioned edge exits (§6)", () => {
     const layout = run(t, child.id);
     const parent = layout.nodes.find((n) => n.id === u1.id)!;
     const edge = layout.edges.find((e) => e.id.endsWith(`->${child.id}`))!;
-    return { edge, parentTop: parent.y - CARD_HEIGHT / 2 };
+    return { edge, parent, parentTop: parent.y - parent.radius };
   }
 
-  it("leaves near the top of the assistant band for an early anchor", () => {
+  it("leaves at the top of the assistant band for an early anchor", () => {
     const { edge, parentTop } = exitFor(0);
     const offset = edge.y1 - parentTop;
-    expect(offset).toBeGreaterThanOrEqual(USER_BAND_HEIGHT);
-    expect(offset).toBeLessThan(USER_BAND_HEIGHT + 5);
+    expect(offset).toBeCloseTo(DIAMETER * USER_BAND_FRACTION, 5);
   });
 
-  it("leaves near the bottom for a late anchor", () => {
+  it("leaves at the bottom of the dot for a late anchor", () => {
     const { edge, parentTop } = exitFor(1000);
-    expect(edge.y1 - parentTop).toBeGreaterThan(CARD_HEIGHT - 5);
-    expect(edge.y1 - parentTop).toBeLessThanOrEqual(CARD_HEIGHT);
+    expect(edge.y1 - parentTop).toBeCloseTo(DIAMETER, 5);
   });
 
   it("is monotonic in the anchor offset — a later anchor never exits higher", () => {
@@ -195,18 +342,27 @@ describe("anchor-positioned edge exits (§6)", () => {
     }
   });
 
+  it("keeps the exit on the rim of the dot it leaves", () => {
+    for (const start of [0, 250, 500, 900]) {
+      const { edge, parent } = exitFor(start);
+      const distance = Math.hypot(edge.x1 - parent.x, edge.y1 - parent.y);
+      expect(distance).toBeCloseTo(parent.radius, 5);
+    }
+  });
+
   it("reports the offset as a percentage label", () => {
     expect(exitFor(500).edge.exitLabel).toBe("50%");
   });
 
-  it("falls back to the bottom centre for a plain continuation", () => {
+  it("falls back to the bottom of the dot for a plain continuation", () => {
     const t = new TreeFixture();
     t.linear(2);
     const layout = run(t, t.all().at(-1)!.id);
     const parent = layout.nodes[0];
     const edge = layout.edges[0];
+    expect(edge.isSpine).toBe(true);
     expect(edge.x1).toBe(parent.x);
-    expect(edge.y1).toBe(parent.y + CARD_HEIGHT / 2);
+    expect(edge.y1).toBe(parent.y + parent.radius);
     expect(edge.exitLabel).toBeUndefined();
   });
 
@@ -228,7 +384,9 @@ describe("anchor-positioned edge exits (§6)", () => {
     const layout = run(t, child.id);
     const parent = layout.nodes.find((n) => n.id === u1.id)!;
     const edge = layout.edges.find((e) => e.id.endsWith(`->${child.id}`))!;
-    expect(edge.y1 - (parent.y - CARD_HEIGHT / 2)).toBeLessThan(USER_BAND_HEIGHT);
+    expect(edge.y1 - (parent.y - parent.radius)).toBeLessThan(
+      parent.radius * 2 * USER_BAND_FRACTION,
+    );
   });
 });
 
@@ -282,7 +440,7 @@ describe("auto-collapse (§6 depth threshold)", () => {
     expect(side.length).toBe(6);
   });
 
-  it("never hides a card without accounting for it in a badge", () => {
+  it("never hides a turn without accounting for it in a badge", () => {
     const { t, trunkLeaf } = forked(30, 8);
     const layout = run(t, trunkLeaf.id);
     const hidden = layout.totalGroups - layout.nodes.length;
@@ -292,41 +450,63 @@ describe("auto-collapse (§6 depth threshold)", () => {
 });
 
 describe("geometry", () => {
-  it("keeps every card inside the reported bounds", () => {
+  it("keeps every dot inside the reported bounds", () => {
     const t = new TreeFixture();
     t.linear(5);
     for (let i = 0; i < 4; i++) {
-      const fork = t.add("user", `fork ${i}`, t.all()[1].id);
-      t.add("assistant", "reply", fork.id);
+      gesture(t, t.all()[1].id, "concept-lens", `fork ${i}`);
     }
     const layout = run(t, t.all().at(-1)!.id);
     for (const node of layout.nodes) {
-      expect(node.x - CARD_WIDTH / 2).toBeGreaterThanOrEqual(-0.01);
-      expect(node.x + CARD_WIDTH / 2).toBeLessThanOrEqual(layout.width + 0.01);
-      expect(node.y).toBeLessThanOrEqual(layout.height);
+      expect(node.x - node.radius).toBeGreaterThanOrEqual(-0.01);
+      expect(node.x + node.radius).toBeLessThanOrEqual(layout.width + 0.01);
+      expect(node.y - node.radius).toBeGreaterThanOrEqual(-0.01);
+      expect(node.y + node.radius).toBeLessThanOrEqual(layout.height + 0.01);
     }
   });
 
-  it("never overlaps two cards", () => {
+  it("never overlaps two dots", () => {
     const t = new TreeFixture();
     t.linear(4);
     for (let i = 0; i < 5; i++) {
-      const fork = t.add("user", `fork ${i}`, t.all()[1].id);
-      t.add("assistant", "reply", fork.id);
+      gesture(t, t.all()[1].id, "isolated-selection", `fork ${i}`);
     }
+    // …and a branch hanging off a branch, which is what fills the columns up.
+    const branchReply = t.all().find((n) => n.content === "fork 0 reply")!;
+    gesture(t, branchReply.id, "concept-lens", "deep");
+
     const layout = run(t, t.all().at(-1)!.id);
     for (let i = 0; i < layout.nodes.length; i++) {
       for (let j = i + 1; j < layout.nodes.length; j++) {
         const a = layout.nodes[i];
         const b = layout.nodes[j];
-        const overlaps =
-          Math.abs(a.x - b.x) < CARD_WIDTH && Math.abs(a.y - b.y) < CARD_HEIGHT;
-        expect(overlaps).toBe(false);
+        const gap = Math.hypot(a.x - b.x, a.y - b.y) - a.radius - b.radius;
+        expect(gap).toBeGreaterThan(6);
       }
     }
   });
 
-  it("puts deeper cards lower", () => {
+  it("stacks two long branches on one side in separate columns", () => {
+    const t = new TreeFixture();
+    t.linear(8);
+    // Two lenses off adjacent trunk turns, each carrying on for a few turns.
+    const heads = [t.all()[1].id, t.all()[3].id].map((parent) => {
+      let head = gesture(t, parent, "concept-lens", "lens");
+      let cursor = t.all().at(-1)!;
+      for (let i = 0; i < 4; i++) {
+        gesture(t, cursor.id, "continuation", "on");
+        cursor = t.all().at(-1)!;
+      }
+      return head;
+    });
+
+    const layout = run(t, t.all().find((n) => n.content === "answer turn 8")!.id);
+    const [a, b] = heads.map((h) => layout.nodes.find((n) => n.id === h.id)!);
+    // Whether they land on the same side or opposite ones, they never collide.
+    expect(a.side === b.side ? a.x !== b.x : true).toBe(true);
+  });
+
+  it("puts deeper turns lower", () => {
     const t = new TreeFixture();
     t.linear(5);
     const layout = run(t, t.all().at(-1)!.id);
@@ -377,7 +557,7 @@ describe("geometry", () => {
     expect(layout.nodes.filter((n) => n.onActivePath)).toHaveLength(50);
 
     // What must stay bounded is the off-path clutter: at most OFF_PATH_DEPTH
-    // cards per branch rather than all five.
+    // turns per branch rather than all five.
     const offPath = layout.nodes.filter((n) => !n.onActivePath);
     expect(offPath).toHaveLength(10 * OFF_PATH_DEPTH);
     expect(layout.nodes.length).toBeLessThan(layout.totalGroups);

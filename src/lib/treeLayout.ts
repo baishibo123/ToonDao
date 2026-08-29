@@ -1,32 +1,60 @@
-import { hierarchy, tree, type HierarchyPointNode } from "d3-hierarchy";
 import type { BranchKind, ConversationNode, NodeId, TextAnchor } from "@/types";
 import { pathToRoot, type NodeMap } from "@/lib/tree";
 
 /**
  * Layout for the floating tree (§6).
  *
- * DESIGN: one laid-out node per *turn*, not per message.
+ * DESIGN 1: one laid-out node per *turn*, not per message.
  *
- * A user node and its assistant replies form one card. The reason is that a
+ * A user node and its assistant replies form one node. The reason is that a
  * user→assistant edge is always a `continuation` and always present, so drawing
  * it doubles the depth of the tree while carrying no information. Collapsing
  * the pair means every edge that survives is a *decision* — a continuation, a
  * lens, a crop, an isolation, a quote — which is what §6 asks the edge
  * typography to carry. It also gives §11 Q2 its answer for free: retries are
- * replies to the same user node, so they collapse into a variant stack on one
- * card rather than fanning out as separate thoughts.
+ * replies to the same user node, so they collapse into a variant ring on one
+ * node rather than fanning out as separate thoughts.
  *
- * The card has two bands, user above and assistant below, so an edge anchored
- * to a character offset inside a reply can leave from the vertical position that
- * offset corresponds to. That is the visual payoff of storing offsets: an edge
- * visibly leaves from the middle of a message.
+ * DESIGN 2: a trunk, and branches off it.
+ *
+ * The tree is not a generic tidy tree. Two of the six origin kinds *are* the
+ * conversation continuing — you replied to what the model said (`continuation`),
+ * or you quoted a passage of it and replied (`quote-reply`). Those two run
+ * straight down a single vertical spine, because that is what they are: one
+ * line of thought, one after another.
+ *
+ * Everything else — a lens, a crop, an isolation — is a departure from that
+ * line, so it leaves sideways as a branch. A branch is itself a spine: it runs
+ * downward from where it left, continuations extend it, and a further gesture
+ * off it forks again, one column further out. Branches on branches, all the way
+ * down.
+ *
+ * The payoff is that a glance answers "where is the thread, and what came off
+ * it" without reading a single label. Depth reads vertically (y is exactly
+ * `depth * ROW_GAP`, so equal turns line up across every branch) and departure
+ * reads horizontally.
  */
 
-export const CARD_WIDTH = 132;
-export const CARD_HEIGHT = 46;
-export const USER_BAND_HEIGHT = 17;
-export const COLUMN_GAP = 30;
-export const ROW_GAP = 42;
+/** Vertical distance between consecutive turns. Also the row quantum. */
+export const ROW_GAP = 34;
+/** Horizontal distance between one branch column and the next. */
+export const COLUMN_GAP = 40;
+/** Vertical clearance demanded between two spines sharing a column. */
+export const COLUMN_CLEAR = ROW_GAP * 0.9;
+
+export const TRUNK_RADIUS = 6.5;
+export const RADIUS_STEP = 1.15;
+export const MIN_RADIUS = 3.5;
+
+/**
+ * How the two bands of a turn divide its dot: the upper share belongs to the
+ * user message, the rest to the reply. An edge anchored to a character offset
+ * leaves the rim at the height that offset corresponds to inside its band, so
+ * an edge born two thirds of the way through an answer visibly leaves two
+ * thirds of the way down. That is the visual payoff of storing offsets.
+ */
+export const USER_BAND_FRACTION = 0.37;
+
 /** Below this many turns the whole tree is shown regardless of depth. */
 export const AUTO_EXPAND_LIMIT = 12;
 /**
@@ -41,13 +69,30 @@ export const AUTO_EXPAND_LIMIT = 12;
  */
 export const OFF_PATH_DEPTH = 2;
 
+/**
+ * The two kinds that *are* the conversation continuing, and so stay on the
+ * spine they were born on. Everything else forks.
+ */
+export const TRUNK_KINDS: readonly BranchKind[] = ["continuation", "quote-reply"];
+
+export function isTrunkKind(kind: BranchKind): boolean {
+  return TRUNK_KINDS.includes(kind);
+}
+
+/** Branches read as tributaries of the trunk, so they thin out with distance. */
+export function radiusFor(branchLevel: number): number {
+  return Math.max(MIN_RADIUS, TRUNK_RADIUS - branchLevel * RADIUS_STEP);
+}
+
+export type Side = -1 | 0 | 1;
+
 export interface TurnGroup {
   /** The user node's id. Stable across re-layouts. */
   id: string;
   user: ConversationNode;
   replies: ConversationNode[];
   parentGroupId: string | null;
-  /** Which node inside the parent card this edge leaves from. */
+  /** Which node inside the parent this edge leaves from. */
   edgeFromNodeId: NodeId | null;
   edgeKind: BranchKind;
   anchor?: TextAnchor;
@@ -58,8 +103,17 @@ export interface LaidOutNode extends TurnGroup {
   y: number;
   depth: number;
   turn: number;
+  radius: number;
+  /** 0 on the trunk, 1 on a branch off it, 2 on a branch off a branch… */
+  branchLevel: number;
+  /** Which way this node's spine hangs off its parent spine. 0 on the trunk. */
+  side: Side;
+  /** Shared by every node on one run of trunk-kind edges. */
+  spineId: string;
+  /** True on the node where a branch leaves the spine that bore it. */
+  isBranchRoot: boolean;
   onActivePath: boolean;
-  /** The card holding the node the composer is attached to. */
+  /** The turn holding the node the composer is attached to. */
   isCurrent: boolean;
   hiddenDescendants: number;
   childCount: number;
@@ -73,7 +127,11 @@ export interface LaidOutEdge {
   x2: number;
   y2: number;
   onActivePath: boolean;
-  /** Where inside the parent card the edge leaves, 0 at the top. */
+  /** True when both ends sit on one spine — drawn as a straight run. */
+  isSpine: boolean;
+  /** Which way a fork leaves its parent. 0 on a spine edge. */
+  side: Side;
+  /** Where inside the parent the edge leaves, as a percentage of the message. */
   exitLabel?: string;
 }
 
@@ -88,7 +146,7 @@ export interface TreeLayout {
 
 /* ------------------------------------------------------------------ */
 
-/** Which card a node lives on. Assistant nodes live on their user's card. */
+/** Which turn a node lives on. Assistant nodes live on their user's turn. */
 export function groupIdOf(nodes: NodeMap, id: NodeId): string | null {
   const node = nodes[id];
   if (!node) return null;
@@ -132,6 +190,32 @@ export function buildGroups(nodes: NodeMap, conversationId: string): Map<string,
   return groups;
 }
 
+/* ------------------------------------------------------------------ */
+
+interface Placement {
+  x: number;
+  y: number;
+  depth: number;
+  branchLevel: number;
+  side: Side;
+  column: number;
+  spineId: string;
+  isBranchRoot: boolean;
+}
+
+/** A spine waiting to be placed: a head turn plus where it may go. */
+interface PendingSpine {
+  head: TurnGroup;
+  startY: number;
+  depth: number;
+  branchLevel: number;
+  /** Preferred side. Honoured exactly once the branch is off the trunk. */
+  side: Side;
+  minColumn: number;
+  lockSide: boolean;
+  order: number;
+}
+
 export function layoutTree(args: {
   nodes: NodeMap;
   conversationId: string;
@@ -144,7 +228,7 @@ export function layoutTree(args: {
     return { nodes: [], edges: [], width: 0, height: 0, totalGroups: 0 };
   }
 
-  // The active path in Graph A, mapped onto cards.
+  // The active path in Graph A, mapped onto turns.
   const activeGroupIds = new Set<string>();
   for (const node of pathToRoot(nodes, activeNodeId)) {
     const id = groupIdOf(nodes, node.id);
@@ -165,7 +249,7 @@ export function layoutTree(args: {
   const autoExpandAll = groups.size <= AUTO_EXPAND_LIMIT;
 
   /**
-   * A card's children are drawn when the whole tree is small, when the card is
+   * A turn's children are drawn when the whole tree is small, when the turn is
    * on the active path (so every fork off it is always visible), when the user
    * has expanded it, or when it is still within OFF_PATH_DEPTH levels of the
    * active path. Everything beyond that becomes a count badge.
@@ -195,60 +279,167 @@ export function layoutTree(args: {
     walk(root, activeGroupIds.has(root.id) ? 0 : 1);
   }
 
-  // d3-hierarchy needs a single root; a synthetic one keeps multiple roots
-  // (possible after a mid-tree delete) laid out side by side.
+  /* ---- placement ------------------------------------------------- */
+
   const visibleIds = new Set(visible.map((g) => g.id));
-  const rootStub: LayoutDatum = { id: "__root__", parentId: null, group: null };
-  const data: LayoutDatum[] = [
-    rootStub,
-    ...visible.map((group) => ({
-      id: group.id,
-      parentId:
-        group.parentGroupId && visibleIds.has(group.parentGroupId)
-          ? group.parentGroupId
-          : "__root__",
-      group,
-    })),
-  ];
+  const visibleChildren = (id: string): TurnGroup[] =>
+    (childrenByParent.get(id) ?? []).filter((g) => visibleIds.has(g.id));
 
-  const root = hierarchy<NestedDatum>(buildNested(data), (d) => d.children);
-  const layout = tree<NestedDatum>()
-    .nodeSize([CARD_WIDTH + COLUMN_GAP, CARD_HEIGHT + ROW_GAP])
-    .separation((a, b) => (a.parent === b.parent ? 1 : 1.25));
-  const positioned = layout(root);
+  /**
+   * Which child keeps the spine going. A turn can have two continuations —
+   * you went back and asked something else in the same register — and only one
+   * of them can occupy the line. The one you are reading wins, so the trunk is
+   * always the thread you are actually in; the other becomes a branch, still
+   * drawn with its own edge style.
+   */
+  const spineNext = (group: TurnGroup): TurnGroup | null => {
+    const trunkKids = visibleChildren(group.id).filter((k) => isTrunkKind(k.edgeKind));
+    if (trunkKids.length === 0) return null;
+    return trunkKids.find((k) => activeGroupIds.has(k.id)) ?? trunkKids[0];
+  };
 
-  const placed = new Map<string, HierarchyPointNode<NestedDatum>>();
-  positioned.each((point) => {
-    if (point.data.id !== "__root__") placed.set(point.data.id, point);
+  const chainOf = (head: TurnGroup): TurnGroup[] => {
+    const chain: TurnGroup[] = [];
+    const seen = new Set<string>();
+    let cursor: TurnGroup | null = head;
+    while (cursor && !seen.has(cursor.id)) {
+      seen.add(cursor.id);
+      chain.push(cursor);
+      cursor = spineNext(cursor);
+    }
+    return chain;
+  };
+
+  /** Lowest y already consumed in each `side:column` lane. */
+  const laneBottom = new Map<string, number>();
+  const laneKey = (side: Side, column: number) => `${side}:${column}`;
+
+  const firstFreeColumn = (side: Side, minColumn: number, yTop: number): number => {
+    let column = minColumn;
+    while ((laneBottom.get(laneKey(side, column)) ?? -Infinity) > yTop - COLUMN_CLEAR) {
+      column += 1;
+    }
+    return column;
+  };
+
+  const placement = new Map<string, Placement>();
+  const queue: PendingSpine[] = [];
+  let order = 0;
+  const enqueue = (spine: Omit<PendingSpine, "order">) => {
+    queue.push({ ...spine, order: order++ });
+  };
+
+  // The first root is the trunk. Any others (only possible after a mid-tree
+  // delete orphaned a subtree) are laid out beside it rather than dropped.
+  (childrenByParent.get(null) ?? []).forEach((root, index) => {
+    enqueue({
+      head: root,
+      startY: 0,
+      depth: 0,
+      branchLevel: 0,
+      side: index === 0 ? 0 : 1,
+      minColumn: index === 0 ? 0 : 1,
+      lockSide: index === 0,
+    });
   });
 
-  // d3 reports card *centres*. Shifting by minX alone leaves the leftmost card
-  // extending half a width past x=0, where the SVG clips it — so the offset
-  // includes half a card in each axis and the reported size does too.
-  const xs = [...placed.values()].map((p) => p.x);
-  const minX = (xs.length ? Math.min(...xs) : 0) - CARD_WIDTH / 2;
-  // The stub occupies depth 0, so real roots sit at depth 1; lift them back,
-  // less half a card so the top row is not clipped either.
-  const shiftY = CARD_HEIGHT + ROW_GAP - CARD_HEIGHT / 2;
+  // Forks off the trunk alternate sides, which is what makes the shape read as
+  // a trunk rather than as a comb. Deeper forks stay on the side they are
+  // already on, so a branch fans outward and never crosses back over the trunk.
+  let trunkForkParity = 0;
 
-  const laidOut: LaidOutNode[] = [];
-  const turnNumbers = computeTurnNumbers(groups, childrenByParent);
+  while (queue.length > 0) {
+    let pick = 0;
+    for (let i = 1; i < queue.length; i++) {
+      const a = queue[i];
+      const b = queue[pick];
+      if (a.startY < b.startY || (a.startY === b.startY && a.order < b.order)) pick = i;
+    }
+    const spine = queue.splice(pick, 1)[0];
+    const chain = chainOf(spine.head);
+    const yTop = spine.startY;
+    const yBottom = spine.startY + (chain.length - 1) * ROW_GAP;
 
-  for (const group of visible) {
-    const point = placed.get(group.id);
-    if (!point) continue;
-    laidOut.push({
-      ...group,
-      x: point.x - minX,
-      y: point.y - shiftY,
-      depth: point.depth - 1,
-      turn: turnNumbers.get(group.id) ?? 0,
-      onActivePath: activeGroupIds.has(group.id),
-      isCurrent: group.id === currentGroupId,
-      hiddenDescendants: hiddenCount.get(group.id) ?? 0,
-      childCount: (childrenByParent.get(group.id) ?? []).length,
+    let side: Side = spine.side;
+    let column = spine.minColumn;
+    if (side !== 0 || spine.minColumn !== 0) {
+      const preferred = (side === 0 ? 1 : side) as -1 | 1;
+      const here = firstFreeColumn(preferred, spine.minColumn, yTop);
+      if (spine.lockSide) {
+        side = preferred;
+        column = here;
+      } else {
+        const other = (preferred * -1) as -1 | 1;
+        const there = firstFreeColumn(other, spine.minColumn, yTop);
+        side = there < here ? other : preferred;
+        column = Math.min(here, there);
+      }
+      laneBottom.set(laneKey(side, column), yBottom);
+    }
+
+    const x = side * column * COLUMN_GAP;
+    chain.forEach((group, index) => {
+      placement.set(group.id, {
+        x,
+        y: spine.startY + index * ROW_GAP,
+        depth: spine.depth + index,
+        branchLevel: spine.branchLevel,
+        side,
+        column,
+        spineId: spine.head.id,
+        isBranchRoot: index === 0 && spine.branchLevel > 0,
+      });
     });
+
+    for (const group of chain) {
+      const at = placement.get(group.id)!;
+      const keeper = spineNext(group);
+      for (const kid of visibleChildren(group.id)) {
+        if (keeper && kid.id === keeper.id) continue;
+        const onTrunk = spine.branchLevel === 0;
+        enqueue({
+          head: kid,
+          startY: at.y + ROW_GAP,
+          depth: at.depth + 1,
+          branchLevel: spine.branchLevel + 1,
+          side: onTrunk ? (trunkForkParity++ % 2 === 0 ? 1 : -1) : side,
+          minColumn: column + 1,
+          lockSide: !onTrunk,
+        });
+      }
+    }
   }
+
+  /* ---- normalise to a positive box ------------------------------- */
+
+  const raw = visible
+    .map((group) => ({ group, at: placement.get(group.id) }))
+    .filter((entry): entry is { group: TurnGroup; at: Placement } => Boolean(entry.at));
+
+  if (raw.length === 0) {
+    return { nodes: [], edges: [], width: 0, height: 0, totalGroups: groups.size };
+  }
+
+  const radiusOf = (at: Placement) => radiusFor(at.branchLevel);
+  const minX = Math.min(...raw.map(({ at }) => at.x - radiusOf(at)));
+  const minY = Math.min(...raw.map(({ at }) => at.y - radiusOf(at)));
+
+  const laidOut: LaidOutNode[] = raw.map(({ group, at }) => ({
+    ...group,
+    x: at.x - minX,
+    y: at.y - minY,
+    depth: at.depth,
+    turn: at.depth + 1,
+    radius: radiusOf(at),
+    branchLevel: at.branchLevel,
+    side: at.side,
+    spineId: at.spineId,
+    isBranchRoot: at.isBranchRoot,
+    onActivePath: activeGroupIds.has(group.id),
+    isCurrent: group.id === currentGroupId,
+    hiddenDescendants: hiddenCount.get(group.id) ?? 0,
+    childCount: (childrenByParent.get(group.id) ?? []).length,
+  }));
 
   const byId = new Map(laidOut.map((n) => [n.id, n]));
   const edges: LaidOutEdge[] = [];
@@ -256,25 +447,24 @@ export function layoutTree(args: {
     if (!node.parentGroupId) continue;
     const parent = byId.get(node.parentGroupId);
     if (!parent) continue;
-    const exit = exitPoint(parent, node, nodes);
+    const isSpine = parent.spineId === node.spineId;
+    const exit = exitPoint(parent, node, nodes, isSpine);
     edges.push({
       id: `${parent.id}->${node.id}`,
       kind: node.edgeKind,
       x1: exit.x,
       y1: exit.y,
       x2: node.x,
-      y2: node.y - CARD_HEIGHT / 2,
+      y2: node.y - node.radius,
       onActivePath: parent.onActivePath && node.onActivePath,
+      isSpine,
+      side: isSpine ? 0 : node.x >= parent.x ? 1 : -1,
       exitLabel: exit.label,
     });
   }
 
-  const width = laidOut.length
-    ? Math.max(...laidOut.map((n) => n.x)) + CARD_WIDTH / 2
-    : 0;
-  const height = laidOut.length
-    ? Math.max(...laidOut.map((n) => n.y)) + CARD_HEIGHT / 2
-    : 0;
+  const width = Math.max(...laidOut.map((n) => n.x + n.radius));
+  const height = Math.max(...laidOut.map((n) => n.y + n.radius));
 
   return { nodes: laidOut, edges, width, height, totalGroups: groups.size };
 }
@@ -282,39 +472,58 @@ export function layoutTree(args: {
 /* ------------------------------------------------------------------ */
 
 /**
- * Where an edge leaves its parent card.
+ * Where an edge leaves its parent.
  *
- * With an anchor, the exit slides down the band belonging to the node the
- * anchor points into, proportionally to the character offset — so an edge born
- * two thirds of the way through a long answer visibly leaves two thirds of the
- * way down. Without one (a plain continuation) it leaves the bottom centre.
+ * A spine edge is a straight vertical run between two turns of one thread, so
+ * it always leaves the bottom of the dot — bending it would say something the
+ * thread is not doing.
+ *
+ * A fork leaves the rim. With an anchor the exit slides down the band belonging
+ * to the node the anchor points into, proportionally to the character offset;
+ * without one it leaves the lower flank at 45°.
  */
 function exitPoint(
   parent: LaidOutNode,
   child: LaidOutNode,
   nodes: NodeMap,
+  isSpine: boolean,
 ): { x: number; y: number; label?: string } {
   const anchor = child.anchor;
   const sourceId = child.edgeFromNodeId;
   const source = sourceId ? nodes[sourceId] : undefined;
+  const radius = parent.radius;
 
-  if (!anchor || !source || source.content.length === 0) {
-    return { x: parent.x, y: parent.y + CARD_HEIGHT / 2 };
+  const anchored = Boolean(anchor && source && source.content.length > 0);
+  const fraction = anchored ? clamp01(anchor!.start / source!.content.length) : 0;
+  const label = anchored ? `${Math.round(fraction * 100)}%` : undefined;
+
+  if (isSpine) {
+    return { x: parent.x, y: parent.y + radius, label };
   }
 
-  const fraction = clamp01(anchor.start / source.content.length);
-  const top = parent.y - CARD_HEIGHT / 2;
-  const band =
-    source.role === "user"
-      ? { top, height: USER_BAND_HEIGHT }
-      : { top: top + USER_BAND_HEIGHT, height: CARD_HEIGHT - USER_BAND_HEIGHT };
+  const direction = child.x >= parent.x ? 1 : -1;
+  if (!anchored) {
+    return {
+      x: parent.x + direction * radius * Math.SQRT1_2,
+      y: parent.y + radius * Math.SQRT1_2,
+    };
+  }
 
+  const top = parent.y - radius;
+  const band =
+    source!.role === "user"
+      ? { top, height: 2 * radius * USER_BAND_FRACTION }
+      : {
+          top: top + 2 * radius * USER_BAND_FRACTION,
+          height: 2 * radius * (1 - USER_BAND_FRACTION),
+        };
+
+  const y = band.top + band.height * fraction;
+  const dy = y - parent.y;
   return {
-    x: parent.x + CARD_WIDTH / 2,
-    // Inset by 2px at each end so an exit at 0% or 100% still reads as being
-    // on the card rather than on its border.
-    y: band.top + 2 + (band.height - 4) * fraction,
-    label: `${Math.round(fraction * 100)}%`,
+    x: parent.x + direction * Math.sqrt(Math.max(0, radius * radius - dy * dy)),
+    y,
+    label,
   };
 }
 
@@ -335,59 +544,4 @@ function countSubtree(
     stack.push(...(childrenByParent.get(group.id) ?? []));
   }
   return total;
-}
-
-/** 1-based turn number down each branch, so a fork restarts from its parent. */
-function computeTurnNumbers(
-  groups: Map<string, TurnGroup>,
-  childrenByParent: Map<string | null, TurnGroup[]>,
-): Map<string, number> {
-  const out = new Map<string, number>();
-  const stack: Array<{ group: TurnGroup; turn: number }> = (
-    childrenByParent.get(null) ?? []
-  ).map((group) => ({ group, turn: 1 }));
-
-  while (stack.length) {
-    const { group, turn } = stack.pop()!;
-    out.set(group.id, turn);
-    for (const child of childrenByParent.get(group.id) ?? []) {
-      stack.push({ group: child, turn: turn + 1 });
-    }
-  }
-  void groups;
-  return out;
-}
-
-/* ------------------------------------------------------------------ */
-/* Flat parent pointers → the nested shape d3-hierarchy wants                  */
-/* ------------------------------------------------------------------ */
-
-interface LayoutDatum {
-  id: string;
-  parentId: string | null;
-  group: TurnGroup | null;
-}
-
-interface NestedDatum extends LayoutDatum {
-  children?: NestedDatum[];
-}
-
-function buildNested(data: LayoutDatum[]): NestedDatum {
-  const byId = new Map<string, NestedDatum>();
-  for (const datum of data) byId.set(datum.id, { ...datum });
-  let root: NestedDatum | undefined;
-  for (const datum of data) {
-    const node = byId.get(datum.id)!;
-    if (datum.parentId === null) {
-      root = node;
-      continue;
-    }
-    const parent = byId.get(datum.parentId);
-    if (!parent) {
-      root ??= node;
-      continue;
-    }
-    (parent.children ??= []).push(node);
-  }
-  return root ?? byId.get(data[0]!.id)!;
 }
