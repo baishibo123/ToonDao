@@ -2,13 +2,28 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import { useStore } from "@/store/useStore";
 import { useUI } from "@/store/useUI";
 import { layoutTree, type LaidOutNode, type TreeLayout } from "@/lib/treeLayout";
-import { Edge, edgeColor } from "@/components/tree/edges";
+import { Edge, EdgeLegend, edgeColor } from "@/components/tree/edges";
 import { BRANCH_META } from "@/lib/policyMeta";
 import { policyLabel } from "@/lib/assembleContext";
 
-interface TreeCanvasProps {
+interface Rect {
+  x: number;
+  y: number;
   width: number;
   height: number;
+}
+
+interface TreeCanvasProps {
+  /** Size of the drawing surface, which is the whole stage. */
+  width: number;
+  height: number;
+  /**
+   * The part of the surface the user can actually see — the open canvas beside
+   * the thread. The tree fits, centres and focuses itself in here, but it is
+   * free to draw outside it: the blurred tail bleeding past the thread's edges
+   * is what makes the two read as one artifact rather than two panes.
+   */
+  viewport: Rect;
 }
 
 interface View {
@@ -43,11 +58,15 @@ function lerp(a: number, b: number, t: number): number {
 }
 
 /**
- * An exponential ease toward `target`, in a ref so it survives re-layout.
- * Used for the reveal, which has to interpolate a transform, a mask radius and
- * an opacity together — CSS can transition none of those on an SVG mask.
+ * Eases toward `target` over a fixed duration.
+ *
+ * Time-based rather than per-frame: a per-frame decay stalls half-open wherever
+ * requestAnimationFrame is being throttled — a background tab, a loaded
+ * machine — and a reveal that stops halfway is worse than one that snaps.
  */
-function useEased(target: number, speed = 0.18): number {
+const REVEAL_MS = 320;
+
+function useEased(target: number): number {
   const [value, setValue] = useState(target);
   const current = useRef(target);
 
@@ -57,17 +76,20 @@ function useEased(target: number, speed = 0.18): number {
       setValue(target);
       return;
     }
+    const from = current.current;
+    if (from === target) return;
+    const started = performance.now();
     let frame = 0;
-    const step = () => {
-      const next = current.current + (target - current.current) * speed;
-      const done = Math.abs(target - next) < 0.003;
-      current.current = done ? target : next;
+    const step = (now: number) => {
+      const t = Math.min(1, (now - started) / REVEAL_MS);
+      const eased = 1 - (1 - t) ** 3;
+      current.current = from + (target - from) * eased;
       setValue(current.current);
-      if (!done) frame = requestAnimationFrame(step);
+      if (t < 1) frame = requestAnimationFrame(step);
     };
     frame = requestAnimationFrame(step);
     return () => cancelAnimationFrame(frame);
-  }, [target, speed]);
+  }, [target]);
 
   return value;
 }
@@ -77,15 +99,17 @@ function useEased(target: number, speed = 0.18): number {
  * never at the cost of pushing a branch off the edge, so the offer is withdrawn
  * as soon as the tree is wider than the panel.
  */
-function centreOnTrunk(layout: TreeLayout, viewport: number, scale: number): number {
+function centreOnTrunk(layout: TreeLayout, vp: Rect, scale: number): number {
   const trunk = layout.nodes.find((n) => n.branchLevel === 0);
   const content = layout.width * scale;
-  const wanted = viewport / 2 - (trunk ? trunk.x : layout.width / 2) * scale;
-  const edge = viewport - PADDING - content;
-  return clamp(wanted, Math.min(PADDING, edge), Math.max(PADDING, edge));
+  const wanted = vp.x + vp.width / 2 - (trunk ? trunk.x : layout.width / 2) * scale;
+  const near = vp.x + PADDING;
+  const far = vp.x + vp.width - PADDING - content;
+  return clamp(wanted, Math.min(near, far), Math.max(near, far));
 }
 
-export function TreeCanvas({ width, height }: TreeCanvasProps) {
+export function TreeCanvas({ width, height, viewport }: TreeCanvasProps) {
+  const { x: vpx, y: vpy, width: vpw, height: vph } = viewport;
   const svgRef = useRef<SVGSVGElement>(null);
   const nodes = useStore((s) => s.nodes);
   const conversationId = useStore((s) => s.conversationId);
@@ -101,6 +125,7 @@ export function TreeCanvas({ width, height }: TreeCanvasProps) {
   const [hover, setHover] = useState<LaidOutNode | null>(null);
   const [focusId, setFocusId] = useState<string | null>(null);
   const [pointerInside, setPointerInside] = useState(false);
+  const [legend, setLegend] = useState(false);
   const uid = useId().replace(/:/g, "");
 
   // The preview card follows the dot under the cursor, and lets go a beat late
@@ -141,55 +166,64 @@ export function TreeCanvas({ width, height }: TreeCanvasProps) {
 
   /** Everything at once, however small that ends up. */
   const overview = useMemo<View>(() => {
-    if (!layout.nodes.length || width === 0 || height === 0) {
+    if (!layout.nodes.length || vpw === 0 || vph === 0) {
       return { x: 0, y: 0, scale: 1 };
     }
+    const content = layout.height + BADGE_ROOM;
     const scale = clamp(
       Math.min(
-        (width - PADDING * 2) / Math.max(1, layout.width),
-        (height - PADDING * 2) / Math.max(1, layout.height + BADGE_ROOM),
+        (vpw - PADDING * 2) / Math.max(1, layout.width),
+        (vph - PADDING * 2) / Math.max(1, content),
       ),
       MIN_SCALE,
       MAX_FIT,
     );
     return {
       scale,
-      x: centreOnTrunk(layout, width, scale),
-      y: (height - (layout.height + BADGE_ROOM) * scale) / 2,
+      x: centreOnTrunk(layout, viewport, scale),
+      y: vpy + (vph - content * scale) / 2,
     };
-  }, [layout, width, height]);
+  }, [layout, viewport, vpw, vph, vpy]);
 
   /**
-   * The resting view: a readable scale, parked on the turn you are in. Depth is
-   * what the user pans; legibility is not negotiable. The whole tree is one
-   * hover away, so this view does not have to compromise to show it.
+   * The resting view: a readable scale, with the turn you are reading in the
+   * dead centre of the open canvas. Centring it there is not decoration — it is
+   * where the focus mask is centred too, so "sharp" and "the conversation I am
+   * looking at" are the same place. A long tree is allowed to run off both ends
+   * rather than being pulled off-centre to keep its edges in frame.
    */
   const focused = useMemo<View>(() => {
-    if (!layout.nodes.length || width === 0 || height === 0) {
+    if (!layout.nodes.length || vpw === 0 || vph === 0) {
       return { x: 0, y: 0, scale: 1 };
     }
-    // Fill the panel when the tree is small enough to fill it, and stop at a
+    const content = layout.height + BADGE_ROOM;
+    // Fill the canvas when the tree is small enough to fill it, and stop at a
     // legible scale when it is not — at which point the focus mask takes over
     // and the rest of the tree is a hover away.
     const scale = clamp(
       Math.min(
-        (width - PADDING * 2) / Math.max(1, layout.width),
-        (height - PADDING * 2) / Math.max(1, layout.height + BADGE_ROOM),
+        (vpw - PADDING * 2) / Math.max(1, layout.width),
+        (vph - PADDING * 2) / Math.max(1, content),
       ),
       LEGIBLE_SCALE,
       MAX_FIT,
     );
+    const fits =
+      layout.width * scale <= vpw - PADDING * 2 && content * scale <= vph - PADDING * 2;
+    if (fits) {
+      return {
+        scale,
+        x: centreOnTrunk(layout, viewport, scale),
+        y: vpy + (vph - content * scale) / 2,
+      };
+    }
     const current = layout.nodes.find((n) => n.isCurrent) ?? layout.nodes.at(-1)!;
-    const content = (layout.height + BADGE_ROOM) * scale;
     return {
       scale,
-      x: centreOnTrunk(layout, width, scale),
-      y:
-        content <= height - PADDING * 2
-          ? (height - content) / 2
-          : clamp(height / 2 - current.y * scale, height - PADDING - content, PADDING),
+      x: vpx + vpw / 2 - current.x * scale,
+      y: vpy + vph / 2 - current.y * scale,
     };
-  }, [layout, width, height]);
+  }, [layout, viewport, vpx, vpy, vpw, vph]);
 
   // Re-fit when the shape changes, but never yank the view out from under
   // someone who has panned it themselves.
@@ -203,10 +237,10 @@ export function TreeCanvas({ width, height }: TreeCanvasProps) {
     const current = layout.nodes.find((n) => n.isCurrent);
     if (!current) return;
     const screenY = current.y * view.scale + view.y;
-    if (screenY < 20 || screenY > height - 20) {
-      setView((v) => ({ ...v, y: height / 2 - current.y * v.scale }));
+    if (screenY < vpy + 20 || screenY > vpy + vph - 20) {
+      setView((v) => ({ ...v, y: vpy + vph / 2 - current.y * v.scale }));
     }
-  }, [layout.nodes, height, userMoved, view.scale, view.y]);
+  }, [layout.nodes, userMoved, view.scale, view.y, vpy, vph]);
 
   /**
    * §6's focus rule. A tree that fits needs no help; one that runs off the
@@ -216,8 +250,8 @@ export function TreeCanvas({ width, height }: TreeCanvasProps) {
    */
   const overflows =
     layout.nodes.length > 0 &&
-    ((layout.height + BADGE_ROOM) * view.scale > height - PADDING ||
-      layout.width * view.scale > width - PADDING);
+    ((layout.height + BADGE_ROOM) * view.scale > vph - PADDING ||
+      layout.width * view.scale > vpw - PADDING);
 
   const reveal = useEased(pointerInside && overflows ? 1 : 0);
   const masked = overflows && reveal < 0.995;
@@ -230,11 +264,14 @@ export function TreeCanvas({ width, height }: TreeCanvasProps) {
         scale: lerp(view.scale, overview.scale, reveal),
       };
 
+  // The mask follows the highlighted turn, wherever the view has put it. At
+  // rest that is the centre of the open canvas; after a manual pan it is
+  // wherever the user dragged it to.
   const anchorNode = layout.nodes.find((n) => n.isCurrent) ?? layout.nodes.at(-1);
-  const focusX = anchorNode ? anchorNode.x * shown.scale + shown.x : width / 2;
-  const focusY = anchorNode ? anchorNode.y * shown.scale + shown.y : height / 2;
+  const focusX = anchorNode ? anchorNode.x * shown.scale + shown.x : vpx + vpw / 2;
+  const focusY = anchorNode ? anchorNode.y * shown.scale + shown.y : vpy + vph / 2;
   const focusR = lerp(
-    Math.max(130, Math.min(width, height) * 0.55),
+    Math.max(140, Math.min(vpw, vph) * 0.6),
     Math.hypot(width, height) * 1.2,
     reveal,
   );
@@ -453,15 +490,26 @@ export function TreeCanvas({ width, height }: TreeCanvasProps) {
         >
           all
         </button>
+        <button
+          type="button"
+          className="btn btn--sm btn--ghost"
+          onClick={() => setLegend((v) => !v)}
+          aria-pressed={legend}
+          title="Edge types"
+        >
+          ?
+        </button>
         <span className="treecanvas__zoom">{Math.round(shown.scale * 100)}%</span>
       </div>
+
+      {legend ? <EdgeLegend onClose={() => setLegend(false)} /> : null}
 
       {hover ? (
         <HoverPreview
           node={hover}
           // Sit opposite the turn being described, so the card never covers the
           // dot the cursor is on — or the stretch of tree around it.
-          place={hover.y * shown.scale + shown.y < height / 2 ? "bottom" : "top"}
+          place={hover.y * shown.scale + shown.y < vpy + vph / 2 ? "bottom" : "top"}
         />
       ) : null}
 

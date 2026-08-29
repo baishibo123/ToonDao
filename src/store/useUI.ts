@@ -52,6 +52,12 @@ interface UIState {
   treeOpen: boolean;
   setTreeOpen: (open: boolean) => void;
 
+  /** Live width of the canvas the tree gets, in px. The thread is sized around
+   *  it, so both halves have to read one number — during a drag it is this one,
+   *  and `settings.treePanel.width` only catches up on pointer-up. */
+  treeGutter: number | null;
+  setTreeGutter: (width: number) => void;
+
   /** Node the tree is hovering, mirrored into the transcript as a highlight. */
   hoverNodeId: NodeId | null;
   setHoverNodeId: (id: NodeId | null) => void;
@@ -100,6 +106,10 @@ export const useUI = create<UIState>((set, get) => ({
 
   treeOpen: true,
   setTreeOpen: (treeOpen) => set({ treeOpen }),
+
+  treeGutter: null,
+  setTreeGutter: (treeGutter) =>
+    set((s) => (s.treeGutter === treeGutter ? s : { treeGutter })),
 
   hoverNodeId: null,
   setHoverNodeId: (hoverNodeId) => set({ hoverNodeId }),

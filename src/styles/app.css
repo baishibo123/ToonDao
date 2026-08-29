@@ -153,11 +153,42 @@
    ------------------------------------------------------------------ */
 
 .main {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-width: 0;
   min-height: 0;
+  background: var(--bg);
+  /* Set by App from the tree's measured width. The thread sizes itself around
+     it; the tree draws underneath, across the whole area. */
+  --tree-gutter: 0px;
+}
+
+/* The thread, floating as a card on the shared canvas. It is deliberately not
+   full-bleed: the margins are where the out-of-focus tree drifts past. */
+.thread {
   position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  width: calc(100% - var(--tree-gutter));
+  padding: 12px 14px 14px 16px;
+  gap: 10px;
+}
+
+.thread__card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: color-mix(in oklab, var(--bg-raised) 92%, transparent);
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-panel);
+  overflow: hidden;
 }
 
 .topbar {
@@ -166,8 +197,7 @@
   gap: 10px;
   padding: 9px 20px;
   border-bottom: 1px solid var(--border);
-  background: color-mix(in oklab, var(--bg) 88%, transparent);
-  backdrop-filter: blur(8px);
+  background: color-mix(in oklab, var(--bg) 40%, transparent);
   flex: none;
 }
 .topbar__title {
@@ -458,9 +488,12 @@
 
 .composer {
   flex: none;
-  border-top: 1px solid var(--border);
-  background: color-mix(in oklab, var(--bg-raised) 70%, var(--bg));
-  padding: 12px 24px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: color-mix(in oklab, var(--bg-raised) 92%, transparent);
+  backdrop-filter: blur(14px);
+  box-shadow: var(--shadow-pop);
+  padding: 12px 20px 14px;
 }
 .composer__inner { max-width: 720px; margin: 0 auto; }
 

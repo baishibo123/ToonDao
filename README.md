@@ -199,13 +199,24 @@ to whichever was sent first — would leave you on a branch while reading the
 thread. The trunk is the thread you are actually in; the sibling keeps its
 continuation styling and hangs off as a branch.
 
+**The tree is not a window.** A floating panel with a title bar is a second
+application sitting on top of the first: chrome to look past, a thread to hide,
+and a drag nobody asked for. The lineage and the conversation are one artifact,
+so they share one canvas — the thread floats as a card on the left, the tree
+lives on the open ground beside it, and the out-of-focus stretches drift behind
+the card's margins. The stage is full-bleed and sits *under* the thread; what it
+hands the canvas is a viewport, the open ground, so the tree fits and centres
+itself in the part you can actually see while staying free to bleed past it.
+
 **A long tree is focused, not shrunk.** Fitting a 40-turn conversation into a
-400px panel puts it at 30% zoom, where the dots stop being distinguishable and
-the map stops being a map. The resting view refuses to go below 100%, parks on
-the turn you are in, and lets the rest overflow — where a focus mask fades and
-blurs it out, so the panel edge reads as "there is more" rather than as a crop.
-Hovering the panel dissolves the mask and eases the view out to the whole tree;
-leaving it puts you back. `here` and `all` pin either end of that for good.
+400px canvas puts it at 30% zoom, where the dots stop being distinguishable and
+the map stops being a map. The resting view refuses to go below 100% and puts
+the turn you are reading in the dead centre of the open canvas — which is where
+the focus mask is centred too, so "sharp" and "the conversation I am looking at"
+are the same place. The rest overflows, and the mask fades and blurs it out, so
+the edge reads as "there is more" rather than as a crop. Hovering the canvas
+dissolves the mask and eases the view out to the whole tree; leaving it puts you
+back. `here` and `all` pin either end of that for good.
 
 **Off-path collapse is measured from the active path, not from the root.** §6
 asks for auto-collapse "below a depth threshold". Collapsing every off-path
@@ -289,7 +300,7 @@ rendered links unusable, and §5.5 asks that ordinary use stay ordinary.
 | `⌥⌫` | Stop generating |
 | `?` | Shortcut list |
 
-Inside the tree panel, arrow keys walk parent/child/sibling and `Enter`
+Inside the tree canvas, arrow keys walk parent/child/sibling and `Enter`
 navigates to a card.
 
 ---
