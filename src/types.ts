@@ -136,16 +136,6 @@ export interface Settings {
   conceptLensTurns: number;
   temperature: number;
   maxTokens: number | null;
-  treePanel: {
-    /** null until the user drags it. Distinct from 0, which is a real position.
-     *  Avoids computing a default from window.innerWidth before layout, which
-     *  can legitimately read 0 and pin the panel to the left edge. */
-    x: number | null;
-    y: number | null;
-    width: number;
-    height: number;
-    collapsed: boolean;
-  };
 }
 
 /* ------------------------------------------------------------------ */

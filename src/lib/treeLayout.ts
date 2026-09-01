@@ -36,15 +36,15 @@ import { pathToRoot, type NodeMap } from "@/lib/tree";
  */
 
 /** Vertical distance between consecutive turns. Also the row quantum. */
-export const ROW_GAP = 34;
+export const ROW_GAP = 30;
 /** Horizontal distance between one branch column and the next. */
-export const COLUMN_GAP = 40;
+export const COLUMN_GAP = 34;
 /** Vertical clearance demanded between two spines sharing a column. */
 export const COLUMN_CLEAR = ROW_GAP * 0.9;
 
-export const TRUNK_RADIUS = 6.5;
-export const RADIUS_STEP = 1.15;
-export const MIN_RADIUS = 3.5;
+export const TRUNK_RADIUS = 5.6;
+export const RADIUS_STEP = 1;
+export const MIN_RADIUS = 3;
 
 /**
  * How the two bands of a turn divide its dot: the upper share belongs to the

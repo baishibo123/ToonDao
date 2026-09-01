@@ -1,38 +1,19 @@
 /* ------------------------------------------------------------------
    Tree stage (§6)
 
-   Not a window. The stage is full-bleed under the thread card, so the tree and
-   the conversation share one canvas — sharp on the open ground to the right,
-   drifting out of focus behind the card's margins.
+   The tree lies across the whole page, over the thread, at watermark strength.
+   The cursor carries a light; inside it the tree is at full strength, outside
+   it is a ghost you can read straight through. Nothing here takes a pointer
+   event except the dots themselves.
    ------------------------------------------------------------------ */
 
 .treestage {
   position: absolute;
   inset: 0;
-  z-index: 0;
+  z-index: 3;
   overflow: hidden;
+  pointer-events: none;
 }
-
-/* Drag the boundary between the two halves. Invisible until you go near it. */
-.treestage__grip {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 7px;
-  z-index: 2;
-  cursor: ew-resize;
-  touch-action: none;
-}
-.treestage__grip::after {
-  content: "";
-  position: absolute;
-  inset: 24% 3px;
-  border-radius: 2px;
-  background: var(--border-strong);
-  opacity: 0;
-  transition: opacity var(--transition);
-}
-.treestage__grip:hover::after { opacity: 0.7; }
 
 .treehandle {
   position: fixed;
@@ -52,63 +33,79 @@
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-dim);
+  pointer-events: auto;
 }
 .treehandle:hover { color: var(--text); border-color: var(--accent); }
 
 /* ------------------------------------------------------------------
-   Canvas
-
-   A trunk with branches off it, drawn as dots on lines. The nodes carry no
-   text: the shape is the information, and the words are one hover away.
+   Canvas and its three layers
    ------------------------------------------------------------------ */
 
-.treecanvas { position: absolute; inset: 0; }
-.treecanvas svg { display: block; cursor: grab; touch-action: none; }
-.treecanvas svg:active { cursor: grabbing; }
-.treecanvas svg:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.treecanvas {
+  position: absolute;
+  inset: 0;
+  /* The light. Moved by direct style writes, never by a re-render. */
+  --spot-x: 72%;
+  --spot-y: 50%;
+  --spot-r: 172px;
+}
 
-/* The fuzzy edge (§6). A tree taller than the panel does not get chopped off
-   at the border — it dissolves into it, which reads as "there is more" without
-   spending a scrollbar to say so. */
-.treecanvas--masked svg {
-  -webkit-mask-image: linear-gradient(
-    to bottom,
-    transparent 0,
-    #000 22px,
-    #000 calc(100% - 22px),
+.treelayer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.treelayer svg { display: block; }
+
+/* Out of the light: soft, faint, something you read through rather than at. */
+.treelayer--ambient { filter: blur(1.1px); }
+
+/* In the light: the same tree, sharp, cut to a disc under the cursor. */
+.treelayer--lit {
+  -webkit-mask-image: radial-gradient(
+    circle var(--spot-r) at var(--spot-x) var(--spot-y),
+    #000 0%,
+    #000 44%,
+    rgba(0, 0, 0, 0.45) 74%,
     transparent 100%
   );
-  mask-image: linear-gradient(
-    to bottom,
-    transparent 0,
-    #000 22px,
-    #000 calc(100% - 22px),
+  mask-image: radial-gradient(
+    circle var(--spot-r) at var(--spot-x) var(--spot-y),
+    #000 0%,
+    #000 44%,
+    rgba(0, 0, 0, 0.45) 74%,
     transparent 100%
   );
 }
 
-.treecanvas__far { pointer-events: none; }
+/* Hit targets, in screen space so they stay clickable at any scale. */
+.treelayer--hits { pointer-events: none; }
+.treelayer--hits:focus-visible { outline: 2px solid var(--focus); outline-offset: -3px; }
 
-.treecanvas--empty {
+.treecanvas__empty {
   position: absolute;
-  inset: 0 0 0 auto;
-  width: var(--tree-gutter, 320px);
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  text-align: center;
-  font-size: 12.5px;
+  inset: 100px 14px auto auto;
+  width: 260px;
+  margin: 0;
+  text-align: right;
+  font-size: 12px;
   color: var(--text-faint);
   line-height: 1.6;
+  opacity: 0.7;
 }
 
+/* Out of the way at the top, where the composer's own hints are not. */
 .treecanvas__controls {
   position: absolute;
-  right: 8px;
-  bottom: 6px;
+  right: 12px;
+  top: 46px;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--bg) 62%, transparent);
+  backdrop-filter: blur(6px);
   pointer-events: auto;
 }
 .treecanvas__zoom {
@@ -119,8 +116,8 @@
 
 .treecanvas__stats {
   position: absolute;
-  right: 12px;
-  bottom: 30px;
+  right: 14px;
+  top: 74px;
   text-align: right;
   font-family: var(--font-mono);
   font-size: 10px;
@@ -133,18 +130,20 @@
    ------------------------------------------------------------------ */
 
 .edge {
-  opacity: 0.3;
-  transition: opacity var(--transition);
+  opacity: 0.34;
   pointer-events: none;
 }
-.edge--spine { opacity: 0.5; }
+.edge--spine { opacity: 0.55; }
 .edge--onpath,
 .edge--spine.edge--onpath { opacity: 1; }
 
-/* Hovering the panel is the "show me everything" gesture: the soft copy fades
-   out and the off-path structure comes up with it. */
-.treecanvas:hover .edge { opacity: 0.62; }
-.treecanvas:hover .edge--onpath { opacity: 1; }
+/* The watermark. Faint enough that the words under it stay the subject — with
+   one exception: the turn you are on keeps its halo, so you can always find
+   yourself without going looking with the cursor. */
+.treeworld--ambient .edge { opacity: 0.1; }
+.treeworld--ambient .edge--spine { opacity: 0.14; }
+.treeworld--ambient .edge--onpath,
+.treeworld--ambient .edge--spine.edge--onpath { opacity: 0.2; }
 
 .edge__cap { pointer-events: none; }
 
@@ -155,18 +154,23 @@
 .treedot { pointer-events: none; }
 
 .treedot__disc {
-  fill: var(--bg-sunken);
+  fill: var(--bg);
   stroke-width: 1.5;
-  opacity: 0.45;
-  transition: opacity var(--transition);
+  opacity: 0.5;
 }
 .treedot--trunk .treedot__disc { stroke-width: 1.9; }
 .treedot--onpath .treedot__disc { opacity: 1; }
-.treecanvas:hover .treedot__disc { opacity: 0.9; }
-.treecanvas:hover .treedot--onpath .treedot__disc { opacity: 1; }
 
-.treedot__core { opacity: 0.5; transition: opacity var(--transition); }
+.treedot__core { opacity: 0.5; }
 .treedot--onpath .treedot__core { opacity: 1; }
+
+.treeworld--ambient .treedot__disc { opacity: 0.16; }
+.treeworld--ambient .treedot--onpath .treedot__disc { opacity: 0.26; }
+.treeworld--ambient .treedot__core,
+.treeworld--ambient .treedot__variants,
+.treeworld--ambient .treedot__badge { opacity: 0.18; }
+.treeworld--ambient .treedot--current .treedot__disc { opacity: 0.9; }
+.treeworld--ambient .treedot--current .treedot__halo { opacity: 0.55; }
 
 /* Retries are the same thought tried twice, so they ring the dot rather than
    fanning out as separate turns (§11 Q2). */
@@ -234,7 +238,11 @@
    Hit targets — outside the focus mask, so a faded turn stays clickable
    ------------------------------------------------------------------ */
 
-.treedot__target { cursor: pointer; }
+/* The one thing on the whole layer that takes a pointer event. */
+.treedot__target {
+  cursor: pointer;
+  pointer-events: auto;
+}
 .treedot__focusring {
   fill: none;
   stroke: var(--focus);
@@ -248,7 +256,9 @@
 .treehover {
   position: absolute;
   right: 10px;
-  width: max(250px, calc(var(--tree-gutter, 320px) - 20px));
+  width: 320px;
+  z-index: 4;
+  pointer-events: none;
   padding: 7px 10px;
   border-radius: var(--radius-sm);
   background: color-mix(in oklab, var(--bg) 93%, transparent);
@@ -257,8 +267,8 @@
   pointer-events: none;
   font-size: 11.5px;
 }
-.treehover--top { top: 8px; }
-.treehover--bottom { bottom: 26px; }
+.treehover--top { top: 100px; }
+.treehover--bottom { bottom: 24px; }
 
 .treehover__head {
   display: flex;
@@ -306,8 +316,9 @@
   right: 10px;
   bottom: 52px;
   z-index: 2;
-  width: max(300px, calc(var(--tree-gutter, 320px) - 20px));
+  width: 340px;
   max-height: min(420px, 70%);
+  pointer-events: auto;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-panel);

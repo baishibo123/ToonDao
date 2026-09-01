@@ -159,13 +159,12 @@
   min-width: 0;
   min-height: 0;
   background: var(--bg);
-  /* Set by App from the tree's measured width. The thread sizes itself around
-     it; the tree draws underneath, across the whole area. */
-  --tree-gutter: 0px;
+  /* The tree is drawn over this, so keep it a stacking context of its own. */
+  isolation: isolate;
 }
 
-/* The thread, floating as a card on the shared canvas. It is deliberately not
-   full-bleed: the margins are where the out-of-focus tree drifts past. */
+/* The thread has the whole page. The tree lies across it as a watermark, so
+   nothing has to be set aside for the map. */
 .thread {
   position: relative;
   z-index: 1;
@@ -173,7 +172,6 @@
   flex-direction: column;
   min-height: 0;
   flex: 1;
-  width: calc(100% - var(--tree-gutter));
   padding: 12px 14px 14px 16px;
   gap: 10px;
 }

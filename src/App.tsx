@@ -21,9 +21,6 @@ export default function App() {
   const conversations = useStore((s) => s.conversations);
   const renameConversation = useStore((s) => s.renameConversation);
   const setShortcutsOpen = useUI((s) => s.setShortcutsOpen);
-  const treeOpen = useUI((s) => s.treeOpen);
-  const treeGutter = useUI((s) => s.treeGutter);
-  const storedGutter = useStore((s) => s.settings.treePanel.width);
 
   useSelectionWatcher();
   useTermHover();
@@ -35,10 +32,6 @@ export default function App() {
 
   if (!ready) return <div className="boot">opening…</div>;
 
-  // How much canvas the tree is holding. The stage owns the number once it has
-  // measured itself; until then the persisted width is the best guess.
-  const gutter = treeOpen ? (treeGutter ?? storedGutter) : 0;
-
   const conversation = conversations.find((c) => c.id === conversationId);
   const nodeCount = Object.values(nodes).filter(
     (n) => n.conversationId === conversationId,
@@ -47,9 +40,8 @@ export default function App() {
   return (
     <div className="app">
       <Sidebar />
-      {/* One canvas. The tree is the ground; the thread is a card lying on it. */}
-      <main className="main" style={{ ["--tree-gutter" as string]: `${gutter}px` }}>
-        <TreeStage />
+      {/* One canvas. The thread is the page; the tree is drawn across it. */}
+      <main className="main">
         <div className="thread">
           {bootError ? (
             <p className="msg__error" role="alert" style={{ margin: "0 0 10px" }}>
@@ -83,6 +75,7 @@ export default function App() {
           </div>
           <Composer />
         </div>
+        <TreeStage />
       </main>
       <SelectionPopover />
       <Settings />

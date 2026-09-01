@@ -199,24 +199,26 @@ to whichever was sent first — would leave you on a branch while reading the
 thread. The trunk is the thread you are actually in; the sibling keeps its
 continuation styling and hangs off as a branch.
 
-**The tree is not a window.** A floating panel with a title bar is a second
-application sitting on top of the first: chrome to look past, a thread to hide,
-and a drag nobody asked for. The lineage and the conversation are one artifact,
-so they share one canvas — the thread floats as a card on the left, the tree
-lives on the open ground beside it, and the out-of-focus stretches drift behind
-the card's margins. The stage is full-bleed and sits *under* the thread; what it
-hands the canvas is a viewport, the open ground, so the tree fits and centres
-itself in the part you can actually see while staying free to bleed past it.
+**The tree is not a window, and it is not a column either.** A floating panel
+with a title bar is a second application sitting on top of the first, and a
+reserved column is barely better: a tree is mostly whitespace, so setting aside
+its bounding box spends far more room than it uses. The tree is now drawn across
+the *whole page*, over the thread and the composer, at watermark strength. It
+takes no pointer events except on the dots themselves, so selecting a passage,
+scrolling the transcript and hitting send all work straight through it.
 
-**A long tree is focused, not shrunk.** Fitting a 40-turn conversation into a
-400px canvas puts it at 30% zoom, where the dots stop being distinguishable and
-the map stops being a map. The resting view refuses to go below 100% and puts
-the turn you are reading in the dead centre of the open canvas — which is where
-the focus mask is centred too, so "sharp" and "the conversation I am looking at"
-are the same place. The rest overflows, and the mask fades and blurs it out, so
-the edge reads as "there is more" rather than as a crop. Hovering the canvas
-dissolves the mask and eases the view out to the whole tree; leaving it puts you
-back. `here` and `all` pin either end of that for good.
+**The cursor carries a light.** Outside it the tree is a ghost you read through;
+inside it the tree is at full strength and sharp. That is what makes an overlay
+survivable — the words underneath stay the subject — and it is also the answer
+to scale. However large the conversation gets, the whole structure is on the
+page at once and you read it by sweeping the light across it, rather than by
+panning a viewport around a shape you cannot see. When the cursor leaves, the
+light drifts back to the turn you are on, which keeps its halo in the watermark
+so you can always find yourself without going looking.
+
+Two views, and no free zoom: the whole tree at once is the resting state, and
+`here` is a close-up for when one stretch needs the room. Dragging a dot pans;
+clicking one navigates.
 
 **Off-path collapse is measured from the active path, not from the root.** §6
 asks for auto-collapse "below a depth threshold". Collapsing every off-path

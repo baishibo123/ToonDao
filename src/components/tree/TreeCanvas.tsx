@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "@/store/useStore";
 import { useUI } from "@/store/useUI";
 import { layoutTree, type LaidOutNode, type TreeLayout } from "@/lib/treeLayout";
@@ -6,24 +6,9 @@ import { Edge, EdgeLegend, edgeColor } from "@/components/tree/edges";
 import { BRANCH_META } from "@/lib/policyMeta";
 import { policyLabel } from "@/lib/assembleContext";
 
-interface Rect {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
 interface TreeCanvasProps {
-  /** Size of the drawing surface, which is the whole stage. */
   width: number;
   height: number;
-  /**
-   * The part of the surface the user can actually see — the open canvas beside
-   * the thread. The tree fits, centres and focuses itself in here, but it is
-   * free to draw outside it: the blurred tail bleeding past the thread's edges
-   * is what makes the two read as one artifact rather than two panes.
-   */
-  viewport: Rect;
 }
 
 interface View {
@@ -32,85 +17,46 @@ interface View {
   scale: number;
 }
 
-const PADDING = 22;
-const MIN_SCALE = 0.3;
-const MAX_SCALE = 2.6;
-/**
- * The scale the resting view refuses to go below. A long conversation is not
- * shrunk to fit — shrinking is how a map becomes a smudge. It stays readable,
- * overflows, and hands the overflow to the focus mask.
- */
-const LEGIBLE_SCALE = 1;
-/** How far an automatic fit may enlarge a small tree. */
-const MAX_FIT = 1.7;
-/** Softness of the out-of-focus copy, in screen pixels. */
-const BLUR = 2.2;
+const PADDING = 26;
+/** Where the trunk sits across the page. Right of the reading column. */
+const HOME_X = 0.79;
+/** How small the whole-tree view is allowed to get before it overflows. */
+const MIN_FIT = 0.45;
+const MAX_FIT = 1.05;
+/** Scale of the close-up view, for working on one stretch of the tree. */
+const CLOSE_SCALE = 1.15;
 /** Room under the last row for a "+N" collapse badge, which the layout — which
  *  knows nothing about badges — does not reserve. */
 const BADGE_ROOM = 18;
+/** How long the light takes to drift home once the cursor leaves. */
+const RETURN_MS = 420;
+/** Smallest comfortable click target for a dot, in screen pixels. */
+const MIN_HIT = 7;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(value, max));
 }
 
-function lerp(a: number, b: number, t: number): number {
-  return a + (b - a) * t;
-}
-
 /**
- * Eases toward `target` over a fixed duration.
+ * The tree, drawn across the whole page and lit by a spotlight (§6).
  *
- * Time-based rather than per-frame: a per-frame decay stalls half-open wherever
- * requestAnimationFrame is being throttled — a background tab, a loaded
- * machine — and a reveal that stops halfway is worse than one that snaps.
+ * The map used to own a rectangle of the window, which is a bad trade: a tree
+ * is mostly whitespace, so reserving space for its bounding box wastes most of
+ * what it takes. It now lies over the entire page — over the thread, the
+ * composer, everything — at an opacity where it reads as a watermark and the
+ * words underneath stay legible.
+ *
+ * What makes it usable is that the cursor carries a light. Inside the light the
+ * tree is at full strength and sharp; outside it is a ghost. That is also the
+ * answer to scale: the whole structure is on the page at once however big it
+ * gets, and you read it by sweeping the light across it rather than by panning
+ * a viewport around a shape you cannot see.
+ *
+ * Only the dots take pointer events, so everything the tree lies over — text
+ * selection, buttons, the composer — still works straight through it.
  */
-const REVEAL_MS = 320;
-
-function useEased(target: number): number {
-  const [value, setValue] = useState(target);
-  const current = useRef(target);
-
-  useEffect(() => {
-    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
-      current.current = target;
-      setValue(target);
-      return;
-    }
-    const from = current.current;
-    if (from === target) return;
-    const started = performance.now();
-    let frame = 0;
-    const step = (now: number) => {
-      const t = Math.min(1, (now - started) / REVEAL_MS);
-      const eased = 1 - (1 - t) ** 3;
-      current.current = from + (target - from) * eased;
-      setValue(current.current);
-      if (t < 1) frame = requestAnimationFrame(step);
-    };
-    frame = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(frame);
-  }, [target]);
-
-  return value;
-}
-
-/**
- * Put the trunk down the middle, which is the whole point of having one — but
- * never at the cost of pushing a branch off the edge, so the offer is withdrawn
- * as soon as the tree is wider than the panel.
- */
-function centreOnTrunk(layout: TreeLayout, vp: Rect, scale: number): number {
-  const trunk = layout.nodes.find((n) => n.branchLevel === 0);
-  const content = layout.width * scale;
-  const wanted = vp.x + vp.width / 2 - (trunk ? trunk.x : layout.width / 2) * scale;
-  const near = vp.x + PADDING;
-  const far = vp.x + vp.width - PADDING - content;
-  return clamp(wanted, Math.min(near, far), Math.max(near, far));
-}
-
-export function TreeCanvas({ width, height, viewport }: TreeCanvasProps) {
-  const { x: vpx, y: vpy, width: vpw, height: vph } = viewport;
-  const svgRef = useRef<SVGSVGElement>(null);
+export function TreeCanvas({ width, height }: TreeCanvasProps) {
+  const rootRef = useRef<HTMLDivElement>(null);
   const nodes = useStore((s) => s.nodes);
   const conversationId = useStore((s) => s.conversationId);
   const activeNodeId = useStore((s) => s.activeNodeId);
@@ -120,38 +66,11 @@ export function TreeCanvas({ width, height, viewport }: TreeCanvasProps) {
   const requestScrollTo = useUI((s) => s.requestScrollTo);
 
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [view, setView] = useState<View>({ x: 0, y: 0, scale: 1 });
-  const [userMoved, setUserMoved] = useState(false);
+  const [closeUp, setCloseUp] = useState(false);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
   const [hover, setHover] = useState<LaidOutNode | null>(null);
   const [focusId, setFocusId] = useState<string | null>(null);
-  const [pointerInside, setPointerInside] = useState(false);
   const [legend, setLegend] = useState(false);
-  const uid = useId().replace(/:/g, "");
-
-  // The preview card follows the dot under the cursor, and lets go a beat late
-  // so that sweeping across a fork does not strobe it.
-  const hoverTimer = useRef<number | undefined>(undefined);
-  const enterNode = useCallback(
-    (node: LaidOutNode) => {
-      window.clearTimeout(hoverTimer.current);
-      setHover(node);
-      setHoverNodeId(node.replies.at(-1)?.id ?? node.user.id);
-    },
-    [setHoverNodeId],
-  );
-  const leaveNode = useCallback(
-    (immediate = false) => {
-      window.clearTimeout(hoverTimer.current);
-      const clear = () => {
-        setHover(null);
-        setHoverNodeId(null);
-      };
-      if (immediate) clear();
-      else hoverTimer.current = window.setTimeout(clear, 110);
-    },
-    [setHoverNodeId],
-  );
-  useEffect(() => () => window.clearTimeout(hoverTimer.current), []);
 
   const layout = useMemo(
     () =>
@@ -164,160 +83,170 @@ export function TreeCanvas({ width, height, viewport }: TreeCanvasProps) {
     [nodes, conversationId, activeNodeId, expanded],
   );
 
-  /** Everything at once, however small that ends up. */
-  const overview = useMemo<View>(() => {
-    if (!layout.nodes.length || vpw === 0 || vph === 0) {
-      return { x: 0, y: 0, scale: 1 };
-    }
-    const content = layout.height + BADGE_ROOM;
-    const scale = clamp(
-      Math.min(
-        (vpw - PADDING * 2) / Math.max(1, layout.width),
-        (vph - PADDING * 2) / Math.max(1, content),
-      ),
-      MIN_SCALE,
-      MAX_FIT,
-    );
-    return {
-      scale,
-      x: centreOnTrunk(layout, viewport, scale),
-      y: vpy + (vph - content * scale) / 2,
-    };
-  }, [layout, viewport, vpw, vph, vpy]);
-
   /**
-   * The resting view: a readable scale, with the turn you are reading in the
-   * dead centre of the open canvas. Centring it there is not decoration — it is
-   * where the focus mask is centred too, so "sharp" and "the conversation I am
-   * looking at" are the same place. A long tree is allowed to run off both ends
-   * rather than being pulled off-centre to keep its edges in frame.
+   * Two views, no free zoom. The whole tree at once is the resting state —
+   * being able to see all of it is the point of it being a watermark — and the
+   * close-up is for when a stretch of it needs real estate.
    */
-  const focused = useMemo<View>(() => {
-    if (!layout.nodes.length || vpw === 0 || vph === 0) {
+  const base = useMemo<View>(() => {
+    if (!layout.nodes.length || width === 0 || height === 0) {
       return { x: 0, y: 0, scale: 1 };
-    }
-    const content = layout.height + BADGE_ROOM;
-    // Fill the canvas when the tree is small enough to fill it, and stop at a
-    // legible scale when it is not — at which point the focus mask takes over
-    // and the rest of the tree is a hover away.
-    const scale = clamp(
-      Math.min(
-        (vpw - PADDING * 2) / Math.max(1, layout.width),
-        (vph - PADDING * 2) / Math.max(1, content),
-      ),
-      LEGIBLE_SCALE,
-      MAX_FIT,
-    );
-    const fits =
-      layout.width * scale <= vpw - PADDING * 2 && content * scale <= vph - PADDING * 2;
-    if (fits) {
-      return {
-        scale,
-        x: centreOnTrunk(layout, viewport, scale),
-        y: vpy + (vph - content * scale) / 2,
-      };
     }
     const current = layout.nodes.find((n) => n.isCurrent) ?? layout.nodes.at(-1)!;
+    if (closeUp) {
+      return {
+        scale: CLOSE_SCALE,
+        x: width * HOME_X - current.x * CLOSE_SCALE,
+        y: height / 2 - current.y * CLOSE_SCALE,
+      };
+    }
+    const content = layout.height + BADGE_ROOM;
+    const scale = clamp(
+      Math.min(
+        (width - PADDING * 2) / Math.max(1, layout.width),
+        (height - PADDING * 2) / Math.max(1, content),
+      ),
+      MIN_FIT,
+      MAX_FIT,
+    );
+    const trunk = layout.nodes.find((n) => n.branchLevel === 0);
+    const spread = layout.width * scale;
+    const wanted = width * HOME_X - (trunk ? trunk.x : layout.width / 2) * scale;
+    const near = PADDING;
+    const far = width - PADDING - spread;
     return {
       scale,
-      x: vpx + vpw / 2 - current.x * scale,
-      y: vpy + vph / 2 - current.y * scale,
+      x: clamp(wanted, Math.min(near, far), Math.max(near, far)),
+      y:
+        content * scale <= height - PADDING * 2
+          ? (height - content * scale) / 2
+          : height / 2 - current.y * scale,
     };
-  }, [layout, viewport, vpx, vpy, vpw, vph]);
+  }, [layout, width, height, closeUp]);
 
-  // Re-fit when the shape changes, but never yank the view out from under
-  // someone who has panned it themselves.
+  const view: View = { x: base.x + pan.x, y: base.y + pan.y, scale: base.scale };
+
+  // A pan belongs to the view it was made in.
   useEffect(() => {
-    if (!userMoved) setView(focused);
-  }, [focused, userMoved]);
+    setPan({ x: 0, y: 0 });
+  }, [closeUp, conversationId]);
 
-  // Keep the current turn in frame as the conversation grows.
-  useEffect(() => {
-    if (!userMoved) return;
-    const current = layout.nodes.find((n) => n.isCurrent);
-    if (!current) return;
-    const screenY = current.y * view.scale + view.y;
-    if (screenY < vpy + 20 || screenY > vpy + vph - 20) {
-      setView((v) => ({ ...v, y: vpy + vph / 2 - current.y * v.scale }));
-    }
-  }, [layout.nodes, userMoved, view.scale, view.y, vpy, vph]);
-
-  /**
-   * §6's focus rule. A tree that fits needs no help; one that runs off the
-   * panel gets a soft edge, so the eye lands on the stretch you are working in
-   * instead of on a wall of dots. Hovering the panel dissolves it — that is the
-   * gesture for "show me the whole thing", and it costs nothing to undo.
-   */
-  const overflows =
-    layout.nodes.length > 0 &&
-    ((layout.height + BADGE_ROOM) * view.scale > vph - PADDING ||
-      layout.width * view.scale > vpw - PADDING);
-
-  const reveal = useEased(pointerInside && overflows ? 1 : 0);
-  const masked = overflows && reveal < 0.995;
-
-  const shown: View = userMoved
-    ? view
-    : {
-        x: lerp(view.x, overview.x, reveal),
-        y: lerp(view.y, overview.y, reveal),
-        scale: lerp(view.scale, overview.scale, reveal),
-      };
-
-  // The mask follows the highlighted turn, wherever the view has put it. At
-  // rest that is the centre of the open canvas; after a manual pan it is
-  // wherever the user dragged it to.
-  const anchorNode = layout.nodes.find((n) => n.isCurrent) ?? layout.nodes.at(-1);
-  const focusX = anchorNode ? anchorNode.x * shown.scale + shown.x : vpx + vpw / 2;
-  const focusY = anchorNode ? anchorNode.y * shown.scale + shown.y : vpy + vph / 2;
-  const focusR = lerp(
-    Math.max(140, Math.min(vpw, vph) * 0.6),
-    Math.hypot(width, height) * 1.2,
-    reveal,
+  const screenOf = useCallback(
+    (node: LaidOutNode) => ({
+      x: node.x * view.scale + view.x,
+      y: node.y * view.scale + view.y,
+    }),
+    [view.scale, view.x, view.y],
   );
 
-  const onWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    const rect = svgRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const px = e.clientX - rect.left;
-    const py = e.clientY - rect.top;
-    setUserMoved(true);
-    setView((v) => {
-      const from = userMoved ? v : shown;
-      const next = clamp(from.scale * (e.deltaY < 0 ? 1.12 : 0.89), MIN_SCALE, MAX_SCALE);
-      const k = next / from.scale;
-      return { scale: next, x: px - (px - from.x) * k, y: py - (py - from.y) * k };
-    });
-  };
+  /* ---- the light ------------------------------------------------- */
 
-  const onPointerDown = (e: React.PointerEvent) => {
-    if ((e.target as Element).closest(".treedot__target")) return;
-    const from = userMoved ? view : shown;
-    const start = { x: e.clientX, y: e.clientY, vx: from.x, vy: from.y };
-    (e.currentTarget as Element).setPointerCapture(e.pointerId);
-    let dragged = false;
+  const current = layout.nodes.find((n) => n.isCurrent) ?? layout.nodes.at(-1);
+  const homeX = current ? current.x * view.scale + view.x : width * HOME_X;
+  const homeY = current ? current.y * view.scale + view.y : height / 2;
 
-    const move = (ev: PointerEvent) => {
-      if (!dragged && Math.hypot(ev.clientX - start.x, ev.clientY - start.y) < 3) return;
-      dragged = true;
-      setUserMoved(true);
-      setView((v) => ({
-        ...v,
-        x: start.vx + (ev.clientX - start.x),
-        y: start.vy + (ev.clientY - start.y),
-      }));
+  const spot = useRef({ x: homeX, y: homeY });
+  const home = useRef({ x: homeX, y: homeY });
+  const tracking = useRef(false);
+  const frame = useRef(0);
+
+  const paint = useCallback(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    el.style.setProperty("--spot-x", `${spot.current.x}px`);
+    el.style.setProperty("--spot-y", `${spot.current.y}px`);
+  }, []);
+
+  /** Drift the light back to the turn you are on. */
+  const driftHome = useCallback(() => {
+    cancelAnimationFrame(frame.current);
+    const from = { ...spot.current };
+    const to = { ...home.current };
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+      spot.current = to;
+      paint();
+      return;
+    }
+    const started = performance.now();
+    const step = (now: number) => {
+      const t = Math.min(1, (now - started) / RETURN_MS);
+      const k = 1 - (1 - t) ** 3;
+      spot.current = { x: from.x + (to.x - from.x) * k, y: from.y + (to.y - from.y) * k };
+      paint();
+      if (t < 1) frame.current = requestAnimationFrame(step);
     };
-    const up = () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
+    frame.current = requestAnimationFrame(step);
+  }, [paint]);
+
+  // The cursor carries the light while it is over the page. Moving it is a
+  // direct DOM write on two custom properties rather than a re-render — the
+  // tree is drawn three times over and cannot be reconciled at pointer rate.
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const onMove = (e: MouseEvent) => {
+      const box = el.getBoundingClientRect();
+      const x = e.clientX - box.left;
+      const y = e.clientY - box.top;
+      const inside = x >= 0 && y >= 0 && x <= box.width && y <= box.height;
+      if (inside) {
+        cancelAnimationFrame(frame.current);
+        tracking.current = true;
+        spot.current = { x, y };
+        paint();
+      } else if (tracking.current) {
+        tracking.current = false;
+        driftHome();
+      }
     };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
-  };
+    window.addEventListener("mousemove", onMove, { passive: true });
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      cancelAnimationFrame(frame.current);
+    };
+  }, [driftHome, paint]);
+
+  // Follow the highlighted turn as it moves, but never yank the light out of
+  // the user's hand while they are pointing at something.
+  useEffect(() => {
+    home.current = { x: homeX, y: homeY };
+    if (tracking.current) return;
+    driftHome();
+  }, [homeX, homeY, driftHome]);
+
+  useEffect(() => {
+    if (!tracking.current) spot.current = { ...home.current };
+    paint();
+  }, [width, height, paint]);
+
+  /* ---- interaction ------------------------------------------------ */
+
+  const dragged = useRef(false);
+
+  const onGrab = useCallback(
+    (e: React.PointerEvent) => {
+      const start = { x: e.clientX, y: e.clientY, px: pan.x, py: pan.y };
+      dragged.current = false;
+      const move = (ev: PointerEvent) => {
+        if (!dragged.current && Math.hypot(ev.clientX - start.x, ev.clientY - start.y) < 4) {
+          return;
+        }
+        dragged.current = true;
+        setPan({ x: start.px + (ev.clientX - start.x), y: start.py + (ev.clientY - start.y) });
+      };
+      const up = () => {
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", up);
+      };
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", up);
+    },
+    [pan.x, pan.y],
+  );
 
   const navigateTo = useCallback(
     (group: LaidOutNode) => {
+      if (dragged.current) return;
       // Land on the reply the user was reading if there is one, so clicking a
       // dot and clicking its message in the transcript agree.
       const target = group.replies.at(-1)?.id ?? group.user.id;
@@ -337,16 +266,36 @@ export function TreeCanvas({ width, height, viewport }: TreeCanvasProps) {
     });
   }, []);
 
+  // The preview card follows the dot under the cursor, and lets go a beat late
+  // so that sweeping across a fork does not strobe it.
+  const hoverTimer = useRef<number | undefined>(undefined);
+  const enterNode = useCallback(
+    (node: LaidOutNode) => {
+      window.clearTimeout(hoverTimer.current);
+      setHover(node);
+      setHoverNodeId(node.replies.at(-1)?.id ?? node.user.id);
+    },
+    [setHoverNodeId],
+  );
+  const leaveNode = useCallback(() => {
+    window.clearTimeout(hoverTimer.current);
+    hoverTimer.current = window.setTimeout(() => {
+      setHover(null);
+      setHoverNodeId(null);
+    }, 110);
+  }, [setHoverNodeId]);
+  useEffect(() => () => window.clearTimeout(hoverTimer.current), []);
+
   /** Arrows walk the tree; Enter navigates. §6's keyboard requirement. */
   const onKeyDown = (e: React.KeyboardEvent) => {
     const currentId = focusId ?? layout.nodes.find((n) => n.isCurrent)?.id;
-    const current = layout.nodes.find((n) => n.id === currentId);
-    if (!current) return;
+    const from = layout.nodes.find((n) => n.id === currentId);
+    if (!from) return;
 
     const siblings = layout.nodes
-      .filter((n) => n.parentGroupId === current.parentGroupId)
+      .filter((n) => n.parentGroupId === from.parentGroupId)
       .sort((a, b) => a.x - b.x);
-    const index = siblings.findIndex((n) => n.id === current.id);
+    const index = siblings.findIndex((n) => n.id === from.id);
     let next: LaidOutNode | undefined;
 
     switch (e.key) {
@@ -357,17 +306,17 @@ export function TreeCanvas({ width, height, viewport }: TreeCanvasProps) {
         next = siblings[index + 1];
         break;
       case "ArrowUp":
-        next = layout.nodes.find((n) => n.id === current.parentGroupId);
+        next = layout.nodes.find((n) => n.id === from.parentGroupId);
         break;
       case "ArrowDown":
         next = layout.nodes
-          .filter((n) => n.parentGroupId === current.id)
+          .filter((n) => n.parentGroupId === from.id)
           .sort((a, b) => a.x - b.x)[0];
         break;
       case "Enter":
       case " ":
         e.preventDefault();
-        navigateTo(current);
+        navigateTo(from);
         return;
       default:
         return;
@@ -378,117 +327,72 @@ export function TreeCanvas({ width, height, viewport }: TreeCanvasProps) {
     setHover(next);
   };
 
+  const hoverAt = hover ? screenOf(hover) : null;
+
+  // The root is rendered whether or not there is a tree yet: the light's
+  // listener binds to it once, and an early return would leave it holding a
+  // null ref for the life of the conversation.
   if (layout.nodes.length === 0) {
     return (
-      <div className="treecanvas treecanvas--empty">
-        Nothing branched yet. Send a message, then select some text in a reply.
+      <div className="treecanvas" ref={rootRef}>
+        <p className="treecanvas__empty">
+          Nothing branched yet. Send a message, then select some text in a reply.
+        </p>
       </div>
     );
   }
 
   return (
-    <div
-      className={`treecanvas${masked ? " treecanvas--masked" : ""}`}
-      onMouseEnter={() => setPointerInside(true)}
-      // Also on move: a panel that opens under a cursor already sitting on it
-      // never receives an enter, and would stay masked until the mouse left
-      // and came back.
-      onMouseMove={() => setPointerInside(true)}
-      onMouseLeave={() => {
-        setPointerInside(false);
-        leaveNode(true);
-      }}
-    >
+    <div className="treecanvas" ref={rootRef}>
+      {/* The watermark: the whole tree, always, faint enough to read through. */}
+      <div className="treelayer treelayer--ambient" aria-hidden>
+        <TreeWorld layout={layout} view={view} width={width} height={height} tone="ambient" />
+      </div>
+
+      {/* The lit patch under the cursor, cut out of an identical sharp copy. */}
+      <div className="treelayer treelayer--lit" aria-hidden>
+        <TreeWorld layout={layout} view={view} width={width} height={height} tone="lit" />
+      </div>
+
       <svg
-        ref={svgRef}
+        className="treelayer treelayer--hits"
         width={width}
         height={height}
-        onWheel={onWheel}
-        onPointerDown={onPointerDown}
         onKeyDown={onKeyDown}
         tabIndex={0}
         role="tree"
         aria-label="Conversation tree"
       >
-        <defs>
-          <radialGradient
-            id={`${uid}-focus`}
-            gradientUnits="userSpaceOnUse"
-            cx={focusX}
-            cy={focusY}
-            r={Math.max(1, focusR)}
-          >
-            <stop offset="0" stopColor="#fff" stopOpacity="1" />
-            <stop offset="0.42" stopColor="#fff" stopOpacity="1" />
-            <stop offset="0.78" stopColor="#fff" stopOpacity="0.45" />
-            <stop offset="1" stopColor="#fff" stopOpacity="0" />
-          </radialGradient>
-          <mask id={`${uid}-mask`} maskUnits="userSpaceOnUse" x={0} y={0} width={width} height={height}>
-            <rect width={width} height={height} fill={`url(#${uid}-focus)`} />
-          </mask>
-          <filter id={`${uid}-blur`} x="-8%" y="-8%" width="116%" height="116%">
-            <feGaussianBlur stdDeviation={BLUR * (1 - reveal)} />
-          </filter>
-          <filter id={`${uid}-glow`} x="-260%" y="-260%" width="620%" height="620%">
-            <feGaussianBlur stdDeviation={2.4} result="halo" />
-            <feMerge>
-              <feMergeNode in="halo" />
-              <feMergeNode in="halo" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-        </defs>
-
-        {/* The out-of-focus copy. Only what is masked away above shows through,
-            so the tree does not stop at the edge of the panel — it goes soft. */}
-        {masked ? (
-          <g className="treecanvas__far" opacity={0.55 * (1 - reveal)} filter={`url(#${uid}-blur)`}>
-            <TreeWorld layout={layout} view={shown} glowId={`${uid}-glow`} />
-          </g>
-        ) : null}
-
-        <g mask={masked ? `url(#${uid}-mask)` : undefined}>
-          <TreeWorld layout={layout} view={shown} glowId={`${uid}-glow`} />
-        </g>
-
-        {/* Hit targets live outside the mask so a faded turn is still clickable. */}
-        <g className="treecanvas__hits" transform={`translate(${shown.x} ${shown.y}) scale(${shown.scale})`}>
-          {layout.nodes.map((node) => (
+        {layout.nodes.map((node) => {
+          const at = screenOf(node);
+          return (
             <TreeHit
               key={node.id}
               node={node}
+              x={at.x}
+              y={at.y}
+              radius={Math.max(MIN_HIT, (node.radius + 3) * view.scale)}
+              badgeOffset={(node.radius + 10) * view.scale}
               focused={focusId === node.id}
+              onGrab={onGrab}
               onEnter={() => enterNode(node)}
-              onLeave={() => leaveNode()}
+              onLeave={leaveNode}
               onSelect={() => navigateTo(node)}
               onToggle={() => toggleExpanded(node.id)}
             />
-          ))}
-        </g>
+          );
+        })}
       </svg>
 
       <div className="treecanvas__controls">
         <button
           type="button"
-          className="btn btn--sm btn--ghost"
-          onClick={() => {
-            setUserMoved(false);
-            setView(focused);
-          }}
-          title="Centre on the current turn at a readable scale"
+          className={`btn btn--sm btn--ghost${closeUp ? " btn--on" : ""}`}
+          onClick={() => setCloseUp((v) => !v)}
+          aria-pressed={closeUp}
+          title={closeUp ? "Back to the whole tree" : "Close up on the current turn"}
         >
-          here
-        </button>
-        <button
-          type="button"
-          className="btn btn--sm btn--ghost"
-          onClick={() => {
-            setUserMoved(true);
-            setView(overview);
-          }}
-          title="Fit the whole tree, however small"
-        >
-          all
+          {closeUp ? "all" : "here"}
         </button>
         <button
           type="button"
@@ -499,18 +403,13 @@ export function TreeCanvas({ width, height, viewport }: TreeCanvasProps) {
         >
           ?
         </button>
-        <span className="treecanvas__zoom">{Math.round(shown.scale * 100)}%</span>
+        <span className="treecanvas__zoom">{Math.round(view.scale * 100)}%</span>
       </div>
 
       {legend ? <EdgeLegend onClose={() => setLegend(false)} /> : null}
 
-      {hover ? (
-        <HoverPreview
-          node={hover}
-          // Sit opposite the turn being described, so the card never covers the
-          // dot the cursor is on — or the stretch of tree around it.
-          place={hover.y * shown.scale + shown.y < vpy + vph / 2 ? "bottom" : "top"}
-        />
+      {hover && hoverAt ? (
+        <HoverPreview node={hover} place={hoverAt.y < height / 2 ? "bottom" : "top"} />
       ) : null}
 
       <div className="treecanvas__stats">
@@ -518,7 +417,6 @@ export function TreeCanvas({ width, height, viewport }: TreeCanvasProps) {
         {layout.nodes.length < layout.totalGroups
           ? ` · ${layout.totalGroups - layout.nodes.length} collapsed`
           : ""}
-        {overflows && !hover ? " · hover to reveal" : ""}
       </div>
     </div>
   );
@@ -526,25 +424,34 @@ export function TreeCanvas({ width, height, viewport }: TreeCanvasProps) {
 
 /* ------------------------------------------------------------------ */
 
-/** The drawn tree. Rendered twice — once sharp, once soft behind the mask. */
+/** The drawn tree. Rendered twice — once as a watermark, once lit. */
 function TreeWorld({
   layout,
   view,
-  glowId,
+  width,
+  height,
+  tone,
 }: {
   layout: TreeLayout;
   view: View;
-  glowId: string;
+  width: number;
+  height: number;
+  tone: "ambient" | "lit";
 }) {
   return (
-    <g transform={`translate(${view.x} ${view.y}) scale(${view.scale})`}>
-      {layout.edges.map((edge) => (
-        <Edge key={edge.id} edge={edge} />
-      ))}
-      {layout.nodes.map((node) => (
-        <TreeDot key={node.id} node={node} glowId={glowId} />
-      ))}
-    </g>
+    <svg width={width} height={height} aria-hidden>
+      <g
+        className={`treeworld treeworld--${tone}`}
+        transform={`translate(${view.x} ${view.y}) scale(${view.scale})`}
+      >
+        {layout.edges.map((edge) => (
+          <Edge key={edge.id} edge={edge} />
+        ))}
+        {layout.nodes.map((node) => (
+          <TreeDot key={node.id} node={node} />
+        ))}
+      </g>
+    </svg>
   );
 }
 
@@ -553,9 +460,10 @@ function TreeWorld({
  *
  * The vocabulary is deliberately small: the ring is the origin kind's colour,
  * a filled core means the turn has an answer, a second ring means retries are
- * stacked underneath, and the one turn you are reading wears a halo.
+ * stacked underneath, and the one turn you are reading wears a halo — which
+ * stays lit in the watermark, so you can always find yourself.
  */
-function TreeDot({ node, glowId }: { node: LaidOutNode; glowId: string }) {
+function TreeDot({ node }: { node: LaidOutNode }) {
   const accent = edgeColor(node.edgeKind);
   const reply = node.replies.at(-1);
   const streaming = node.user.status === "streaming" || reply?.status === "streaming";
@@ -577,13 +485,13 @@ function TreeDot({ node, glowId }: { node: LaidOutNode; glowId: string }) {
     <g className={classes} transform={`translate(${node.x} ${node.y})`}>
       {node.isCurrent ? (
         <>
-          <circle className="treedot__halo" r={radius + 4.5} filter={`url(#${glowId})`} />
-          <circle className="treedot__pulse" r={radius + 4.5} />
+          <circle className="treedot__halo" r={radius + 4} />
+          <circle className="treedot__pulse" r={radius + 4} />
         </>
       ) : null}
 
       {node.replies.length > 1 ? (
-        <circle className="treedot__variants" r={radius + 2.4} />
+        <circle className="treedot__variants" r={radius + 2.2} />
       ) : null}
 
       <circle className="treedot__disc" r={radius} style={{ stroke: accent }} />
@@ -605,19 +513,30 @@ function TreeDot({ node, glowId }: { node: LaidOutNode; glowId: string }) {
 }
 
 /**
- * The interactive twin of a dot: a generous transparent target, kept out of the
- * focus mask so a dimmed turn is still reachable by mouse and by keyboard.
+ * The interactive twin of a dot, in screen space so the target stays clickable
+ * however far the tree has been scaled down. It is the only part of the whole
+ * layer that takes a pointer event — everything the tree lies over stays live.
  */
 function TreeHit({
   node,
+  x,
+  y,
+  radius,
+  badgeOffset,
   focused,
+  onGrab,
   onEnter,
   onLeave,
   onSelect,
   onToggle,
 }: {
   node: LaidOutNode;
+  x: number;
+  y: number;
+  radius: number;
+  badgeOffset: number;
   focused: boolean;
+  onGrab: (e: React.PointerEvent) => void;
   onEnter: () => void;
   onLeave: () => void;
   onSelect: () => void;
@@ -626,7 +545,8 @@ function TreeHit({
   return (
     <g
       className={`treedot__target${focused ? " treedot__target--focused" : ""}`}
-      transform={`translate(${node.x} ${node.y})`}
+      transform={`translate(${x} ${y})`}
+      onPointerDown={onGrab}
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
       onClick={onSelect}
@@ -637,12 +557,12 @@ function TreeHit({
         60,
       )}`}
     >
-      {focused ? <circle className="treedot__focusring" r={node.radius + 5} /> : null}
-      <circle r={node.radius + 7} fill="transparent" />
+      {focused ? <circle className="treedot__focusring" r={radius} /> : null}
+      <circle r={radius} fill="transparent" />
       {node.hiddenDescendants > 0 ? (
         <circle
-          r={9}
-          cy={node.radius + 10}
+          r={Math.max(MIN_HIT, radius * 0.9)}
+          cy={badgeOffset}
           fill="transparent"
           onClick={(e) => {
             e.stopPropagation();
@@ -654,13 +574,7 @@ function TreeHit({
   );
 }
 
-function HoverPreview({
-  node,
-  place,
-}: {
-  node: LaidOutNode;
-  place: "top" | "bottom";
-}) {
+function HoverPreview({ node, place }: { node: LaidOutNode; place: "top" | "bottom" }) {
   const reply = node.replies.at(-1);
   const meta = BRANCH_META[node.edgeKind];
   return (

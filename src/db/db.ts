@@ -113,7 +113,6 @@ export const DEFAULT_SETTINGS: Settings = {
   conceptLensTurns: 2,
   temperature: 0.7,
   maxTokens: null,
-  treePanel: { x: null, y: null, width: 440, height: 520, collapsed: false },
 };
 
 /** Seed templates and settings on first run. Idempotent. */
