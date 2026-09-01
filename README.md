@@ -154,6 +154,11 @@ Editing a template changes future nodes only.
 
 ### Decisions the spec did not ask for
 
+The three passes that reshaped the tree — trunk and branches, one canvas, then
+the watermark and its spotlight — are written up as a decision record in
+[docs/decisions/tree-shape.md](docs/decisions/tree-shape.md), with the
+alternatives that were turned down and what each choice cost.
+
 **Isolated nodes are context roots.** `full-ancestry` walks stop at — and
 include — a node whose own policy is `isolated`. The spec is explicit that a
 windowed node's follow-ups return to full ancestry, and silent about isolated
