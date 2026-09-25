@@ -11,8 +11,6 @@ import { newId } from "@/lib/id";
  *  origin and parent of the next submit. */
 export type PendingGesture =
   | { kind: "quote"; sourceNodeId: NodeId; anchor: TextAnchor }
-  /** An ordinary turn, but off an earlier message — a new line of thought. */
-  | { kind: "fork"; sourceNodeId: NodeId }
   | { kind: "isolated"; sourceNodeId: NodeId; anchor: TextAnchor }
   | { kind: "concept"; sourceNodeId: NodeId; anchor: TextAnchor; turns: number }
   | {
@@ -68,8 +66,6 @@ export interface AsideFrame {
   rootNodeId: NodeId | null;
   /** Leaf inside the aside that its composer is attached to. */
   activeNodeId: NodeId | null;
-  /** Text to seed the composer with, consumed once ("Compare with…"). */
-  seed?: string;
 }
 
 /** Where an existing branch sits: what `showAsides()` needs to reopen it. */
@@ -124,7 +120,6 @@ interface UIState {
     gesture: PendingGesture;
     conversationId: string;
     from?: string;
-    seed?: string;
   }) => string;
   /** Shows existing branches, outermost first — the chain that leads to one. */
   showAsides: (chain: AsideTarget[]) => void;
@@ -201,7 +196,7 @@ export const useUI = create<UIState>((set, get) => ({
 
   asides: [],
 
-  openAside: ({ gesture, conversationId, from, seed }) => {
+  openAside: ({ gesture, conversationId, from }) => {
     const id = newId("s");
     set((s) => {
       const at = from ? s.asides.findIndex((f) => f.id === from) : -1;
@@ -223,7 +218,6 @@ export const useUI = create<UIState>((set, get) => ({
             pending: gesture,
             rootNodeId: null,
             activeNodeId: null,
-            ...(seed ? { seed } : {}),
           },
         ],
       };
@@ -295,7 +289,7 @@ export const useUI = create<UIState>((set, get) => ({
       return {
         openInspectors,
         asides: s.asides.map((f) =>
-          f.id === id ? { ...f, rootNodeId, activeNodeId, pending: null, seed: undefined } : f,
+          f.id === id ? { ...f, rootNodeId, activeNodeId, pending: null } : f,
         ),
       };
     }),

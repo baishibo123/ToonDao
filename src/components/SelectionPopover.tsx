@@ -3,18 +3,19 @@ import { useStore } from "@/store/useStore";
 import { useUI, type PendingGesture } from "@/store/useUI";
 import { useStartGesture } from "@/hooks/useStartGesture";
 import { BRANCH_META } from "@/lib/policyMeta";
-import { estimateTokens, formatTokens } from "@/lib/tokens";
 
 /**
- * The one floating toolbar behind §5.1, §5.3 and §5.4.
+ * The toolbar that appears on a passage: what a reader does when the text gets
+ * hard, named the way a reader would name it.
  *
- * A drag offers the range actions; a click additionally offers the term
- * actions, because a click has been expanded to a term (§5.1). No action sends
- * anything: each one *starts* a gesture, which either opens a window carrying
- * the branch's context or docks into the composer of the surface the passage
- * was read in. Either way the user sees §5.3's `1 message · isolated` chip
- * before committing, and all five interactions still leave through one submit
- * path.
+ *   Explain    "wait — what's this?"    §5.1, opens an aside
+ *   Reply      "about this —"           §5.4, stays in this conversation
+ *   Just this  "take only this"         §5.3, opens an aside
+ *
+ * A click has been expanded to a term (§5.1) and a drag resolves to its range;
+ * both offer the same moves, so the toolbar is learnt once. No action sends
+ * anything: each *starts* a gesture, and the carried context is on screen before
+ * the user commits.
  */
 export function SelectionPopover() {
   const ref = useRef<HTMLDivElement>(null);
@@ -100,11 +101,8 @@ export function SelectionPopover() {
    * composer is `useStartGesture()`'s decision, not this toolbar's — the
    * toolbar's job is to say what the user pointed at and what they asked for.
    */
-  const start = (gesture: PendingGesture, seed?: string) =>
-    startGesture(gesture, {
-      ...(seed ? { seed } : {}),
-      ...(selection.asideId ? { asideId: selection.asideId } : {}),
-    });
+  const start = (gesture: PendingGesture) =>
+    startGesture(gesture, selection.asideId ? { asideId: selection.asideId } : {});
 
   return (
     <div
@@ -118,30 +116,13 @@ export function SelectionPopover() {
     >
       <div className="selpop__preview" title={anchor.text}>
         <span className="selpop__quote">“{truncate(preview, 46)}”</span>
-        <span className="selpop__meta">
-          {anchor.end - anchor.start} chars · {formatTokens(estimateTokens(anchor.text))}
-        </span>
       </div>
 
       <div className="selpop__actions">
         <Action
-          kind="isolated-selection"
-          label="Ask about only this"
-          hint="§5.3 — zero ancestry. Opens a window; nothing but this text reaches the model."
-          onClick={() =>
-            start({ kind: "isolated", sourceNodeId: selection.nodeId, anchor })
-          }
-        />
-        <Action
-          kind="quote-reply"
-          label="Reply to this"
-          hint="§5.4 — continues the current path with the passage quoted. Stays in this composer."
-          onClick={() => start({ kind: "quote", sourceNodeId: selection.nodeId, anchor })}
-        />
-        <Action
           kind="concept-lens"
-          label="Explain in context"
-          hint="§5.1 — opens a window carrying a narrow window of recent turns plus this concept."
+          label="Explain"
+          hint="What does this mean? Asked beside the thread, carrying only the last few turns."
           onClick={() =>
             start({
               kind: "concept",
@@ -152,26 +133,18 @@ export function SelectionPopover() {
           }
         />
         <Action
-          kind="concept-lens"
-          label="Compare with…"
-          hint="Same narrow window, seeded as a comparison."
-          onClick={() =>
-            start(
-              {
-                kind: "concept",
-                sourceNodeId: selection.nodeId,
-                anchor,
-                turns: conceptLensTurns,
-              },
-              `Compare “${preview}” with `,
-            )
-          }
+          kind="quote-reply"
+          label="Reply"
+          hint="Reply to this passage, here in the conversation. It is quoted above what you type."
+          onClick={() => start({ kind: "quote", sourceNodeId: selection.nodeId, anchor })}
         />
         <Action
-          kind="continuation"
-          label="New line from here"
-          hint="An ordinary turn off this message, keeping full ancestry up to it. Opens a window, because it is a second line of thought rather than the next thing you said."
-          onClick={() => start({ kind: "fork", sourceNodeId: selection.nodeId })}
+          kind="isolated-selection"
+          label="Just this"
+          hint="Ask about this passage on its own, beside the thread. Nothing else is sent."
+          onClick={() =>
+            start({ kind: "isolated", sourceNodeId: selection.nodeId, anchor })
+          }
         />
       </div>
     </div>

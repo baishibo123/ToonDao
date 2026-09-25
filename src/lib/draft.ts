@@ -71,21 +71,6 @@ export function planSubmission(args: {
         forks: false,
       };
 
-    // Not one of the five: an ordinary turn taken off an earlier message rather
-    // than off the end of the thread. Same policy as §5.5 chat — full ancestry,
-    // a continuation edge — and the only thing that makes it a departure is
-    // *where* it attaches. It forks, so it opens a window: two ordinary lines of
-    // thought off one message are two conversations, and the invariant is that a
-    // window is one linear spine.
-    case "fork":
-      return {
-        parentId: pending.sourceNodeId,
-        policy: { kind: "full-ancestry" },
-        origin: { kind: "continuation", sourceNodeId: pending.sourceNodeId },
-        content: text,
-        forks: true,
-      };
-
     // §5.3 — lineage without inheritance.
     case "isolated":
       return {

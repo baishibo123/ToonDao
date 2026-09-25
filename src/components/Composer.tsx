@@ -30,11 +30,6 @@ const GESTURE_COPY: Record<
     hint: "Everything after the cut is withheld from the prompt. The full answer stays readable above.",
     className: "composer__gesture--crop",
   },
-  fork: {
-    label: "New line from here",
-    hint: "An ordinary turn, but taken off an earlier message. Full ancestry up to that point.",
-    className: "composer__gesture--fork",
-  },
 };
 
 /**
@@ -114,18 +109,6 @@ export function Composer() {
     if (!asideId) return;
     textareaRef.current?.focus();
   }, [asideId, frame?.pending]);
-
-  // "Compare with…" arrives as seed text on the aside that opened for it.
-  const seed = frame?.seed;
-  useEffect(() => {
-    if (!seed) return;
-    setText(seed);
-    const el = textareaRef.current;
-    if (!el) return;
-    el.focus();
-    // Park the caret at the end so the user types straight into the gap.
-    requestAnimationFrame(() => el.setSelectionRange(el.value.length, el.value.length));
-  }, [seed]);
 
   // Auto-grow. Measured from 0px rather than "auto": in dev the stylesheet
   // arrives after first paint, and measuring "auto" against unstyled layout
@@ -367,8 +350,6 @@ function placeholderFor(kind: string | undefined, hasHistory: boolean): string {
       return "What about this concept? Leave blank to just ask for an explanation";
     case "crop":
       return "Optional note — or send blank to ask it to pick up from the cut";
-    case "fork":
-      return "Ask something else from this point…";
     default:
       return hasHistory ? "Reply…" : "Start a conversation…";
   }

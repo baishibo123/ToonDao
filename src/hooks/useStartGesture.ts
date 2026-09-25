@@ -4,8 +4,6 @@ import { useUI, type PendingGesture } from "@/store/useUI";
 import { gestureOpensAside } from "@/lib/draft";
 
 export interface StartGestureOptions {
-  /** Seed text for the composer that receives the gesture. */
-  seed?: string;
   /** Set when the gesture was started inside an aside. */
   asideId?: string;
 }
@@ -42,7 +40,6 @@ export function useStartGesture(): (
           gesture,
           conversationId,
           ...(opts.asideId ? { from: opts.asideId } : {}),
-          ...(opts.seed ? { seed: opts.seed } : {}),
         });
         return;
       }

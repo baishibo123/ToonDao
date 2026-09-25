@@ -508,7 +508,6 @@
 .composer__gesture--isolated { border-left-color: var(--hue-isolated); }
 .composer__gesture--concept { border-left-color: var(--hue-lens); }
 .composer__gesture--crop { border-left-color: var(--hue-crop); }
-.composer__gesture--fork { border-left-color: var(--hue-continuation); }
 
 .gesture__main { flex: 1; min-width: 0; }
 .gesture__label {
@@ -867,8 +866,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   border-radius: var(--radius);
   box-shadow: var(--shadow-pop);
   overflow: hidden;
-  min-width: 250px;
-  max-width: 340px;
+  max-width: 420px;
   animation: pop 120ms cubic-bezier(0.2, 0, 0.2, 1);
 }
 @keyframes pop {
@@ -890,22 +888,18 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.selpop__meta {
-  display: block;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--text-faint);
-  margin-top: 2px;
-}
-
-.selpop__actions { padding: 4px; }
+/* One row: the toolbar sits over the text being read, so the less of it
+   it covers the better. */
+.selpop__actions { display: flex; gap: 2px; padding: 4px; }
 
 .selpop__action {
   display: flex;
+  flex: 1 1 auto;
   align-items: center;
-  gap: 9px;
-  width: 100%;
-  padding: 6px 8px;
+  justify-content: center;
+  gap: 6px;
+  padding: 5px 10px;
+  white-space: nowrap;
   border-radius: var(--radius-sm);
   font-size: 13px;
   color: var(--text-dim);

@@ -20,7 +20,7 @@ import {
   threadOf,
   type OutlineThread,
 } from "@/lib/outline";
-import { gestureOpensAside, planSubmission } from "@/lib/draft";
+import { gestureOpensAside } from "@/lib/draft";
 import type { BranchKind, ConversationNode, NodeId } from "@/types";
 import type { NodeMap } from "@/lib/tree";
 import { TreeFixture } from "./helpers";
@@ -392,25 +392,10 @@ describe("a window is one linear spine", () => {
   });
 });
 
-describe("the fork gesture", () => {
-  /**
-   * An ordinary turn taken off an earlier message. Same payload as ordinary
-   * chat; the only difference is where it attaches — and that it forks, so it
-   * opens a window instead of moving the thread.
-   */
-  it("is a full-ancestry continuation that forks", () => {
-    const plan = planSubmission({
-      text: "what about the other case?",
-      pending: { kind: "fork", sourceNodeId: "n4" },
-      activeLeafId: "n10",
-    });
-    expect(plan.parentId).toBe("n4");
-    expect(plan.policy).toEqual({ kind: "full-ancestry" });
-    expect(plan.origin).toEqual({ kind: "continuation", sourceNodeId: "n4" });
-    expect(plan.forks).toBe(true);
-    expect(gestureOpensAside({ kind: "fork", sourceNodeId: "n4" })).toBe(true);
-  });
-
+describe("a second continuation off an earlier message", () => {
+  // No gesture creates one any more — the composer always attaches to the end
+  // of its spine — but older data and imports can hold them, so the outline
+  // still has to name them.
   it("is named by its ask, since it points at no passage", () => {
     const t = new TreeFixture();
     const made = t.linear(1);
