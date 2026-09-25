@@ -9,9 +9,12 @@ import { describe, expect, it } from "vitest";
 import {
   ancestorThreadIds,
   branchLabel,
+  buildGroups,
   buildOutline,
   flattenOutline,
   forksOf,
+  groupIdOf,
+  isTrunkKind,
   spineChild,
   spineLeaf,
   threadOf,
@@ -249,6 +252,58 @@ describe("which gestures open a window (requirement 2)", () => {
 });
 
 /* ------------------------------------------------------------------ */
+
+describe("turns", () => {
+  // Ported from the removed treeLayout tests: the grouping they covered is
+  // still what every row and every spine is built from.
+  it("puts an assistant node on its user node's turn", () => {
+    const t = new TreeFixture();
+    const u = t.add("user", "q", null);
+    const a = t.add("assistant", "a", u.id);
+    const nodes = mapOf(t);
+    expect(groupIdOf(nodes, u.id)).toBe(u.id);
+    expect(groupIdOf(nodes, a.id)).toBe(u.id);
+  });
+
+  it("makes one turn per exchange, not one per message", () => {
+    const t = new TreeFixture();
+    t.linear(6); // 12 nodes
+    expect(buildGroups(mapOf(t), t.conversationId).size).toBe(6);
+  });
+
+  it("collapses retries into the turn they retry (§11 Q2)", () => {
+    const t = new TreeFixture();
+    const u = t.add("user", "q", null);
+    t.add("assistant", "first try", u.id);
+    t.add("assistant", "second try", u.id, { kind: "full-ancestry" }, "regenerate");
+    t.add("assistant", "third try", u.id, { kind: "full-ancestry" }, "regenerate");
+    const groups = buildGroups(mapOf(t), t.conversationId);
+    expect(groups.size).toBe(1);
+    expect(groups.get(u.id)!.replies).toHaveLength(3);
+  });
+
+  it("promotes an orphaned subtree to a root rather than dropping it", () => {
+    const t = new TreeFixture();
+    const u1 = t.add("user", "q1", null);
+    const a1 = t.add("assistant", "a1", u1.id);
+    const u2 = t.add("user", "q2", a1.id);
+    t.add("assistant", "a2", u2.id);
+    const nodes = mapOf(t);
+    delete nodes[a1.id]; // simulate a mid-tree delete
+    delete nodes[u1.id];
+    const groups = buildGroups(nodes, t.conversationId);
+    expect(groups.get(u2.id)!.parentGroupId).toBeNull();
+    expect(buildOutline(nodes, t.conversationId).threads.map((th) => th.id)).toEqual([u2.id]);
+  });
+
+  it("counts exactly continuation and quote-reply as carrying the line", () => {
+    expect(isTrunkKind("continuation")).toBe(true);
+    expect(isTrunkKind("quote-reply")).toBe(true);
+    for (const kind of ["concept-lens", "structural-crop", "isolated-selection"] as const) {
+      expect(isTrunkKind(kind)).toBe(false);
+    }
+  });
+});
 
 describe("a window is one linear spine", () => {
   /**

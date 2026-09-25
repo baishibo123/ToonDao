@@ -24,7 +24,7 @@ export function useSelectionWatcher(): void {
       // Let the browser settle the selection before reading it.
       frame = requestAnimationFrame(() => {
         const target = event.target as Element | null;
-        if (target?.closest?.(".selpop, .composer, .modal, .treestage")) return;
+        if (target?.closest?.(".selpop, .composer, .modal")) return;
         // A click on a link is a click on a link. Popping a toolbar over it
         // would make rendered links unusable, and §5.5 asks that ordinary use
         // stay ordinary.

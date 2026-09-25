@@ -1,36 +1,94 @@
-import type { BranchKind, ConversationNode, NodeId } from "@/types";
-import { buildGroups, isTrunkKind, type TurnGroup } from "@/lib/treeLayout";
+import type { BranchKind, ConversationNode, NodeId, TextAnchor } from "@/types";
 import { childrenOf, type NodeMap } from "@/lib/tree";
 
 /**
- * The conversation as a *file structure* — the model behind the sidebar outline.
+ * The conversation's structure, in one place: what a turn is, what a spine is,
+ * and the file-structure view of both that the sidebar draws.
  *
- * The tree canvas (§6) answers "what is the shape of this thinking"; the outline
- * answers "what are the named things in it, and which one am I in". Finder is
- * the right borrowed idiom for the second question: rows, disclosure triangles,
- * indentation, one selected row.
+ * A TURN is a user node plus its replies. Retries are second replies to the same
+ * user node, so they are variants of one turn, never a turn of their own.
  *
- * WHAT A ROW IS. A row is a *thread*: one run of turns joined by trunk-kind
- * edges. That is deliberately the same cut `treeLayout.ts` makes — a
- * continuation or a quote-reply is the conversation carrying on, so it belongs
- * to the thread it is in; a lens, a crop or an isolation is a departure, so it
- * becomes a thread of its own, nested under the one it left. `isTrunkKind()` is
- * imported rather than re-stated so the sidebar can never disagree with the map
- * about what a branch is.
+ * A SPINE is a run of turns joined by the two edges that *are* the conversation
+ * carrying on: an ordinary reply (`continuation`) and a reply to a quoted
+ * passage (`quote-reply`). Everything else — a lens, a crop, an isolation — is a
+ * departure, and a departure starts a spine of its own.
  *
- * STABILITY OVER LIVENESS. Where a turn has two trunk-kind children — you came
- * back and asked something else in the same register — `treeLayout` gives the
- * line to whichever one you are currently reading, because the map should show
- * the thread you are in. The outline cannot do that: it is an index, and a row
- * that reorders itself as you navigate is unusable. So the outline always gives
- * the line to the *oldest* trunk child, and the later ones become nested rows.
- * The two can therefore disagree about which continuation holds the spine. That
- * is the intended trade: the canvas is a live map, the outline is a stable list.
+ * A SPINE IS WHAT ONE PANE SHOWS. The thread shows the spine that starts at the
+ * root; an aside shows one departure. No pane ever shows two spines, which is
+ * what keeps the reading column one conversation long.
  *
- * Retries never appear. A retry is a second assistant reply to the same user
- * node, so it does not open a turn of its own — it collapses into the row it
- * was tried in, exactly as it collapses into one dot on the canvas.
+ * WHAT A ROW IS. The outline has one row per spine, nested under the spine it
+ * left. Where a turn has two children that could each carry the line — you came
+ * back and asked something else — the *oldest* holds it and the later one
+ * becomes a nested row. An index that reorders itself as you navigate is
+ * unusable, so the choice is stable rather than live.
  */
+
+/* ------------------------------------------------------------------ */
+/* Turns                                                               */
+/* ------------------------------------------------------------------ */
+
+/** The two origin kinds that continue the spine they were born on. */
+export const TRUNK_KINDS: readonly BranchKind[] = ["continuation", "quote-reply"];
+
+export function isTrunkKind(kind: BranchKind): boolean {
+  return TRUNK_KINDS.includes(kind);
+}
+
+export interface TurnGroup {
+  /** The user node's id. Stable across rebuilds. */
+  id: string;
+  user: ConversationNode;
+  replies: ConversationNode[];
+  parentGroupId: string | null;
+  edgeKind: BranchKind;
+  anchor?: TextAnchor;
+}
+
+/** Which turn a node lives on. Assistant nodes live on their user's turn. */
+export function groupIdOf(nodes: NodeMap, id: NodeId): string | null {
+  const node = nodes[id];
+  if (!node) return null;
+  return node.role === "user" ? node.id : node.parentId;
+}
+
+export function buildGroups(nodes: NodeMap, conversationId: string): Map<string, TurnGroup> {
+  const groups = new Map<string, TurnGroup>();
+
+  for (const node of Object.values(nodes)) {
+    if (node.conversationId !== conversationId) continue;
+    if (node.role !== "user") continue;
+
+    const replies = node.childrenIds
+      .map((id) => nodes[id])
+      .filter((n): n is ConversationNode => Boolean(n) && n.role === "assistant")
+      .sort((a, b) => a.createdAt - b.createdAt);
+
+    groups.set(node.id, {
+      id: node.id,
+      user: node,
+      replies,
+      parentGroupId: node.parentId ? groupIdOf(nodes, node.parentId) : null,
+      edgeKind: node.origin?.kind ?? "continuation",
+      anchor: node.origin?.anchor,
+    });
+  }
+
+  // A turn whose parent is missing (deleted mid-tree) becomes a root rather than
+  // vanishing — losing a subtree from the index would be worse than showing it
+  // detached.
+  for (const group of groups.values()) {
+    if (group.parentGroupId && !groups.has(group.parentGroupId)) {
+      group.parentGroupId = null;
+    }
+  }
+
+  return groups;
+}
+
+/* ------------------------------------------------------------------ */
+/* Threads — the outline                                               */
+/* ------------------------------------------------------------------ */
 
 export interface OutlineThread {
   /** The head turn's id — its user node's id. Stable across re-layouts. */

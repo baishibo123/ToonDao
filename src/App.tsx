@@ -6,7 +6,6 @@ import { Transcript } from "@/components/Transcript";
 import { Composer } from "@/components/Composer";
 import { Settings } from "@/components/Settings";
 import { SelectionPopover } from "@/components/SelectionPopover";
-import { TreeStage } from "@/components/tree/TreeStage";
 import { BranchWindows } from "@/components/BranchWindows";
 import { useSelectionWatcher } from "@/hooks/useSelectionWatcher";
 import { useTermHover } from "@/hooks/useTermHover";
@@ -41,7 +40,6 @@ export default function App() {
   return (
     <div className="app">
       <Sidebar />
-      {/* One canvas. The thread is the page; the tree is drawn across it. */}
       <main className="main">
         <div className="thread">
           {bootError ? (
@@ -76,7 +74,6 @@ export default function App() {
           </div>
           <Composer />
         </div>
-        <TreeStage />
       </main>
       {/* Branches float in front of the thread, behind the toolbar and modals. */}
       <BranchWindows />

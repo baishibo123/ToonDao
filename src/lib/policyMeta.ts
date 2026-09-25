@@ -2,8 +2,8 @@ import type { BranchKind, ContextPolicy, PolicyKind } from "@/types";
 
 /**
  * Shared display vocabulary for the six origin kinds and five policy kinds.
- * The transcript chips, the composer, and the tree edges all read from here, so
- * a colour never means one thing in the tree and another in the transcript.
+ * The transcript, the composer and the sidebar outline all read from here, so a
+ * colour never means one thing in the sidebar and another in the transcript.
  */
 
 export const BRANCH_META: Record<

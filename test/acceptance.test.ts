@@ -14,7 +14,7 @@ import { DEFAULT_TEMPLATES } from "@/lib/templates";
 import { DEFAULT_SETTINGS } from "@/db/db";
 import { draftNode, planSubmission } from "@/lib/draft";
 import { buildBundle, parseBundle } from "@/lib/transfer";
-import { layoutTree } from "@/lib/treeLayout";
+import { buildOutline, forksOf, spineChild, spineLeaf } from "@/lib/outline";
 import { pathToRoot, type NodeMap } from "@/lib/tree";
 import { TreeFixture } from "./helpers";
 import type { Conversation, ConversationNode, NodeStore, TextAnchor } from "@/types";
@@ -171,15 +171,12 @@ describe("§9.3 Isolation is total", () => {
     expect(t.get(turn10.id)!.childrenIds).toContain(node.id);
     expect(pathToRoot(mapOf(t), node.id)).toHaveLength(21);
 
-    // ...with a visibly detached edge.
-    const layout = layoutTree({
-      nodes: mapOf(t),
-      conversationId: t.conversationId,
-      activeNodeId: node.id,
-      expanded: new Set(),
-    });
-    const edge = layout.edges.find((e) => e.id.endsWith(`->${node.id}`))!;
-    expect(edge.kind).toBe("isolated-selection");
+    // ...but it is a departure, not the thread carrying on: it starts a spine
+    // of its own, so it is shown in an aside and never inside the thread.
+    const nodes = mapOf(t);
+    expect(forksOf(nodes, turn10.id).map((n) => n.id)).toEqual([node.id]);
+    const [main] = buildOutline(nodes, t.conversationId).threads;
+    expect(main.children.map((c) => c.kind)).toEqual(["isolated-selection"]);
   });
 });
 
@@ -235,23 +232,20 @@ describe("§9.4 Quote extends, the other three fork", () => {
       iso.node.id,
     ]);
 
-    // All four visible in the tree with distinct edge styles.
-    const layout = layoutTree({
-      nodes: mapOf(t),
-      conversationId: t.conversationId,
-      activeNodeId: iso.node.id,
-      expanded: new Set(),
-    });
-    const kinds = [quote, lens, crop, iso].map(
-      (g) => layout.edges.find((e) => e.id.endsWith(`->${g.node.id}`))!.kind,
-    );
-    expect(kinds).toEqual([
-      "quote-reply",
-      "concept-lens",
-      "structural-crop",
-      "isolated-selection",
+    // The quote carries the thread on; the other three each leave it, as
+    // three separately named asides.
+    const nodes = mapOf(t);
+    expect(spineChild(nodes, src.id)?.id).toBe(quote.node.id);
+    expect(forksOf(nodes, src.id).map((n) => n.id)).toEqual([
+      lens.node.id,
+      crop.node.id,
+      iso.node.id,
     ]);
-    expect(new Set(kinds).size).toBe(4);
+    const [main] = buildOutline(nodes, t.conversationId).threads;
+    expect(main.nodeIds).toContain(quote.node.id);
+    const kinds = main.children.map((c) => c.kind);
+    expect(kinds).toEqual(["concept-lens", "structural-crop", "isolated-selection"]);
+    expect(new Set([...kinds, "quote-reply"]).size).toBe(4);
 
     // And each carries a different amount of context.
     expect(assembleContext(quote.node, t, T)).toHaveLength(13);
@@ -368,16 +362,14 @@ describe("§9.7 Normal use stays normal", () => {
     expect(JSON.stringify(payload)).not.toContain("This is the context of our conversation");
     expect(t.all().every((n) => n.origin?.anchor === undefined)).toBe(true);
 
-    // And the tree of a gesture-free conversation is a single straight line.
-    const layout = layoutTree({
-      nodes: mapOf(t),
-      conversationId: t.conversationId,
-      activeNodeId: t.all().at(-1)!.id,
-      expanded: new Set(),
-    });
-    expect(layout.nodes).toHaveLength(5);
-    expect(layout.edges.every((e) => e.kind === "continuation")).toBe(true);
-    expect(new Set(layout.nodes.map((n) => n.x)).size).toBe(1);
+    // And a gesture-free conversation is one spine: one thread, no asides,
+    // and walking it from the root reaches the last reply.
+    const nodes = mapOf(t);
+    const outline = buildOutline(nodes, t.conversationId);
+    expect(outline.threads).toHaveLength(1);
+    expect(outline.threads[0].turnCount).toBe(5);
+    expect(outline.threads[0].children).toEqual([]);
+    expect(spineLeaf(nodes, t.all()[0].id)).toBe(t.all().at(-1)!.id);
   });
 
   it("the draft payload the composer previews is the payload that gets sent", () => {

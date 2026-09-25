@@ -9,8 +9,8 @@
 
    The one departure from Finder: a row's icon is its origin glyph in its
    origin hue, not a generic document. A branch's *kind* is the thing worth
-   knowing at a glance, and the vocabulary is already shared with the tree
-   edges and the transcript badges (policyMeta.ts).
+   knowing at a glance, and the vocabulary is already shared with the
+   transcript's marks (policyMeta.ts).
    ------------------------------------------------------------------ */
 
 .outline {
@@ -37,7 +37,7 @@
 .row:hover .row__kill { opacity: 1; }
 
 /* Selection is a filled row, as in Finder — not a left border, which reads
-   as "the thread continues here" and is what the tree already means by it. */
+   as "the thread continues here". */
 .row--selected {
   background: color-mix(in oklab, var(--kind, var(--accent)) 16%, transparent);
   color: var(--text);

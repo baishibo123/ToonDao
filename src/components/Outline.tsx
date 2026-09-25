@@ -50,7 +50,7 @@ export function Outline() {
     ? (outline.threadOfNode.get(activeNodeId) ?? null)
     : null;
 
-  // A branch you navigate to from the transcript or the tree must not be hidden
+  // A branch you navigate to from the transcript must not be hidden
   // behind a collapsed parent — the outline's job is to say where you are.
   useEffect(() => {
     if (!selectedThreadId) return;

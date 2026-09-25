@@ -28,7 +28,6 @@ export const MessageView = memo(function MessageView({ node, turn }: MessageView
   const setBranchWindowActive = useUI((s) => s.setBranchWindowActive);
 
   const openInspector = useUI((s) => s.openInspectors.has(node.id));
-  const hovered = useUI((s) => s.hoverNodeId === node.id);
   const cropHover = useUI((s) => (s.cropHover?.nodeId === node.id ? s.cropHover.charOffset : null));
 
   const streaming = streamingNodeId === node.id;
@@ -90,7 +89,7 @@ export const MessageView = memo(function MessageView({ node, turn }: MessageView
 
   return (
     <article
-      className={`msg msg--${node.role}${hovered ? " msg--hovered" : ""}`}
+      className={`msg msg--${node.role}`}
       id={messageDomId(node.id, windowId)}
       data-node-id={node.id}
     >

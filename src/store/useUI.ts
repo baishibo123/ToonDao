@@ -103,18 +103,11 @@ interface UIState {
   shortcutsOpen: boolean;
   setShortcutsOpen: (open: boolean) => void;
 
-  treeOpen: boolean;
-  setTreeOpen: (open: boolean) => void;
-
   /** Outline rows the user has collapsed. Absent means open: a conversation is
    *  mostly worth seeing, and hiding it by default hides the feature. */
   collapsedRows: Set<string>;
   toggleRow: (id: string) => void;
   setRowCollapsed: (id: string, collapsed: boolean) => void;
-
-  /** Node the tree is hovering, mirrored into the transcript as a highlight. */
-  hoverNodeId: NodeId | null;
-  setHoverNodeId: (id: NodeId | null) => void;
 
   /** Bumped to ask the transcript to scroll a node into view. */
   scrollTarget: { id: NodeId; nonce: number } | null;
@@ -193,9 +186,6 @@ export const useUI = create<UIState>((set, get) => ({
   shortcutsOpen: false,
   setShortcutsOpen: (shortcutsOpen) => set({ shortcutsOpen }),
 
-  treeOpen: true,
-  setTreeOpen: (treeOpen) => set({ treeOpen }),
-
   collapsedRows: new Set<string>(),
   toggleRow: (id) =>
     set((s) => {
@@ -211,9 +201,6 @@ export const useUI = create<UIState>((set, get) => ({
       else next.delete(id);
       return { collapsedRows: next };
     }),
-
-  hoverNodeId: null,
-  setHoverNodeId: (hoverNodeId) => set({ hoverNodeId }),
 
   scrollTarget: null,
   requestScrollTo: (id) =>

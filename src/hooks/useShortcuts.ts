@@ -14,7 +14,6 @@ export const SHORTCUTS: Shortcut[] = [
   { keys: "Shift ⏎", label: "Newline" },
   { keys: "Esc", label: "Drop the pending gesture, or close what is open" },
   { keys: "⌘ ⇧ W", label: "Close the front branch window" },
-  { keys: "⌘ ⇧ T", label: "Show or hide the tree" },
   { keys: "⌘ ⇧ N", label: "New conversation" },
   { keys: "⌘ ⇧ I", label: "Inspect the payload of the last message" },
   { keys: "⌘ ⇧ ,", label: "Settings" },
@@ -101,10 +100,6 @@ export function useShortcuts(): void {
           ui.closeBranchWindow(target);
           break;
         }
-        case "t":
-          e.preventDefault();
-          ui.setTreeOpen(!ui.treeOpen);
-          break;
         case "n":
           e.preventDefault();
           void store.newConversation();

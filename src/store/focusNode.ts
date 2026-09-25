@@ -9,8 +9,7 @@ import { buildOutline, spineLeaf, threadOf } from "@/lib/outline";
  * The invariant this enforces is that **a window is one linear spine**. The main
  * chat box is the spine that starts at the root; every departure from it is a
  * spine of its own, shown only in its own window. So navigating — from the
- * sidebar, from the tree, from a branch marker in the transcript, from a sibling
- * switch — can never splice one spine into another. It either moves the main
+ * sidebar, from a branch marker in the transcript, from a sibling switch — can never splice one spine into another. It either moves the main
  * window's cursor or it opens (or fronts) the window that owns the node.
  *
  * Landing rule: go to the *end* of the spine the node sits on, then scroll the

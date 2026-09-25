@@ -6,8 +6,6 @@ export function Sidebar() {
   const newConversation = useStore((s) => s.newConversation);
 
   const setSettingsOpen = useUI((s) => s.setSettingsOpen);
-  const treeOpen = useUI((s) => s.treeOpen);
-  const setTreeOpen = useUI((s) => s.setTreeOpen);
   // Selected whole rather than mapped: a selector that builds a new array on
   // every call re-renders on every unrelated store write.
   const windows = useUI((s) => s.windows);
@@ -41,13 +39,6 @@ export function Sidebar() {
           onClick={() => void newConversation()}
         >
           + New conversation
-        </button>
-        <button
-          type="button"
-          className="btn btn--wide btn--ghost"
-          onClick={() => setTreeOpen(!treeOpen)}
-        >
-          {treeOpen ? "Hide" : "Show"} tree
         </button>
         <button
           type="button"
