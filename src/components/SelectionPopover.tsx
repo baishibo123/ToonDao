@@ -17,6 +17,11 @@ import { findParked } from "@/lib/later";
  * Explain and Later are the two answers to the same question — does this block
  * me right now? — so they sit side by side.
  *
+ * Inside an aside there is one more: To thread, which quotes the passage into
+ * the thread's composer. It is how a side conversation ends — you come back
+ * with what you learned — and it reuses the quote reply rather than inventing a
+ * gesture, because carrying a passage into a conversation is what a quote is.
+ *
  * A click has been expanded to a term (§5.1) and a drag resolves to its range;
  * both offer the same moves, so the toolbar is learnt once. No action sends
  * anything: each *starts* a gesture, and the carried context is on screen before
@@ -164,6 +169,17 @@ export function SelectionPopover() {
           hint="Reply to this passage, here in the conversation. It is quoted above what you type."
           onClick={() => start({ kind: "quote", sourceNodeId: selection.nodeId, anchor })}
         />
+        {selection.asideId ? (
+          <Action
+            kind="quote-reply"
+            label="To thread"
+            hint="Quote this in the thread, to carry what you learned back into the conversation."
+            onClick={() =>
+              // No asideId: the quote docks into the thread's composer.
+              startGesture({ kind: "quote", sourceNodeId: selection.nodeId, anchor })
+            }
+          />
+        ) : null}
         <Action
           kind="isolated-selection"
           label="Just this"
