@@ -4,8 +4,20 @@
     {
       "name": "toondao",
       "runtimeExecutable": "/bin/sh",
-      "runtimeArgs": ["-c", "PATH=/opt/homebrew/bin:$PATH exec npm run dev -- --port 5273 --strictPort"],
+      "runtimeArgs": [
+        "-c",
+        "PATH=/opt/homebrew/bin:$PATH exec npm run dev -- --port 5273 --strictPort"
+      ],
       "port": 5273
+    },
+    {
+      "name": "mock-llm",
+      "runtimeExecutable": "/bin/sh",
+      "runtimeArgs": [
+        "-c",
+        "PATH=/opt/homebrew/bin:$PATH exec node dev/mock-llm.mjs"
+      ],
+      "port": 8787
     }
   ]
 }
