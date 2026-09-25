@@ -3,15 +3,15 @@ import type { NodeId } from "@/types";
 import { useStore } from "@/store/useStore";
 import { useUI } from "@/store/useUI";
 import { MessageView } from "@/components/MessageView";
-import { pathToRoot, turnNumbers } from "@/lib/tree";
+import { pathToRoot } from "@/lib/tree";
 
 interface TranscriptProps {
   /** Leaf to render the path to. Defaults to the app's active node. */
   leafId?: NodeId | null;
   /**
-   * Render the path from this node down instead of from the root. A branch
-   * window shows its own branch, not the ancestry that led to it — the ancestry
-   * is on screen already, in the thread the window is floating over.
+   * Render the path from this node down instead of from the root. An aside
+   * shows its own branch, not the ancestry that led to it — the ancestry is on
+   * screen already, in the thread beside it.
    */
   fromNodeId?: NodeId | null;
   /** What to say when there is nothing to show. */
@@ -30,7 +30,7 @@ export function Transcript({ leafId, fromNodeId, empty }: TranscriptProps = {}) 
   /**
    * The transcript is the *lineage* path (Graph A), root to the active leaf.
    * It never consults contextPolicy — what is on screen and what was sent are
-   * different questions, and the chips are what answer the second one.
+   * different questions, and each message's "context" action answers the second.
    */
   const path = useMemo(() => {
     const full = pathToRoot(nodes, activeNodeId);
@@ -38,7 +38,6 @@ export function Transcript({ leafId, fromNodeId, empty }: TranscriptProps = {}) 
     const start = full.findIndex((n) => n.id === fromNodeId);
     return start === -1 ? full : full.slice(start);
   }, [nodes, activeNodeId, fromNodeId]);
-  const turns = useMemo(() => turnNumbers(path), [path]);
 
   // Follow the stream, but only while the user is already near the bottom.
   const pinnedRef = useRef(true);
@@ -86,45 +85,53 @@ export function Transcript({ leafId, fromNodeId, empty }: TranscriptProps = {}) 
     <div className="transcript" ref={scrollerRef}>
       <div className="transcript__inner">
         {path.map((node) => (
-          <MessageView key={node.id} node={node} turn={turns.get(node.id) ?? 0} />
+          <MessageView key={node.id} node={node} />
         ))}
       </div>
     </div>
   );
 }
 
+/**
+ * The first screen. It says what the product is for — reading — and names the
+ * moves in the words the toolbar uses, so the toolbar is recognised the first
+ * time it appears rather than learnt.
+ */
 function EmptyState() {
   return (
     <div className="empty">
-      <h2>Two graphs, one set of nodes.</h2>
+      <h2>A chat you can read.</h2>
       <p>
-        A conversation's <em>shape</em> and a conversation's <em>context</em> are
-        different graphs. Every other chat client collapses them: what gets sent
-        is always the path from the root to wherever you are, invisibly.
+        Ask anything. It behaves like an ordinary chat — until an answer gets
+        hard. Then, instead of scrolling back and retyping, act on the text
+        itself:
       </p>
-      <p>
-        Here, what gets sent is a policy you can see and change per message. Type
-        below and it behaves like an ordinary chat client. Then:
-      </p>
-      <ul>
+      <ul className="empty__moves">
         <li>
-          Click any <code>N messages · ~tok</code> chip to read the exact payload.
+          <b>Explain</b> — click a term you don't know. It is answered beside the
+          conversation, not in it.
         </li>
-        <li>Select text in a reply to ask about only that, or to quote it.</li>
-        <li>Click a term to ask about it with a narrow window of context.</li>
-        <li>Use the left gutter of a reply to cut it where you stopped following.</li>
+        <li>
+          <b>Later</b> — not now. The term is marked where it is and kept in a
+          list, so it is neither chased nor lost.
+        </li>
+        <li>
+          <b>Reply</b> — select a passage to answer that part specifically.
+        </li>
+        <li>
+          <b>Just this</b> — select a passage to ask about it on its own, with
+          nothing else attached.
+        </li>
+        <li>
+          <b>Lost me here</b> — hover the left edge of an answer and cut it where
+          you stopped following. Nothing after the cut is sent.
+        </li>
       </ul>
-      <p>
-        A window is <em>one linear conversation</em>. Replies and quoted replies
-        carry it on, so they stay here. Anything that departs — a lens, a crop,
-        an isolation, or an ordinary question asked off an earlier message —
-        is a second line of thought, so it opens in its own window in front of
-        this one, showing what it carries before you send. This transcript only
-        ever marks where those left; it never splices them in.
+      <p className="empty__coda">
+        This column stays one conversation. Side questions open beside it and are
+        listed on the left; what was sent for any message is under its{" "}
+        <i>context</i> button.
       </p>
-      <ul>
-        <li>Every branch also gets a row in the list on the left, nested under what it left.</li>
-      </ul>
     </div>
   );
 }

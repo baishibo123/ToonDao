@@ -12,7 +12,7 @@ export function Sidebar() {
     <aside className="sidebar">
       <div className="sidebar__head">
         <h1 className="sidebar__brand">ToonDao</h1>
-        <span className="sidebar__tagline">lineage ≠ context</span>
+        <span className="sidebar__tagline">a chat you can read</span>
       </div>
 
       <div className="sidebar__list">

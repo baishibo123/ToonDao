@@ -77,7 +77,6 @@ export type AsideTarget = Pick<
 interface UIState {
   pending: PendingGesture | null;
   setPending: (pending: PendingGesture | null) => void;
-  setConceptTurns: (turns: number) => void;
 
   selection: SelectionState | null;
   setSelection: (selection: SelectionState | null) => void;
@@ -141,14 +140,9 @@ export function draftKey(asideId?: string): string {
   return asideId ? `__draft__:${asideId}` : "__draft__";
 }
 
-export const useUI = create<UIState>((set, get) => ({
+export const useUI = create<UIState>((set) => ({
   pending: null,
   setPending: (pending) => set({ pending, selection: null }),
-  setConceptTurns: (turns) => {
-    const pending = get().pending;
-    if (pending?.kind !== "concept") return;
-    set({ pending: { ...pending, turns: clampTurns(turns) } });
-  },
 
   selection: null,
   setSelection: (selection) => set({ selection }),

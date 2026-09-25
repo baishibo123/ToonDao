@@ -1,7 +1,8 @@
 import { memo, useMemo, useRef } from "react";
 import type { ConversationNode } from "@/types";
 import { Markdown } from "@/components/Markdown";
-import { ContextChip, Inspector } from "@/components/ContextChip";
+import { Inspector } from "@/components/ContextChip";
+import { policyLabel } from "@/lib/assembleContext";
 import { BRANCH_META, branchColor } from "@/lib/policyMeta";
 import { useStore } from "@/store/useStore";
 import { useUI } from "@/store/useUI";
@@ -13,10 +14,9 @@ import { focusNode } from "@/store/focusNode";
 
 interface MessageViewProps {
   node: ConversationNode;
-  turn: number;
 }
 
-export const MessageView = memo(function MessageView({ node, turn }: MessageViewProps) {
+export const MessageView = memo(function MessageView({ node }: MessageViewProps) {
   const contentRef = useRef<HTMLDivElement>(null);
   const { asideId } = useSurface();
   const nodes = useStore((s) => s.nodes);
@@ -26,6 +26,7 @@ export const MessageView = memo(function MessageView({ node, turn }: MessageView
   const deleteSubtree = useStore((s) => s.deleteSubtree);
   const assemble = useStore((s) => s.assemble);
   const setAsideActive = useUI((s) => s.setAsideActive);
+  const toggleInspector = useUI((s) => s.toggleInspector);
 
   const openInspector = useUI((s) => s.openInspectors.has(node.id));
   const cropHover = useUI((s) => (s.cropHover?.nodeId === node.id ? s.cropHover.charOffset : null));
@@ -79,13 +80,7 @@ export const MessageView = memo(function MessageView({ node, turn }: MessageView
     // should not be assembling 200 payloads on every keystroke.
     [openInspector, node, assemble],
   );
-  const chipMessages = useMemo(() => assemble(node), [node, assemble]);
-
   const origin = node.origin;
-  const meta = origin ? BRANCH_META[origin.kind] : null;
-  const showOriginBadge = Boolean(
-    meta && origin && origin.kind !== "continuation",
-  );
 
   return (
     <article
@@ -102,33 +97,43 @@ export const MessageView = memo(function MessageView({ node, turn }: MessageView
       </div>
 
       <div className="msg__body">
-        <header className="msg__head">
-          <span className="msg__role">
-            {node.role === "user" ? `You · turn ${turn}` : "Assistant"}
-          </span>
+        {origin?.anchor && origin.kind !== "structural-crop" && origin.anchor.text ? (
+          <p className="msg__anchor-note">
+            <b>{anchorVerb(origin.kind)}</b> “{truncate(origin.anchor.text, 220)}”
+          </p>
+        ) : null}
 
-          {showOriginBadge && meta && origin ? (
-            <span
-              className="msg__origin"
-              style={{
-                color: branchColor(origin.kind),
-                borderColor: `color-mix(in oklab, ${branchColor(origin.kind)} 45%, transparent)`,
-                background: `color-mix(in oklab, ${branchColor(origin.kind)} 10%, transparent)`,
-              }}
-              title={meta.blurb}
-            >
-              <span aria-hidden>{meta.glyph}</span>
-              {meta.label}
-            </span>
-          ) : null}
+        {origin?.kind === "structural-crop" && origin.anchor ? (
+          <p className="msg__anchor-note">
+            <b>Cut at character {origin.anchor.start}</b> — everything after that
+            point in the previous answer was withheld from the prompt.
+          </p>
+        ) : null}
 
-          <span className="msg__spacer" />
+        <div className="msg__content" ref={contentRef}>
+          <TailDimmedContent node={node} cropAt={cropHover} />
+          {streaming ? <span className="caret" aria-label="streaming" /> : null}
+        </div>
 
+        {node.status === "error" && node.error ? (
+          <p className="msg__error" role="alert">
+            {node.error}
+          </p>
+        ) : null}
+
+        {/*
+          No context chip here. In an ordinary conversation what was sent is
+          exactly what is on the page above, so a count on every message says
+          nothing — and the messages where it is *not* the page say so in
+          words, in the note above their text. The exact payload is one click
+          away for anyone who wants to check.
+        */}
+        <footer className="msg__foot">
           {siblings.length > 1 ? (
-            <span className="variants" title={`${siblings.length} branches from this point`}>
+            <span className="variants" title={`${siblings.length} attempts at this answer`}>
               <button
                 type="button"
-                aria-label="Previous branch"
+                aria-label="Previous attempt"
                 disabled={siblingIndex <= 0}
                 onClick={() => goTo(siblings[siblingIndex - 1].id)}
               >
@@ -139,7 +144,7 @@ export const MessageView = memo(function MessageView({ node, turn }: MessageView
               </span>
               <button
                 type="button"
-                aria-label="Next branch"
+                aria-label="Next attempt"
                 disabled={siblingIndex >= siblings.length - 1}
                 onClick={() => goTo(siblings[siblingIndex + 1].id)}
               >
@@ -172,55 +177,33 @@ export const MessageView = memo(function MessageView({ node, turn }: MessageView
                       : {}),
                   })
                 }
-                title="Retry this prompt as a sibling"
+                title="Try this answer again, keeping this one"
               >
                 retry
               </button>
             ) : null}
+            <button
+              type="button"
+              className="btn btn--ghost btn--sm"
+              aria-expanded={openInspector}
+              onClick={() => toggleInspector(node.id)}
+              title="Show exactly what the model was sent"
+            >
+              {policyLabel(node.contextPolicy) === "full ancestry"
+                ? "context"
+                : `context · ${policyLabel(node.contextPolicy)}`}
+            </button>
             {node.parentId ? (
               <button
                 type="button"
                 className="btn btn--ghost btn--sm btn--danger"
                 onClick={() => void deleteSubtree(node.id)}
-                title="Delete this node and everything below it"
+                title="Delete this message and everything after it"
               >
                 delete
               </button>
             ) : null}
           </span>
-        </header>
-
-        {origin?.anchor && origin.kind !== "structural-crop" && origin.anchor.text ? (
-          <p className="msg__anchor-note">
-            <b>{anchorVerb(origin.kind)}</b> “{truncate(origin.anchor.text, 220)}”
-          </p>
-        ) : null}
-
-        {origin?.kind === "structural-crop" && origin.anchor ? (
-          <p className="msg__anchor-note">
-            <b>Cut at character {origin.anchor.start}</b> — everything after that
-            point in the previous answer was withheld from the prompt.
-          </p>
-        ) : null}
-
-        <div className="msg__content" ref={contentRef}>
-          <TailDimmedContent node={node} cropAt={cropHover} />
-          {streaming ? <span className="caret" aria-label="streaming" /> : null}
-        </div>
-
-        {node.status === "error" && node.error ? (
-          <p className="msg__error" role="alert">
-            {node.error}
-          </p>
-        ) : null}
-
-        <footer className="msg__foot">
-          <ContextChip
-            nodeId={node.id}
-            policy={node.contextPolicy}
-            messages={chipMessages}
-            detail={windowDetail(node)}
-          />
         </footer>
 
         {forks.length > 0 ? (
@@ -290,13 +273,6 @@ function TailDimmedContent({
       </div>
     </>
   );
-}
-
-function windowDetail(node: ConversationNode): string | undefined {
-  const policy = node.contextPolicy;
-  if (policy.kind === "windowed") return `${policy.turns * 2} msgs inlined`;
-  if (policy.kind === "truncated") return "tail withheld";
-  return undefined;
 }
 
 function anchorVerb(kind: string): string {

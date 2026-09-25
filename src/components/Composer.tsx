@@ -3,34 +3,18 @@ import { useStore } from "@/store/useStore";
 import { draftKey, useUI, type PendingGesture } from "@/store/useUI";
 import { draftNode, planIsSendable, planSubmission } from "@/lib/draft";
 import { ContextChip, Inspector } from "@/components/ContextChip";
-import { BRANCH_META, branchKindForGesture } from "@/lib/policyMeta";
+import { BRANCH_META } from "@/lib/policyMeta";
 import { useSurface } from "@/components/Surface";
 import { findParked } from "@/lib/later";
 
-const GESTURE_COPY: Record<
-  string,
-  { label: string; hint: string; className: string }
-> = {
-  quote: {
-    label: "Replying to",
-    hint: "Continues this path. The quote is prepended to your message as a blockquote.",
-    className: "composer__gesture--quote",
-  },
-  isolated: {
-    label: "Only this text",
-    hint: "Nothing else is sent — no earlier turns, no ancestry. Branches off where the text came from.",
-    className: "composer__gesture--isolated",
-  },
-  concept: {
-    label: "Concept",
-    hint: "Sent with a narrow window of recent turns. Branches off the message you clicked in.",
-    className: "composer__gesture--concept",
-  },
-  crop: {
-    label: "Cropped here",
-    hint: "Everything after the cut is withheld from the prompt. The full answer stays readable above.",
-    className: "composer__gesture--crop",
-  },
+/**
+ * The one gesture that docks into a composer rather than opening an aside: a
+ * quote reply continues the conversation it was made in, so it waits here,
+ * above the box, until it is sent or dropped.
+ */
+const QUOTE_COPY = {
+  label: "Replying to",
+  hint: "Quoted above your message, in this conversation.",
 };
 
 /**
@@ -68,7 +52,6 @@ export function Composer() {
   const frame = useUI((s) => (asideId ? s.asides.find((f) => f.id === asideId) : undefined));
   const globalPending = useUI((s) => s.pending);
   const setGlobalPending = useUI((s) => s.setPending);
-  const setConceptTurns = useUI((s) => s.setConceptTurns);
   const setAsidePending = useUI((s) => s.setAsidePending);
   const setAsideTurns = useUI((s) => s.setAsideTurns);
   const attachAside = useUI((s) => s.attachAside);
@@ -99,7 +82,11 @@ export function Composer() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plan, conversationId, nodes, templates, systemPrompt, assemble]);
 
-  const sendable = planIsSendable(plan, pending) && !streaming && Boolean(conversationId);
+  // An aside with neither a gesture nor a first message has nothing to attach
+  // a message to — sending would start a stray root — so it cannot send.
+  const attached = asideId ? Boolean(frame?.pending || frame?.rootNodeId) : true;
+  const sendable =
+    planIsSendable(plan, pending) && !streaming && Boolean(conversationId) && attached;
 
   // The thread's composer answers the global focus request; an aside's answers
   // its own gesture changing, which is what docking a quote into it looks like.
@@ -179,38 +166,30 @@ export function Composer() {
     setModelOverride(null);
   };
 
-  const gesture = pending ? GESTURE_COPY[pending.kind] : null;
-  const sourceNode = pending ? nodes[pending.sourceNodeId] : undefined;
-  // Inside an aside the header already says which gesture this is, in more
-  // detail and next to the passage itself. Repeating it above the textarea
-  // would say it twice.
-  const showGestureBand = Boolean(pending && gesture && !asideId);
+  /**
+   * An aside is *defined* by the gesture that opened it: until its first send,
+   * that gesture is the whole of what it is, and its header already says so. So
+   * only a quote gets a band above the box — in either surface — and only a
+   * quote can be dropped from here. Dropping an aside's own gesture would leave
+   * an aside about nothing, whose next message would become a stray root.
+   */
+  const quote = pending?.kind === "quote" ? pending : null;
 
   return (
     <div className="composer">
       <div className="composer__inner">
-        {showGestureBand && pending && gesture ? (
-          <div className={`composer__gesture ${gesture.className}`}>
+        {quote ? (
+          <div className="composer__gesture composer__gesture--quote">
             <div className="gesture__main">
               <div
                 className="gesture__label"
-                style={{ color: `var(${BRANCH_META[branchKindForGesture(pending.kind)].cssVar})` }}
+                style={{ color: `var(${BRANCH_META["quote-reply"].cssVar})` }}
               >
-                <span aria-hidden>{BRANCH_META[branchKindForGesture(pending.kind)].glyph}</span>
-                {gesture.label}
+                <span aria-hidden>{BRANCH_META["quote-reply"].glyph}</span>
+                {QUOTE_COPY.label}
               </div>
-              {pending.kind === "crop" ? (
-                <div className="gesture__quote">
-                  {sourceNode
-                    ? `${countBlocks(sourceNode.content, pending.charOffset)} kept · ${
-                        sourceNode.content.length - pending.charOffset
-                      } characters withheld`
-                    : ""}
-                </div>
-              ) : "anchor" in pending ? (
-                <div className="gesture__quote">{pending.anchor.text}</div>
-              ) : null}
-              <div className="gesture__hint">{gesture.hint}</div>
+              <div className="gesture__quote">{quote.anchor.text}</div>
+              <div className="gesture__hint">{QUOTE_COPY.hint}</div>
             </div>
             <button
               type="button"
@@ -237,10 +216,12 @@ export function Composer() {
                 e.preventDefault();
                 send();
               }
-              if (e.key === "Escape" && pending) {
+              if (e.key === "Escape" && quote) {
                 e.preventDefault();
                 // Handled here, so the global Escape chain does not also fire
                 // and close the aside (or stop a stream) on the same keypress.
+                // Any other gesture lets Escape through: backing out of an
+                // aside is how its gesture is dropped.
                 e.stopPropagation();
                 setPending(null);
               }
@@ -271,7 +252,14 @@ export function Composer() {
         </div>
 
         <div className="composer__foot">
-          {conversationId ? (
+          {/*
+            The payload is shown only where it differs from the page. In the
+            thread, an ordinary message carries exactly the conversation above
+            it, so there is nothing to show until a quote is added. An aside
+            always carries something that is not on its page — a window of the
+            thread, a cut answer, or nothing at all — so it always says what.
+          */}
+          {conversationId && (asideId || quote) ? (
             <ContextChip nodeId={key} policy={plan.policy} messages={draftMessages} />
           ) : null}
 
@@ -283,11 +271,7 @@ export function Composer() {
                   type="button"
                   aria-label="Fewer turns"
                   disabled={pending.turns <= 1}
-                  onClick={() =>
-                    asideId
-                      ? setAsideTurns(asideId, pending.turns - 1)
-                      : setConceptTurns(pending.turns - 1)
-                  }
+                  onClick={() => asideId && setAsideTurns(asideId, pending.turns - 1)}
                 >
                   −
                 </button>
@@ -296,21 +280,13 @@ export function Composer() {
                   type="button"
                   aria-label="More turns"
                   disabled={pending.turns >= 5}
-                  onClick={() =>
-                    asideId
-                      ? setAsideTurns(asideId, pending.turns + 1)
-                      : setConceptTurns(pending.turns + 1)
-                  }
+                  onClick={() => asideId && setAsideTurns(asideId, pending.turns + 1)}
                 >
                   +
                 </button>
               </span>
               <span>turn{pending.turns === 1 ? "" : "s"}</span>
             </span>
-          ) : null}
-
-          {plan.forks && !asideId ? (
-            <span className="msg__branchcount">branches off the source message</span>
           ) : null}
 
           {modelOptions.length > 0 ? (
@@ -335,11 +311,6 @@ export function Composer() {
             </label>
           ) : null}
 
-          {asideId ? null : (
-            <span className="composer__hint">
-              <kbd>Enter</kbd> send · <kbd>Shift</kbd>+<kbd>Enter</kbd> newline
-            </span>
-          )}
         </div>
 
         {showDraftInspector ? (
@@ -363,11 +334,4 @@ function placeholderFor(kind: string | undefined, hasHistory: boolean): string {
     default:
       return hasHistory ? "Reply…" : "Start a conversation…";
   }
-}
-
-/** Rough block count for the crop chip. Cheap on purpose. */
-function countBlocks(content: string, upTo: number): string {
-  const kept = content.slice(0, upTo).split(/\n{2,}/).filter(Boolean).length;
-  const total = content.split(/\n{2,}/).filter(Boolean).length;
-  return `${kept}/${total} blocks`;
 }

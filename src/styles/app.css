@@ -212,13 +212,6 @@
   margin: -3px -6px;
 }
 .topbar__title:hover { border-color: var(--border); }
-.topbar__meta {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--text-faint);
-  flex: none;
-}
-
 .transcript {
   flex: 1;
   overflow-y: auto;
@@ -249,26 +242,27 @@
   letter-spacing: -0.015em;
 }
 .empty p { margin: 0 0 10px; }
-.empty ul { margin: 14px 0 0; padding-left: 1.1em; font-size: 13.5px; }
-.empty li { margin: 5px 0; }
-.empty code {
-  font-family: var(--font-mono);
-  font-size: 0.86em;
-  color: var(--text);
-}
+.empty ul { margin: 14px 0 14px; padding-left: 1.1em; font-size: 13.5px; }
+.empty li { margin: 6px 0; }
+.empty__moves b { font-weight: 600; color: var(--text); }
+.empty__coda { font-size: 12.5px; color: var(--text-faint); }
 
 /* ------------------------------------------------------------------
    Message
    ------------------------------------------------------------------ */
 
+/* No role labels and no rule between messages: a turn is a question and its
+   answer, and the question reads as one by being set apart, the way every
+   chat client the user already knows sets it apart. */
 .msg {
   position: relative;
   display: grid;
   grid-template-columns: 14px minmax(0, 1fr);
   gap: 0 12px;
-  padding: 14px 0;
+  padding: 6px 0 4px;
 }
-.msg + .msg { border-top: 1px solid color-mix(in oklab, var(--border) 55%, transparent); }
+.msg--user { padding-top: 20px; }
+.msg--user:first-child { padding-top: 4px; }
 
 .msg__rail {
   grid-column: 1;
@@ -278,40 +272,17 @@
 
 .msg__body { grid-column: 2; min-width: 0; }
 
-.msg__head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 5px;
-  min-height: 20px;
-}
-
-.msg__role {
-  font-family: var(--font-display);
-  font-size: 11.5px;
-  font-weight: 600;
-  font-variation-settings: "opsz" 12;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-faint);
-}
-.msg--user .msg__role { color: color-mix(in oklab, var(--text-dim) 85%, var(--accent)); }
-
-.msg__origin {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 10.5px;
-  letter-spacing: 0.03em;
-  padding: 1px 6px;
-  border-radius: 999px;
-  border: 1px solid;
-  white-space: nowrap;
-}
-.msg__spacer { flex: 1; }
-
 .msg__content { position: relative; }
-.msg--user .msg__content { color: color-mix(in oklab, var(--text) 88%, var(--accent)); }
+.msg--user .msg__content {
+  width: fit-content;
+  max-width: 100%;
+  padding: 8px 13px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.msg--user .msg__content .md > :first-child { margin-top: 0; }
+.msg--user .msg__content .md > :last-child { margin-bottom: 0; }
 
 .msg__actions {
   display: flex;
@@ -627,17 +598,14 @@
   background: var(--bg-sunken);
 }
 
-.msg__branchcount {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  color: var(--text-faint);
-}
-
+/* Actions stay out of the text until the pointer or the keyboard is on the
+   message; a retry switcher is state, not an action, so it stays visible. */
 .msg__foot {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-top: 9px;
+  gap: 8px;
+  min-height: 24px;
+  margin-top: 4px;
   flex-wrap: wrap;
 }
 

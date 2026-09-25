@@ -17,7 +17,6 @@ export default function App() {
   const ready = useStore((s) => s.ready);
   const bootError = useStore((s) => s.bootError);
   const init = useStore((s) => s.init);
-  const nodes = useStore((s) => s.nodes);
   const conversationId = useStore((s) => s.conversationId);
   const conversations = useStore((s) => s.conversations);
   const renameConversation = useStore((s) => s.renameConversation);
@@ -35,9 +34,6 @@ export default function App() {
   if (!ready) return <div className="boot">opening…</div>;
 
   const conversation = conversations.find((c) => c.id === conversationId);
-  const nodeCount = Object.values(nodes).filter(
-    (n) => n.conversationId === conversationId,
-  ).length;
 
   return (
     <div className="app">
@@ -59,9 +55,6 @@ export default function App() {
                   conversationId && void renameConversation(conversationId, e.target.value)
                 }
               />
-              <span className="topbar__meta">
-                {nodeCount} node{nodeCount === 1 ? "" : "s"}
-              </span>
               <button
                 type="button"
                 className="btn btn--ghost btn--sm"
