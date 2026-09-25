@@ -40,7 +40,15 @@ export function useSelectionWatcher(): void {
           setSelection(null);
           return;
         }
-        setSelection({ nodeId: found.nodeId, anchor: found.anchor, rect: found.rect });
+        // Which surface the passage was read in. A quote reply started inside a
+        // branch window belongs to that window's composer, not the thread's.
+        const windowId = target?.closest?.("[data-window-id]")?.getAttribute("data-window-id");
+        setSelection({
+          nodeId: found.nodeId,
+          anchor: found.anchor,
+          rect: found.rect,
+          ...(windowId ? { windowId } : {}),
+        });
       });
     };
 

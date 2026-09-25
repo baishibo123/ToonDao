@@ -1,23 +1,17 @@
-import { useMemo } from "react";
 import { useStore } from "@/store/useStore";
 import { useUI } from "@/store/useUI";
+import { Outline } from "@/components/Outline";
 
 export function Sidebar() {
-  const conversations = useStore((s) => s.conversations);
-  const conversationId = useStore((s) => s.conversationId);
-  const nodes = useStore((s) => s.nodes);
   const newConversation = useStore((s) => s.newConversation);
-  const selectConversation = useStore((s) => s.selectConversation);
-  const deleteConversation = useStore((s) => s.deleteConversation);
 
   const setSettingsOpen = useUI((s) => s.setSettingsOpen);
   const treeOpen = useUI((s) => s.treeOpen);
   const setTreeOpen = useUI((s) => s.setTreeOpen);
-
-  const currentCount = useMemo(
-    () => Object.values(nodes).filter((n) => n.conversationId === conversationId).length,
-    [nodes, conversationId],
-  );
+  // Selected whole rather than mapped: a selector that builds a new array on
+  // every call re-renders on every unrelated store write.
+  const windows = useUI((s) => s.windows);
+  const closeWindow = useUI((s) => s.closeBranchWindow);
 
   return (
     <aside className="sidebar">
@@ -27,43 +21,20 @@ export function Sidebar() {
       </div>
 
       <div className="sidebar__list">
-        {conversations.map((conversation) => (
-          <div key={conversation.id} className="conv-row">
-            <button
-              type="button"
-              className="conv"
-              aria-current={conversation.id === conversationId}
-              onClick={() => void selectConversation(conversation.id)}
-            >
-              <span className="conv__title">{conversation.title}</span>
-              {conversation.id === conversationId && currentCount > 0 ? (
-                <span className="conv__count">{currentCount}</span>
-              ) : null}
-              <span
-                className="conv__kill"
-                role="button"
-                tabIndex={0}
-                aria-label={`Delete ${conversation.title}`}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    void deleteConversation(conversation.id);
-                  }
-                }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  void deleteConversation(conversation.id);
-                }}
-              >
-                ✕
-              </span>
-            </button>
-          </div>
-        ))}
+        <Outline />
       </div>
 
       <div className="sidebar__foot">
+        {windows.length > 0 ? (
+          <button
+            type="button"
+            className="btn btn--wide btn--ghost"
+            onClick={() => windows.forEach((w) => closeWindow(w.id))}
+            title="Close every open branch window. The branches stay in the tree."
+          >
+            Close {windows.length} branch window{windows.length === 1 ? "" : "s"}
+          </button>
+        ) : null}
         <button
           type="button"
           className="btn btn--wide"

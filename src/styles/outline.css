@@ -1,0 +1,148 @@
+/* ------------------------------------------------------------------
+   Sidebar outline (requirement 1)
+
+   The conversation as a file structure. Borrowed from Finder's list view,
+   because that is the hierarchical list every user of this app already
+   knows how to drive: a disclosure triangle per row, one indentation step
+   per level, a hairline guide down each level so a deep branch can be
+   traced back to what it left, and exactly one selected row.
+
+   The one departure from Finder: a row's icon is its origin glyph in its
+   origin hue, not a generic document. A branch's *kind* is the thing worth
+   knowing at a glance, and the vocabulary is already shared with the tree
+   edges and the transcript badges (policyMeta.ts).
+   ------------------------------------------------------------------ */
+
+.outline {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 2px 0 6px;
+}
+
+.outline__group + .outline__group { margin-top: 3px; }
+
+.row {
+  --indent: 0px;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding-left: calc(6px + var(--indent));
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  min-height: 24px;
+  position: relative;
+}
+.row:hover { background: var(--surface-hover); }
+.row:hover .row__kill { opacity: 1; }
+
+/* Selection is a filled row, as in Finder — not a left border, which reads
+   as "the thread continues here" and is what the tree already means by it. */
+.row--selected {
+  background: color-mix(in oklab, var(--kind, var(--accent)) 16%, transparent);
+  color: var(--text);
+}
+.row--selected:hover {
+  background: color-mix(in oklab, var(--kind, var(--accent)) 22%, transparent);
+}
+
+/* The guide line. Drawn on the row rather than as a wrapper element so the
+   rows stay a flat list and keyboard walking stays a flat array. */
+.row--thread::before {
+  content: "";
+  position: absolute;
+  left: calc(11px + var(--indent));
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: color-mix(in oklab, var(--border) 75%, transparent);
+}
+
+.row__twist {
+  flex: none;
+  width: 14px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  font-size: 8px;
+  color: var(--text-faint);
+  transition: transform var(--transition), color var(--transition);
+  transform: rotate(0deg);
+  z-index: 1;
+}
+.row__twist--open { transform: rotate(90deg); }
+.row__twist--leaf { visibility: hidden; }
+.row:hover .row__twist { color: var(--text-dim); }
+
+.row__label {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px 3px 4px;
+  color: inherit;
+  text-align: left;
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+
+.row__icon {
+  flex: none;
+  width: 13px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--kind, var(--text-faint));
+}
+
+.row__text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row__count {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--text-faint);
+  letter-spacing: 0.02em;
+}
+
+/* No icon on a conversation row: the twist already says open or closed, and a
+   second triangle beside it read as a stutter. The display face and the turn
+   count are what separate a conversation from the threads inside it. */
+.row--conv .row__label {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-variation-settings: "opsz" 14;
+  font-weight: 550;
+}
+.row--conv .row__label[aria-current="true"] { color: var(--text); }
+/* The open conversation, marked even when its rows are collapsed. */
+.row--conv[aria-selected="true"] {
+  background: var(--surface);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.row--conv[aria-selected="true"]:hover { background: var(--surface-hover); }
+
+.row__kill, .row__pop, .row__open {
+  flex: none;
+  opacity: 0;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  margin-right: 4px;
+  border-radius: 3px;
+  font-size: 10px;
+  color: var(--text-faint);
+  transition: opacity var(--transition), color var(--transition);
+}
+.row__kill:hover { color: var(--danger); }
+/* Not a button: opening the window is what clicking the row does. This only
+   reports that one is already open. */
+.row__open { opacity: 1; color: var(--kind, var(--accent)); cursor: default; }
+.row__kill:focus-visible { opacity: 1; }

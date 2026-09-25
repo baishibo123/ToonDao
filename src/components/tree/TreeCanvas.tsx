@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "@/store/useStore";
+import { focusNode } from "@/store/focusNode";
 import { useUI } from "@/store/useUI";
 import { layoutTree, type LaidOutNode, type TreeLayout } from "@/lib/treeLayout";
 import { Edge, EdgeLegend, edgeColor } from "@/components/tree/edges";
@@ -60,10 +61,8 @@ export function TreeCanvas({ width, height }: TreeCanvasProps) {
   const nodes = useStore((s) => s.nodes);
   const conversationId = useStore((s) => s.conversationId);
   const activeNodeId = useStore((s) => s.activeNodeId);
-  const setActiveLeafFrom = useStore((s) => s.setActiveLeafFrom);
 
   const setHoverNodeId = useUI((s) => s.setHoverNodeId);
-  const requestScrollTo = useUI((s) => s.requestScrollTo);
 
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [closeUp, setCloseUp] = useState(false);
@@ -250,11 +249,12 @@ export function TreeCanvas({ width, height }: TreeCanvasProps) {
       // Land on the reply the user was reading if there is one, so clicking a
       // dot and clicking its message in the transcript agree.
       const target = group.replies.at(-1)?.id ?? group.user.id;
-      setActiveLeafFrom(target);
-      requestScrollTo(target);
+      // The dot may be on a branch, in which case this opens its window rather
+      // than pulling the branch into the thread.
+      focusNode(target);
       setFocusId(group.id);
     },
-    [setActiveLeafFrom, requestScrollTo],
+    [focusNode],
   );
 
   const toggleExpanded = useCallback((id: string) => {

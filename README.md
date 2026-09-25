@@ -78,6 +78,51 @@ user cannot see what the model sees, the premise collapses.
 
 ---
 
+## One window, one linear conversation
+
+That is the whole layout rule, and everything below follows from it.
+
+A **spine** is a run of turns joined by the two edges that *are* the conversation
+carrying on: an ordinary reply (`continuation`) and a reply to a quoted passage
+(`quote-reply`). Retries are not a separate line — they are attempts at one turn,
+switched in place with `‹ ›`.
+
+Anything else is a **departure**: a concept lens, a structural crop, an isolated
+selection, or an ordinary question asked off an earlier message. A departure
+starts a spine of its own, and a spine of its own gets a window of its own.
+
+**The chat box** shows the spine that starts at the root, and nothing else. It
+cannot show a branch, so no navigation can put one there — the cursor is bound to
+that spine, including the one restored from IndexedDB on load. Where a branch
+left, the transcript shows a **mark** under the message it left from: the
+branch's glyph, its name, and a way into it. That is the trace; the branch itself
+is never spliced in.
+
+**A branch window** is the same thing one level down: its own spine, its own
+composer, its own marks where its own branches left. Replying inside it extends
+it. Departing from it opens another window. Branches on branches, all the way
+down, one window each.
+
+**The outline** (left) is the index of all of them: one row per spine, nested
+under the spine it left, Finder-style. Clicking a row goes there — which means
+moving the chat box's cursor for the root spine, and opening or fronting a window
+for anything else. A `⧉` marks the rows that already have a window.
+
+`focusNode()` in [src/store/focusNode.ts](src/store/focusNode.ts) is the single
+place that decides which of those two things "go there" means, so the sidebar,
+the tree canvas, a fork mark and a variant switch cannot disagree. And
+`gestureOpensWindow()` decides which gestures depart by asking the same
+`plan.forks` that decides what gets sent — so a gesture cannot fork in the
+payload while behaving like a reply on screen.
+
+**The tree canvas** stays what it was: the shape of the whole thing, drawn across
+the page. Clicking a dot on a branch opens that branch's window. The outline and
+the canvas make the same spine/departure cut — they share `isTrunkKind()` — and
+disagree on purpose in exactly one case, which
+[docs/decisions/branch-windows.md](docs/decisions/branch-windows.md) explains.
+
+---
+
 ## Where things are
 
 | Path | What it is |
@@ -89,9 +134,15 @@ user cannot see what the model sees, the premise collapses.
 | `src/components/Markdown.tsx` | Block-anchored renderer. Emits the `data-src-*` attributes `anchor.ts` reads back. |
 | `src/lib/templates.ts` | Seed templates. User-editable, stored in IndexedDB, never read from a call site. |
 | `src/lib/treeLayout.ts` | Turn grouping, trunk/branch classification and the trunk layout. Pure, no layout library. |
+| `src/lib/outline.ts` | **What a spine is.** `spineChild` / `spineLeaf` / `forksOf`, and the conversation as a file structure built from them. Reuses `treeLayout`'s trunk/branch cut. |
+| `src/store/focusNode.ts` | **The only place that decides which window a node belongs to.** |
+| `src/components/Outline.tsx` | The sidebar outline. Finder's list view, driven by `outline.ts`. |
+| `src/components/BranchWindow.tsx` | A branch as a floating window over the thread, with its own transcript and composer. |
+| `src/components/Surface.tsx` | Which surface a message or composer is in — the thread, or a particular window. |
+| `src/hooks/useStartGesture.ts` | **The only place that decides where a started gesture goes.** Window, or composer. |
 | `src/lib/transfer.ts` | JSON export/import with full tree fidelity. |
 | `src/providers/` | One `Provider` interface; OpenAI-compatible and native Anthropic adapters behind it. |
-| `test/` | 180 tests. Acceptance scenarios from §9 are asserted against assembled payloads, not vibes. |
+| `test/` | 201 tests. Acceptance scenarios from §9 are asserted against assembled payloads, not vibes. |
 
 Two invariants worth preserving, both checkable with grep:
 
@@ -111,8 +162,10 @@ Two invariants worth preserving, both checkable with grep:
   ```bash
   grep -rnE "kind: \"(full-ancestry|windowed|truncated|isolated|quoted)\"" src
   ```
-  Hits outside `draft.ts` should only be `transfer.ts`, which *deserializes*
-  policies from an export file rather than choosing them.
+  Hits outside `draft.ts` should only be: `transfer.ts`, which *deserializes*
+  policies from an export file rather than choosing them; and the two places that
+  name a *gesture* kind — `useUI.ts`'s `PendingGesture` union and the selection
+  toolbar that constructs one — since `isolated` is a word both vocabularies use.
 
 ## Running the tests
 
@@ -299,6 +352,7 @@ rendered links unusable, and §5.5 asks that ordinary use stay ordinary.
 |---|---|
 | `Enter` / `Shift+Enter` | Send / newline |
 | `Esc` | Drop the pending gesture, then close whatever is open, then stop generating |
+| `⌘⇧W` | Close the front branch window (the branch stays in the tree) |
 | `⌘⇧T` | Show/hide the tree |
 | `⌘⇧N` | New conversation |
 | `⌘⇧I` | Inspect the payload of the current message |
@@ -308,7 +362,8 @@ rendered links unusable, and §5.5 asks that ordinary use stay ordinary.
 | `?` | Shortcut list |
 
 Inside the tree canvas, arrow keys walk parent/child/sibling and `Enter`
-navigates to a card.
+navigates to a card. In the sidebar outline, `↑`/`↓` walk rows and `←`/`→`
+collapse and expand them, as in Finder.
 
 ---
 

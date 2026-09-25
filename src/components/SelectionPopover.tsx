@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "@/store/useStore";
-import { useUI } from "@/store/useUI";
+import { useUI, type PendingGesture } from "@/store/useUI";
+import { useStartGesture } from "@/hooks/useStartGesture";
 import { BRANCH_META } from "@/lib/policyMeta";
 import { estimateTokens, formatTokens } from "@/lib/tokens";
 
@@ -8,21 +9,20 @@ import { estimateTokens, formatTokens } from "@/lib/tokens";
  * The one floating toolbar behind §5.1, §5.3 and §5.4.
  *
  * A drag offers the range actions; a click additionally offers the term
- * actions, because a click has been expanded to a term (§5.1). Every action
- * docks a pending gesture into the composer rather than sending immediately —
- * that is what puts §5.3's `1 message · isolated` chip in front of the user
- * before they commit, and it means all five interactions leave through one
- * submit path.
+ * actions, because a click has been expanded to a term (§5.1). No action sends
+ * anything: each one *starts* a gesture, which either opens a window carrying
+ * the branch's context or docks into the composer of the surface the passage
+ * was read in. Either way the user sees §5.3's `1 message · isolated` chip
+ * before committing, and all five interactions still leave through one submit
+ * path.
  */
 export function SelectionPopover() {
   const ref = useRef<HTMLDivElement>(null);
   const selection = useUI((s) => s.selection);
   const setSelection = useUI((s) => s.setSelection);
-  const setPending = useUI((s) => s.setPending);
-  const focusComposer = useUI((s) => s.focusComposer);
+  const startGesture = useStartGesture();
 
   const nodes = useStore((s) => s.nodes);
-  const setActiveLeafFrom = useStore((s) => s.setActiveLeafFrom);
   const conceptLensTurns = useStore((s) => s.settings.conceptLensTurns);
 
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
@@ -95,10 +95,17 @@ export function SelectionPopover() {
   if (!selection || !sourceNode || !pos) return null;
 
   const anchor = selection.anchor;
-  const dock = (gesture: Parameters<typeof setPending>[0]) => {
-    setPending(gesture);
-    focusComposer();
-  };
+  /**
+   * Every action leaves through here. Whether it opens a window or docks into a
+   * composer is `useStartGesture()`'s decision, not this toolbar's — the
+   * toolbar's job is to say what the user pointed at and what they asked for.
+   */
+  const start = (gesture: PendingGesture, seed?: string) =>
+    startGesture(gesture, {
+      near: selection.rect,
+      ...(seed ? { seed } : {}),
+      ...(selection.windowId ? { windowId: selection.windowId } : {}),
+    });
 
   return (
     <div
@@ -121,23 +128,23 @@ export function SelectionPopover() {
         <Action
           kind="isolated-selection"
           label="Ask about only this"
-          hint="§5.3 — zero ancestry. Nothing but this text reaches the model."
+          hint="§5.3 — zero ancestry. Opens a window; nothing but this text reaches the model."
           onClick={() =>
-            dock({ kind: "isolated", sourceNodeId: selection.nodeId, anchor })
+            start({ kind: "isolated", sourceNodeId: selection.nodeId, anchor })
           }
         />
         <Action
           kind="quote-reply"
           label="Reply to this"
-          hint="§5.4 — continues the current path with the passage quoted."
-          onClick={() => dock({ kind: "quote", sourceNodeId: selection.nodeId, anchor })}
+          hint="§5.4 — continues the current path with the passage quoted. Stays in this composer."
+          onClick={() => start({ kind: "quote", sourceNodeId: selection.nodeId, anchor })}
         />
         <Action
           kind="concept-lens"
           label="Explain in context"
-          hint="§5.1 — a narrow window of recent turns plus this concept."
+          hint="§5.1 — opens a window carrying a narrow window of recent turns plus this concept."
           onClick={() =>
-            dock({
+            start({
               kind: "concept",
               sourceNodeId: selection.nodeId,
               anchor,
@@ -149,26 +156,23 @@ export function SelectionPopover() {
           kind="concept-lens"
           label="Compare with…"
           hint="Same narrow window, seeded as a comparison."
-          onClick={() => {
-            useUI.getState().setComposerSeed(`Compare “${preview}” with `);
-            dock({
-              kind: "concept",
-              sourceNodeId: selection.nodeId,
-              anchor,
-              turns: conceptLensTurns,
-            });
-          }}
+          onClick={() =>
+            start(
+              {
+                kind: "concept",
+                sourceNodeId: selection.nodeId,
+                anchor,
+                turns: conceptLensTurns,
+              },
+              `Compare “${preview}” with `,
+            )
+          }
         />
         <Action
           kind="continuation"
-          label="Branch from here"
-          hint="Fork an ordinary turn off this message, keeping full ancestry."
-          onClick={() => {
-            setActiveLeafFrom(selection.nodeId);
-            useStore.getState().setActiveNode(selection.nodeId);
-            setSelection(null);
-            focusComposer();
-          }}
+          label="New line from here"
+          hint="An ordinary turn off this message, keeping full ancestry up to it. Opens a window, because it is a second line of thought rather than the next thing you said."
+          onClick={() => start({ kind: "fork", sourceNodeId: selection.nodeId })}
         />
       </div>
     </div>

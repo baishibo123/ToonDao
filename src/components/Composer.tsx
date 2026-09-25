@@ -1,9 +1,10 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "@/store/useStore";
-import { useUI } from "@/store/useUI";
+import { draftKey, useUI, type PendingGesture } from "@/store/useUI";
 import { draftNode, planIsSendable, planSubmission } from "@/lib/draft";
 import { ContextChip, Inspector } from "@/components/ContextChip";
-import { BRANCH_META } from "@/lib/policyMeta";
+import { BRANCH_META, branchKindForGesture } from "@/lib/policyMeta";
+import { useSurface } from "@/components/Surface";
 
 const GESTURE_COPY: Record<
   string,
@@ -29,16 +30,32 @@ const GESTURE_COPY: Record<
     hint: "Everything after the cut is withheld from the prompt. The full answer stays readable above.",
     className: "composer__gesture--crop",
   },
+  fork: {
+    label: "New line from here",
+    hint: "An ordinary turn, but taken off an earlier message. Full ancestry up to that point.",
+    className: "composer__gesture--fork",
+  },
 };
 
+/**
+ * One composer, two surfaces.
+ *
+ * Rendered bare it is the thread's composer, attached to the app's active leaf.
+ * Rendered inside a branch window (which provides a `Surface`) it is that
+ * window's composer: it reads that window's pending gesture, submits detached
+ * so the thread behind it does not move, and binds the branch to the window on
+ * the first send. Both routes go through `planSubmission()` — the surface
+ * changes where a message lands, never what gets sent.
+ */
 export function Composer() {
+  const { windowId } = useSurface();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [text, setText] = useState("");
   /** null means "whatever this branch inherits" (§8 P3). */
   const [modelOverride, setModelOverride] = useState<string | null>(null);
 
   const conversationId = useStore((s) => s.conversationId);
-  const activeNodeId = useStore((s) => s.activeNodeId);
+  const appActiveNodeId = useStore((s) => s.activeNodeId);
   const nodes = useStore((s) => s.nodes);
   const streamingNodeId = useStore((s) => s.streamingNodeId);
   const submit = useStore((s) => s.submit);
@@ -50,18 +67,30 @@ export function Composer() {
   const providers = useStore((s) => s.settings.providers);
   const activeProviderId = useStore((s) => s.settings.activeProviderId);
 
-  const pending = useUI((s) => s.pending);
-  const setPending = useUI((s) => s.setPending);
+  const win = useUI((s) => (windowId ? s.windows.find((w) => w.id === windowId) : undefined));
+  const globalPending = useUI((s) => s.pending);
+  const setGlobalPending = useUI((s) => s.setPending);
   const setConceptTurns = useUI((s) => s.setConceptTurns);
+  const setBranchWindowPending = useUI((s) => s.setBranchWindowPending);
+  const setBranchWindowTurns = useUI((s) => s.setBranchWindowTurns);
+  const attachBranchWindow = useUI((s) => s.attachBranchWindow);
   const focusNonce = useUI((s) => s.composerFocusNonce);
-  const composerSeed = useUI((s) => s.composerSeed);
-  const showDraftInspector = useUI((s) => s.openInspectors.has("__draft__"));
+  const key = draftKey(windowId);
+  const showDraftInspector = useUI((s) => s.openInspectors.has(key));
+
+  const pending: PendingGesture | null = windowId ? (win?.pending ?? null) : globalPending;
+  const activeLeafId = windowId ? (win?.activeNodeId ?? null) : appActiveNodeId;
+
+  const setPending = (next: PendingGesture | null) => {
+    if (windowId) setBranchWindowPending(windowId, next);
+    else setGlobalPending(next);
+  };
 
   const streaming = streamingNodeId !== null;
 
   const plan = useMemo(
-    () => planSubmission({ text, pending, activeLeafId: activeNodeId }),
-    [text, pending, activeNodeId],
+    () => planSubmission({ text, pending, activeLeafId }),
+    [text, pending, activeLeafId],
   );
 
   // The live payload for what is about to be sent. This is the promise §1 makes
@@ -74,20 +103,29 @@ export function Composer() {
 
   const sendable = planIsSendable(plan, pending) && !streaming && Boolean(conversationId);
 
+  // The thread's composer answers the global focus request; a window's answers
+  // its own gesture changing, which is what docking a quote into it looks like.
   useEffect(() => {
+    if (windowId) return;
     textareaRef.current?.focus();
-  }, [focusNonce, pending]);
+  }, [windowId, focusNonce, globalPending]);
 
   useEffect(() => {
-    if (!composerSeed) return;
-    setText(composerSeed.text);
+    if (!windowId) return;
+    textareaRef.current?.focus();
+  }, [windowId, win?.pending]);
+
+  // "Compare with…" arrives as seed text on the window that opened for it.
+  const seed = win?.seed;
+  useEffect(() => {
+    if (!seed) return;
+    setText(seed);
     const el = textareaRef.current;
-    if (el) {
-      el.focus();
-      // Park the caret at the end so the user types straight into the gap.
-      requestAnimationFrame(() => el.setSelectionRange(el.value.length, el.value.length));
-    }
-  }, [composerSeed]);
+    if (!el) return;
+    el.focus();
+    // Park the caret at the end so the user types straight into the gap.
+    requestAnimationFrame(() => el.setSelectionRange(el.value.length, el.value.length));
+  }, [seed]);
 
   // Auto-grow. Measured from 0px rather than "auto": in dev the stylesheet
   // arrives after first paint, and measuring "auto" against unstyled layout
@@ -132,6 +170,16 @@ export function Composer() {
       policy: plan.policy,
       origin: plan.origin,
       ...(modelOverride ? { model: modelOverride } : {}),
+      ...(windowId
+        ? {
+            detached: true,
+            // Bind on the first send — after that the window already owns the
+            // branch and only its leaf moves. Bound at commit rather than on
+            // completion so the reply streams into the window live.
+            onCommitted: ({ userNodeId, assistantNodeId }) =>
+              attachBranchWindow(windowId, win?.rootNodeId ?? userNodeId, assistantNodeId),
+          }
+        : {}),
     });
     setText("");
     setPending(null);
@@ -140,18 +188,22 @@ export function Composer() {
 
   const gesture = pending ? GESTURE_COPY[pending.kind] : null;
   const sourceNode = pending ? nodes[pending.sourceNodeId] : undefined;
+  // Inside a window the header already says which gesture this is, in more
+  // detail and next to the passage itself. Repeating it above the textarea
+  // would spend a third of a small window saying it twice.
+  const showGestureBand = Boolean(pending && gesture && !windowId);
 
   return (
     <div className="composer">
       <div className="composer__inner">
-        {pending && gesture ? (
+        {showGestureBand && pending && gesture ? (
           <div className={`composer__gesture ${gesture.className}`}>
             <div className="gesture__main">
               <div
                 className="gesture__label"
-                style={{ color: `var(${BRANCH_META[gestureToBranch(pending.kind)].cssVar})` }}
+                style={{ color: `var(${BRANCH_META[branchKindForGesture(pending.kind)].cssVar})` }}
               >
-                <span aria-hidden>{BRANCH_META[gestureToBranch(pending.kind)].glyph}</span>
+                <span aria-hidden>{BRANCH_META[branchKindForGesture(pending.kind)].glyph}</span>
                 {gesture.label}
               </div>
               {pending.kind === "crop" ? (
@@ -162,9 +214,9 @@ export function Composer() {
                       } characters withheld`
                     : ""}
                 </div>
-              ) : (
+              ) : "anchor" in pending ? (
                 <div className="gesture__quote">{pending.anchor.text}</div>
-              )}
+              ) : null}
               <div className="gesture__hint">{gesture.hint}</div>
             </div>
             <button
@@ -185,7 +237,7 @@ export function Composer() {
             className="composer__input"
             rows={1}
             value={text}
-            placeholder={placeholderFor(pending?.kind, activeNodeId !== null)}
+            placeholder={placeholderFor(pending?.kind, activeLeafId !== null)}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
@@ -194,6 +246,9 @@ export function Composer() {
               }
               if (e.key === "Escape" && pending) {
                 e.preventDefault();
+                // Handled here, so the global Escape chain does not also fire
+                // and close the window (or stop a stream) on the same keypress.
+                e.stopPropagation();
                 setPending(null);
               }
             }}
@@ -224,12 +279,7 @@ export function Composer() {
 
         <div className="composer__foot">
           {conversationId ? (
-            <ContextChip
-              nodeId="__draft__"
-              policy={plan.policy}
-              messages={draftMessages}
-              detail={plan.forks ? undefined : undefined}
-            />
+            <ContextChip nodeId={key} policy={plan.policy} messages={draftMessages} />
           ) : null}
 
           {pending?.kind === "concept" ? (
@@ -240,7 +290,11 @@ export function Composer() {
                   type="button"
                   aria-label="Fewer turns"
                   disabled={pending.turns <= 1}
-                  onClick={() => setConceptTurns(pending.turns - 1)}
+                  onClick={() =>
+                    windowId
+                      ? setBranchWindowTurns(windowId, pending.turns - 1)
+                      : setConceptTurns(pending.turns - 1)
+                  }
                 >
                   −
                 </button>
@@ -249,7 +303,11 @@ export function Composer() {
                   type="button"
                   aria-label="More turns"
                   disabled={pending.turns >= 5}
-                  onClick={() => setConceptTurns(pending.turns + 1)}
+                  onClick={() =>
+                    windowId
+                      ? setBranchWindowTurns(windowId, pending.turns + 1)
+                      : setConceptTurns(pending.turns + 1)
+                  }
                 >
                   +
                 </button>
@@ -258,7 +316,7 @@ export function Composer() {
             </span>
           ) : null}
 
-          {plan.forks ? (
+          {plan.forks && !windowId ? (
             <span className="msg__branchcount">branches off the source message</span>
           ) : null}
 
@@ -284,9 +342,11 @@ export function Composer() {
             </label>
           ) : null}
 
-          <span className="composer__hint">
-            <kbd>Enter</kbd> send · <kbd>Shift</kbd>+<kbd>Enter</kbd> newline
-          </span>
+          {windowId ? null : (
+            <span className="composer__hint">
+              <kbd>Enter</kbd> send · <kbd>Shift</kbd>+<kbd>Enter</kbd> newline
+            </span>
+          )}
         </div>
 
         {showDraftInspector ? (
@@ -295,19 +355,6 @@ export function Composer() {
       </div>
     </div>
   );
-}
-
-function gestureToBranch(kind: string) {
-  switch (kind) {
-    case "quote":
-      return "quote-reply" as const;
-    case "isolated":
-      return "isolated-selection" as const;
-    case "concept":
-      return "concept-lens" as const;
-    default:
-      return "structural-crop" as const;
-  }
 }
 
 function placeholderFor(kind: string | undefined, hasHistory: boolean): string {
@@ -320,6 +367,8 @@ function placeholderFor(kind: string | undefined, hasHistory: boolean): string {
       return "What about this concept? Leave blank to just ask for an explanation";
     case "crop":
       return "Optional note — or send blank to ask it to pick up from the cut";
+    case "fork":
+      return "Ask something else from this point…";
     default:
       return hasHistory ? "Reply…" : "Start a conversation…";
   }

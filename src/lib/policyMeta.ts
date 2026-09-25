@@ -54,6 +54,27 @@ export const BRANCH_META: Record<
   },
 };
 
+/**
+ * Gesture kind → the origin kind it will produce. The gesture names are the
+ * UI's vocabulary and the origin names are the data model's; this is the one
+ * place they are lined up, so a window, a composer band and a tree edge all
+ * agree on which colour and glyph a half-finished gesture already owns.
+ */
+export function branchKindForGesture(kind: string): BranchKind {
+  switch (kind) {
+    case "quote":
+      return "quote-reply";
+    case "isolated":
+      return "isolated-selection";
+    case "concept":
+      return "concept-lens";
+    case "crop":
+      return "structural-crop";
+    default:
+      return "continuation";
+  }
+}
+
 export const POLICY_CLASS: Record<PolicyKind, string> = {
   "full-ancestry": "",
   windowed: "chip--windowed",

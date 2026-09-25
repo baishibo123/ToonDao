@@ -4,7 +4,7 @@
 
 .app {
   display: grid;
-  grid-template-columns: 248px minmax(0, 1fr);
+  grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
   height: 100%;
   overflow: hidden;
 }
@@ -510,6 +510,7 @@
 .composer__gesture--isolated { border-left-color: var(--hue-isolated); }
 .composer__gesture--concept { border-left-color: var(--hue-lens); }
 .composer__gesture--crop { border-left-color: var(--hue-crop); }
+.composer__gesture--fork { border-left-color: var(--hue-continuation); }
 
 .gesture__main { flex: 1; min-width: 0; }
 .gesture__label {
@@ -659,6 +660,71 @@
   border-top: 1px dashed var(--hue-crop);
   pointer-events: none;
 }
+
+/* ------------------------------------------------------------------
+   Branch marks
+
+   A branch is not rendered inline — it is a spine of its own, and it lives
+   in its own window. What the transcript owes the reader is a trace: this
+   is where a line of thought left, this is what it was about, and here is
+   the way into it. Indented under the message it left, in the branch's own
+   hue, so the mark reads as belonging to that message rather than as the
+   next thing said.
+   ------------------------------------------------------------------ */
+
+.forks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 7px;
+  padding-left: 11px;
+  position: relative;
+}
+.forks::before {
+  content: "";
+  position: absolute;
+  left: 1px;
+  top: -3px;
+  bottom: 8px;
+  width: 1px;
+  background: color-mix(in oklab, var(--border-strong) 80%, transparent);
+}
+
+.fork {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 340px;
+  padding: 3px 8px 3px 6px;
+  border: 1px solid color-mix(in oklab, var(--kind) 38%, transparent);
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--kind) 8%, transparent);
+  color: var(--text-dim);
+  font-size: 11.5px;
+  line-height: 1.4;
+  transition: background var(--transition), color var(--transition),
+    border-color var(--transition);
+}
+.fork:hover {
+  background: color-mix(in oklab, var(--kind) 16%, transparent);
+  border-color: color-mix(in oklab, var(--kind) 60%, transparent);
+  color: var(--text);
+}
+.fork--open {
+  border-color: color-mix(in oklab, var(--kind) 70%, transparent);
+  color: var(--text);
+}
+
+.fork__glyph { flex: none; color: var(--kind); font-size: 11px; }
+.fork__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fork__open { flex: none; font-size: 9.5px; color: var(--text-faint); }
+.fork:hover .fork__open { color: var(--kind); }
+.fork--open .fork__open { color: var(--kind); }
 
 /* ------------------------------------------------------------------
    Modal / settings
@@ -907,6 +973,10 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 }
 .croprail:hover .croprail__tick { opacity: 0.85; }
 .croprail__tick--on { background: var(--hue-crop); height: 2px; opacity: 1 !important; }
+
+/* A message with no interior block boundary still gets its gutter measured,
+   but nothing to point at and nothing to click. */
+.croprail--empty { pointer-events: none; }
 
 .croprail__line {
   position: absolute;

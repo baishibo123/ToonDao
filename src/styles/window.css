@@ -1,0 +1,177 @@
+/* ------------------------------------------------------------------
+   Branch windows (requirement 2)
+
+   A branch opens in front of the thread it came from. Deliberately not a
+   browser window: a popup would lose the shared store, the shared
+   IndexedDB connection and — the point of the whole thing — the sight of
+   the passage the branch left from, still on screen behind it.
+
+   The chrome is a title bar in the branch's own hue, and the hue is the
+   same one the tree edge and the transcript badge use, so "which branch am
+   I typing into" is answerable without reading a word.
+   ------------------------------------------------------------------ */
+
+.winlayer {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  /* A stacking context of its own: raising one window past its siblings can
+     then never raise it past the selection toolbar (50) or a modal (60),
+     however many times the user clicks. */
+  isolation: isolate;
+  pointer-events: none;
+}
+
+.branchwin {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  pointer-events: auto;
+  background: color-mix(in oklab, var(--bg-raised) 96%, transparent);
+  backdrop-filter: blur(18px);
+  border: 1px solid var(--border-strong);
+  border-top: 2px solid var(--kind, var(--accent));
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-panel);
+  overflow: hidden;
+  animation: winpop 150ms cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+/* The quality floor says focus must always be visible, but the global 2px
+   ring is louder than the window's own identity. Keep a ring; make it the
+   branch's hue, so "this window has the keyboard" and "this is the lens
+   branch" are one mark rather than two competing ones. */
+.branchwin:focus-visible {
+  outline: none;
+  box-shadow:
+    var(--shadow-panel),
+    0 0 0 2px color-mix(in oklab, var(--kind, var(--accent)) 60%, transparent);
+}
+
+@keyframes winpop {
+  from { opacity: 0; transform: translateY(-6px) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+
+.branchwin__bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 8px 7px 11px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in oklab, var(--kind, var(--accent)) 9%, transparent);
+  cursor: grab;
+  user-select: none;
+}
+.branchwin__bar:active { cursor: grabbing; }
+/* While a drag is running the pointer is over whatever is underneath, so
+   text selection has to be suppressed document-wide, not just on the bar. */
+body.is-dragging { user-select: none; cursor: grabbing; }
+
+.branchwin__glyph {
+  flex: none;
+  font-size: 12px;
+  color: var(--kind, var(--accent));
+}
+
+.branchwin__title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  color: var(--text);
+}
+
+.branchwin__buttons { flex: none; display: flex; gap: 1px; }
+
+.branchwin__btn {
+  width: 21px;
+  height: 21px;
+  display: grid;
+  place-items: center;
+  border-radius: 4px;
+  font-size: 10px;
+  color: var(--text-faint);
+  transition: background var(--transition), color var(--transition);
+}
+.branchwin__btn:hover { background: var(--surface-hover); color: var(--text); }
+.branchwin__btn--close:hover { background: var(--danger); color: #fff; }
+
+.branchwin__body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+/* Collapsed, not unmounted: a half-typed message survives being got out of
+   the way. */
+.branchwin--min .branchwin__body,
+.branchwin--min .branchwin__grip { display: none; }
+
+.branchwin__source {
+  flex: none;
+  margin: 0;
+  padding: 7px 12px;
+  border-bottom: 1px solid color-mix(in oklab, var(--border) 60%, transparent);
+  background: var(--bg-sunken);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-faint);
+}
+.branchwin__origin {
+  color: var(--kind, var(--accent));
+  font-weight: 550;
+}
+
+.branchwin__pending {
+  margin: 0;
+  padding: 16px 16px 0;
+  font-size: 12.5px;
+  color: var(--text-faint);
+}
+
+/* The window's own transcript. Tighter than the thread's: it is a column
+   ~460px wide, and the thread's 26px/40px padding would spend a fifth of
+   the height on air. */
+.branchwin .transcript { padding: 8px 0 14px; }
+.branchwin .transcript__inner { max-width: none; padding: 0 12px; }
+.branchwin .msg { padding: 9px 0; }
+.branchwin .msg__actions .btn { padding: 2px 5px; font-size: 10.5px; }
+
+.branchwin__composer {
+  flex: none;
+  max-height: 66%;
+  overflow-y: auto;
+  border-top: 1px solid var(--border);
+}
+.branchwin__composer .composer {
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  background: color-mix(in oklab, var(--bg) 35%, transparent);
+  backdrop-filter: none;
+  padding: 9px 12px 11px;
+}
+.branchwin__composer .composer__inner { max-width: none; }
+/* Pre-send, the payload is the reason the window exists — but it must not
+   push the composer off the bottom of a small window. */
+.branchwin__composer .inspector__body { max-height: 40vh; }
+
+.branchwin__grip {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 16px;
+  height: 16px;
+  cursor: nwse-resize;
+  background: linear-gradient(
+    135deg,
+    transparent 50%,
+    color-mix(in oklab, var(--border-strong) 90%, transparent) 50%
+  );
+  border-bottom-right-radius: var(--radius-lg);
+}

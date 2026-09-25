@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import type { ConversationNode } from "@/types";
 import { cropBoundaries, type CropBoundary } from "@/lib/anchor";
 import { useUI } from "@/store/useUI";
+import { useStartGesture } from "@/hooks/useStartGesture";
 
 /**
  * §5.2 — structural crop. The flagship: nothing on the market does this.
@@ -35,10 +36,13 @@ export function CropRail({ node, contentRef }: CropRailProps) {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
 
   const setCropHover = useUI((s) => s.setCropHover);
-  const setPending = useUI((s) => s.setPending);
-  const focusComposer = useUI((s) => s.focusComposer);
-  const pendingIsThisCrop = useUI(
-    (s) => s.pending?.kind === "crop" && s.pending.sourceNodeId === node.id,
+  const startGesture = useStartGesture();
+  // A crop now lands in a window, so "this crop is docked somewhere" is a
+  // question about the open windows rather than about the composer.
+  const pendingIsThisCrop = useUI((s) =>
+    s.windows.some(
+      (w) => w.pending?.kind === "crop" && w.pending.sourceNodeId === node.id,
+    ),
   );
 
   const boundaries = useMemo(() => cropBoundaries(node.content), [node.content]);
@@ -101,16 +105,22 @@ export function CropRail({ node, contentRef }: CropRailProps) {
     return best;
   };
 
-  if (cuts.length === 0) return null;
-
+  /**
+   * The rail renders whether or not it has cut points, because its own element
+   * is one of the things `measure()` needs: returning null until there were
+   * cuts meant `railRef` never mounted, so the measurement that produces the
+   * cuts could never run and the rail never appeared at all. What is
+   * conditional is the marks on it.
+   */
   const active = hoverIndex !== null ? cuts[hoverIndex] : null;
+  const hasCuts = cuts.length > 0;
 
   return (
     <div
       ref={railRef}
       className={`croprail${active ? " croprail--active" : ""}${
         pendingIsThisCrop ? " croprail--pending" : ""
-      }`}
+      }${hasCuts ? "" : " croprail--empty"}`}
       onMouseMove={(e) => {
         const index = nearest(e.clientY);
         if (index === null || index === hoverIndex) return;
@@ -121,23 +131,35 @@ export function CropRail({ node, contentRef }: CropRailProps) {
         setHoverIndex(null);
         setCropHover(null);
       }}
-      onClick={() => {
+      onClick={(e) => {
         if (hoverIndex === null) return;
         const cut = cuts[hoverIndex];
-        setPending({
-          kind: "crop",
-          sourceNodeId: node.id,
-          charOffset: cut.charOffset,
-          blockPath: cut.blockPath,
-          discardedChars: node.content.length - cut.charOffset,
-        });
+        // The rail is a thin gutter, so the cut line itself is the rect the
+        // window should appear beside.
+        const rail = e.currentTarget.getBoundingClientRect();
+        startGesture(
+          {
+            kind: "crop",
+            sourceNodeId: node.id,
+            charOffset: cut.charOffset,
+            blockPath: cut.blockPath,
+            discardedChars: node.content.length - cut.charOffset,
+          },
+          {
+            near: {
+              top: rail.top + cut.y,
+              bottom: rail.top + cut.y,
+              left: rail.left,
+              right: rail.right,
+            },
+          },
+        );
         setCropHover(null);
         setHoverIndex(null);
-        focusComposer();
       }}
       aria-hidden
     >
-      <span className="croprail__spine" />
+      {hasCuts ? <span className="croprail__spine" /> : null}
 
       {cuts.map((cut, i) => (
         <span
@@ -165,6 +187,7 @@ export function CropRail({ node, contentRef }: CropRailProps) {
       ) : null}
 
       {/* Keyboard route to the same gesture, since the rail is pointer-driven. */}
+      {hasCuts ? (
       <button
         type="button"
         className="croprail__kb"
@@ -172,18 +195,18 @@ export function CropRail({ node, contentRef }: CropRailProps) {
         onClick={(e) => {
           e.stopPropagation();
           const cut = cuts[Math.max(0, Math.floor(cuts.length / 2))];
-          setPending({
+          startGesture({
             kind: "crop",
             sourceNodeId: node.id,
             charOffset: cut.charOffset,
             blockPath: cut.blockPath,
             discardedChars: node.content.length - cut.charOffset,
           });
-          focusComposer();
         }}
       >
         ✂
       </button>
+      ) : null}
     </div>
   );
 }

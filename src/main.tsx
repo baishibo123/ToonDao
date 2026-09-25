@@ -4,6 +4,8 @@ import App from "@/App";
 import "@/styles/base.css";
 import "@/styles/app.css";
 import "@/styles/tree.css";
+import "@/styles/outline.css";
+import "@/styles/window.css";
 
 // Dev-only handles, so the stores can be inspected from the console while
 // working on the gestures. Not shipped: import.meta.env.DEV is statically

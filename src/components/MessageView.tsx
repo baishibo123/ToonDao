@@ -5,33 +5,74 @@ import { ContextChip, Inspector } from "@/components/ContextChip";
 import { BRANCH_META, branchColor } from "@/lib/policyMeta";
 import { useStore } from "@/store/useStore";
 import { useUI } from "@/store/useUI";
-import { childrenOf, siblingsOf } from "@/lib/tree";
+import { siblingsOf } from "@/lib/tree";
+import { branchLabel, forksOf, spineLeaf } from "@/lib/outline";
 import { CropRail } from "@/components/CropRail";
+import { messageDomId, useSurface } from "@/components/Surface";
+import { focusNode } from "@/store/focusNode";
 
 interface MessageViewProps {
   node: ConversationNode;
   turn: number;
-  /** The next node down the active path, so the rail knows where it leads. */
-  isLast: boolean;
 }
 
-export const MessageView = memo(function MessageView({ node, turn, isLast }: MessageViewProps) {
+export const MessageView = memo(function MessageView({ node, turn }: MessageViewProps) {
   const contentRef = useRef<HTMLDivElement>(null);
+  const { windowId } = useSurface();
   const nodes = useStore((s) => s.nodes);
+  const preferredChild = useStore((s) => s.preferredChild);
   const streamingNodeId = useStore((s) => s.streamingNodeId);
   const regenerate = useStore((s) => s.regenerate);
   const deleteSubtree = useStore((s) => s.deleteSubtree);
-  const setActiveLeafFrom = useStore((s) => s.setActiveLeafFrom);
   const assemble = useStore((s) => s.assemble);
+  const setBranchWindowActive = useUI((s) => s.setBranchWindowActive);
 
   const openInspector = useUI((s) => s.openInspectors.has(node.id));
   const hovered = useUI((s) => s.hoverNodeId === node.id);
   const cropHover = useUI((s) => (s.cropHover?.nodeId === node.id ? s.cropHover.charOffset : null));
 
   const streaming = streamingNodeId === node.id;
-  const siblings = useMemo(() => siblingsOf(nodes, node.id), [nodes, node.id]);
+
+  /**
+   * Switch to another attempt at this same turn. It is on this spine, so it
+   * moves this surface's own leaf and nothing else's — and down that attempt's
+   * own continuations, because the turns under the attempt you were reading
+   * belong to that one.
+   */
+  const goTo = (id: string) => {
+    if (windowId) setBranchWindowActive(windowId, spineLeaf(nodes, id, preferredChild));
+    else focusNode(id);
+  };
+  /**
+   * Other attempts at this same turn — retries, switched in place with `‹ ›`.
+   *
+   * Only replies count. A *user* node's siblings are separate lines of thought
+   * off one message, and each of those is its own window now: offering them
+   * here as though they were variants of one message would say the opposite of
+   * what the layout says, and the fork marks below already lead to them.
+   */
+  const siblings = useMemo(
+    () =>
+      node.role === "assistant"
+        ? // Role-filtered: a user node can have both replies and a gesture made
+          // against it, and only the replies are attempts at this turn.
+          siblingsOf(nodes, node.id).filter((sibling) => sibling.role === "assistant")
+        : [],
+    [nodes, node.id, node.role],
+  );
   const siblingIndex = siblings.findIndex((s) => s.id === node.id);
-  const branchCount = useMemo(() => childrenOf(nodes, node.id).length, [nodes, node.id]);
+
+  /**
+   * The lines of thought that left from this message. They are not rendered
+   * inline — each one is a spine of its own and lives in its own window — so
+   * the transcript marks where they left and offers to open them. Without this,
+   * a branch would be reachable only from the sidebar, and the passage that
+   * caused it would carry no trace of it.
+   */
+  const forks = useMemo(
+    () => forksOf(nodes, node.id, preferredChild),
+    [nodes, node.id, preferredChild],
+  );
 
   const messages = useMemo(
     () => (openInspector ? assemble(node) : []),
@@ -50,7 +91,7 @@ export const MessageView = memo(function MessageView({ node, turn, isLast }: Mes
   return (
     <article
       className={`msg msg--${node.role}${hovered ? " msg--hovered" : ""}`}
-      id={`msg-${node.id}`}
+      id={messageDomId(node.id, windowId)}
       data-node-id={node.id}
     >
       <div className="msg__rail">
@@ -90,7 +131,7 @@ export const MessageView = memo(function MessageView({ node, turn, isLast }: Mes
                 type="button"
                 aria-label="Previous branch"
                 disabled={siblingIndex <= 0}
-                onClick={() => setActiveLeafFrom(siblings[siblingIndex - 1].id)}
+                onClick={() => goTo(siblings[siblingIndex - 1].id)}
               >
                 ‹
               </button>
@@ -101,7 +142,7 @@ export const MessageView = memo(function MessageView({ node, turn, isLast }: Mes
                 type="button"
                 aria-label="Next branch"
                 disabled={siblingIndex >= siblings.length - 1}
-                onClick={() => setActiveLeafFrom(siblings[siblingIndex + 1].id)}
+                onClick={() => goTo(siblings[siblingIndex + 1].id)}
               >
                 ›
               </button>
@@ -121,7 +162,17 @@ export const MessageView = memo(function MessageView({ node, turn, isLast }: Mes
               <button
                 type="button"
                 className="btn btn--ghost btn--sm"
-                onClick={() => void regenerate(node.id)}
+                onClick={() =>
+                  void regenerate(node.id, {
+                    detached: Boolean(windowId),
+                    ...(windowId
+                      ? {
+                          onCommitted: (id: string) =>
+                            setBranchWindowActive(windowId, id),
+                        }
+                      : {}),
+                  })
+                }
                 title="Retry this prompt as a sibling"
               >
                 retry
@@ -171,10 +222,15 @@ export const MessageView = memo(function MessageView({ node, turn, isLast }: Mes
             messages={chipMessages}
             detail={windowDetail(node)}
           />
-          {branchCount > 1 && isLast === false ? (
-            <span className="msg__branchcount">{branchCount} branches below</span>
-          ) : null}
         </footer>
+
+        {forks.length > 0 ? (
+          <div className="forks" aria-label="Branches from this message">
+            {forks.map((fork) => (
+              <ForkMark key={fork.id} fork={fork} />
+            ))}
+          </div>
+        ) : null}
 
         {openInspector ? (
           <Inspector
@@ -187,6 +243,30 @@ export const MessageView = memo(function MessageView({ node, turn, isLast }: Mes
     </article>
   );
 });
+
+/** One branch that left from a message, as a way back into it. */
+function ForkMark({ fork }: { fork: ConversationNode }) {
+  const kind = fork.origin?.kind ?? "continuation";
+  const meta = BRANCH_META[kind];
+  const open = useUI((s) => s.windows.some((w) => w.rootNodeId === fork.id));
+  return (
+    <button
+      type="button"
+      className={`fork${open ? " fork--open" : ""}`}
+      style={{ ["--kind" as string]: branchColor(kind) }}
+      title={`${meta.label} — ${meta.blurb}\n${open ? "Its window is open" : "Opens in its own window"}`}
+      onClick={() => focusNode(fork.id)}
+    >
+      <span className="fork__glyph" aria-hidden>
+        {meta.glyph}
+      </span>
+      <span className="fork__label">{branchLabel(fork)}</span>
+      <span className="fork__open" aria-hidden>
+        ⧉
+      </span>
+    </button>
+  );
+}
 
 /**
  * §5.2's live preview: while the crop rail is hovered, the tail that would be

@@ -17,7 +17,8 @@ import { assembleContext, formatPayload } from "@/lib/assembleContext";
 import { createProvider } from "@/providers";
 import { newId } from "@/lib/id";
 import { buildBundle, parseBundle } from "@/lib/transfer";
-import { deepestLeaf, rootsOf, subtreeIds, type NodeMap } from "@/lib/tree";
+import { rootsOf, subtreeIds, type NodeMap } from "@/lib/tree";
+import { buildOutline, spineLeaf, threadOf } from "@/lib/outline";
 
 export interface SubmitRequest {
   /** The human-readable ask. Becomes node.content. */
@@ -27,6 +28,31 @@ export interface SubmitRequest {
   origin: BranchOrigin | null;
   /** Per-branch model override. Absent means inherit from the branch. */
   model?: string;
+  /**
+   * Send without moving the app's cursor.
+   *
+   * A branch sent from its own window must not drag the main transcript into
+   * itself — the whole point of the window is that the thread you were reading
+   * stays where it was. So a detached submit writes the nodes and streams into
+   * them, but leaves `activeNodeId` and the remembered fork choices alone; the
+   * window tracks its own leaf from the ids it gets back.
+   */
+  detached?: boolean;
+  /**
+   * Called once both nodes exist, *before* the stream finishes.
+   *
+   * The awaited result carries the same ids, but it does not arrive until the
+   * reply is complete — a window that waited for it would sit empty for the
+   * whole generation and then fill in all at once. This fires as soon as there
+   * is something to point a view at.
+   */
+  onCommitted?: (result: SubmitResult) => void;
+}
+
+export interface SubmitResult {
+  userNodeId: NodeId;
+  /** The reply node. Exists even when the request failed — it carries the error. */
+  assistantNodeId: NodeId;
 }
 
 interface AppState {
@@ -54,10 +80,12 @@ interface AppState {
   renameConversation: (id: string, title: string) => Promise<void>;
 
   setActiveNode: (id: NodeId) => void;
-  setActiveLeafFrom: (id: NodeId) => void;
 
-  submit: (request: SubmitRequest) => Promise<void>;
-  regenerate: (assistantNodeId: NodeId) => Promise<void>;
+  submit: (request: SubmitRequest) => Promise<SubmitResult>;
+  regenerate: (
+    assistantNodeId: NodeId,
+    opts?: { detached?: boolean; onCommitted?: (nodeId: NodeId) => void },
+  ) => Promise<NodeId | null>;
   stop: () => void;
   deleteSubtree: (id: NodeId) => Promise<void>;
 
@@ -162,15 +190,12 @@ export const useStore = create<AppState>((set, get) => ({
     const nodes: NodeMap = {};
     for (const row of rows) nodes[row.id] = row;
     const conversation = await db.conversations.get(id);
-    const stored = conversation?.activeNodeId;
-    const fallback = rootsOf(nodes, id)[0]?.id ?? null;
-    const activeNodeId =
-      stored && nodes[stored]
-        ? stored
-        : fallback
-          ? deepestLeaf(nodes, fallback)
-          : null;
-    set({ conversationId: id, nodes, activeNodeId, preferredChild: {} });
+    set({
+      conversationId: id,
+      nodes,
+      activeNodeId: mainSpineCursor(nodes, id, conversation?.activeNodeId ?? null),
+      preferredChild: {},
+    });
   },
 
   deleteConversation: async (id) => {
@@ -206,17 +231,6 @@ export const useStore = create<AppState>((set, get) => ({
     void persistActive(get().conversationId, id);
   },
 
-  /** Navigate to a node and continue down to a leaf, so the transcript has a
-   *  full path to show. Used by tree clicks and sibling switches. */
-  setActiveLeafFrom: (id) => {
-    const { nodes, preferredChild } = get();
-    if (!nodes[id]) return;
-    const next = withPreferredPath(nodes, id, preferredChild);
-    const leaf = deepestLeaf(nodes, id, next);
-    set({ activeNodeId: leaf, preferredChild: next });
-    void persistActive(get().conversationId, leaf);
-  },
-
   submit: async (request) => {
     const conversationId = get().conversationId ?? (await get().newConversation());
     const now = Date.now();
@@ -237,7 +251,8 @@ export const useStore = create<AppState>((set, get) => ({
       ...(request.model ? { model: request.model } : {}),
     };
 
-    await commitNode(set, get, userNode);
+    const detached = request.detached === true;
+    await commitNode(set, get, userNode, detached);
 
     // Assemble once, here. The payload is recorded on the node before the
     // request goes out, so the inspector shows what was actually sent even if
@@ -246,7 +261,7 @@ export const useStore = create<AppState>((set, get) => ({
     const preview = formatPayload(messages);
     await patchNode(set, userNode.id, { assembledPreview: preview });
 
-    await runStream(set, get, {
+    const assistantNodeId = await runStream(set, get, {
       conversationId,
       parentId: userNode.id,
       messages,
@@ -254,20 +269,30 @@ export const useStore = create<AppState>((set, get) => ({
       origin: { kind: "continuation", sourceNodeId: userNode.id },
       policy: request.policy,
       model: request.model ?? get().modelForBranch(request.parentId),
+      detached,
+      ...(request.onCommitted
+        ? {
+            onCommitted: (assistantNodeId: NodeId) =>
+              request.onCommitted?.({ userNodeId: userNode.id, assistantNodeId }),
+          }
+        : {}),
     });
 
     await touchConversation(set, get, conversationId, request.text);
+    return { userNodeId: userNode.id, assistantNodeId };
   },
 
-  regenerate: async (assistantNodeId) => {
+  regenerate: async (assistantNodeId, opts) => {
     const { nodes } = get();
     const target = nodes[assistantNodeId];
-    if (!target || target.role !== "assistant" || !target.parentId) return;
+    if (!target || target.role !== "assistant" || !target.parentId) return null;
     const parent = nodes[target.parentId];
-    if (!parent) return;
+    if (!parent) return null;
 
     const messages = get().assemble(parent);
-    await runStream(set, get, {
+    return runStream(set, get, {
+      detached: opts?.detached === true,
+      ...(opts?.onCommitted ? { onCommitted: opts.onCommitted } : {}),
       conversationId: parent.conversationId,
       parentId: parent.id,
       messages,
@@ -308,14 +333,11 @@ export const useStore = create<AppState>((set, get) => ({
             : value;
       }
       const stillValid = activeNodeId && !idSet.has(activeNodeId);
-      const fallback = node.parentId ?? rootsOf(next, node.conversationId)[0]?.id ?? null;
       return {
         nodes: next,
         activeNodeId: stillValid
           ? activeNodeId
-          : fallback
-            ? deepestLeaf(next, fallback)
-            : null,
+          : mainSpineCursor(next, node.conversationId, node.parentId),
       };
     });
   },
@@ -436,12 +458,17 @@ interface StreamRequest {
   policy: ContextPolicy;
   /** Resolved per-branch model; falls back to the provider default. */
   model?: string;
+  /** Stream into the node without moving the app's cursor to it. */
+  detached?: boolean;
+  /** Fired once the reply node exists, before the first delta arrives. */
+  onCommitted?: (assistantNodeId: NodeId) => void;
 }
 
 /** Persist mid-stream at most this often, so a crash loses at most this much. */
 const STREAM_PERSIST_MS = 800;
 
-async function runStream(set: Setter, get: Getter, req: StreamRequest): Promise<void> {
+/** Returns the id of the node the reply was streamed into, error or not. */
+async function runStream(set: Setter, get: Getter, req: StreamRequest): Promise<NodeId> {
   const settings = get().settings;
   const config = settings.providers.find((p) => p.id === settings.activeProviderId);
 
@@ -462,21 +489,22 @@ async function runStream(set: Setter, get: Getter, req: StreamRequest): Promise<
     assembledPreview: req.preview,
   };
 
-  await commitNode(set, get, assistantNode);
+  await commitNode(set, get, assistantNode, req.detached === true);
+  req.onCommitted?.(assistantNode.id);
 
   if (!config) {
     await patchNode(set, assistantNode.id, {
       status: "error",
       error: "No provider configured. Open Settings and add a base URL and key.",
     });
-    return;
+    return assistantNode.id;
   }
   if (!config.apiKey && config.kind === "anthropic") {
     await patchNode(set, assistantNode.id, {
       status: "error",
       error: "Anthropic requires an API key. Add one in Settings.",
     });
-    return;
+    return assistantNode.id;
   }
 
   const controller = new AbortController();
@@ -517,16 +545,27 @@ async function runStream(set: Setter, get: Getter, req: StreamRequest): Promise<
       set({ abort: null, streamingNodeId: null });
     }
   }
+  return assistantNode.id;
 }
 
 /* ------------------------------------------------------------------ */
 /* Persistence helpers                                                 */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Write a node, link it to its parent, and — unless the caller asked to stay
+ * put — move the cursor onto it.
+ *
+ * `detached` skips three things and only these three: the active node, the
+ * remembered fork choice at the parent, and the persisted cursor. The node
+ * itself, and the parent's `childrenIds`, are written either way — a branch in
+ * a window is a real part of the tree, not a draft.
+ */
 async function commitNode(
   set: Setter,
   get: Getter,
   node: ConversationNode,
+  detached = false,
 ): Promise<void> {
   const parent = node.parentId ? get().nodes[node.parentId] : undefined;
   const parentChildren = parent ? [...parent.childrenIds, node.id] : null;
@@ -536,6 +575,7 @@ async function commitNode(
     if (parent && parentChildren) {
       nodes[parent.id] = { ...parent, childrenIds: parentChildren };
     }
+    if (detached) return { nodes };
     return {
       nodes,
       activeNodeId: node.id,
@@ -551,7 +591,7 @@ async function commitNode(
       await db.nodes.update(parent.id, { childrenIds: parentChildren });
     }
   });
-  void persistActive(node.conversationId, node.id);
+  if (!detached) void persistActive(node.conversationId, node.id);
 }
 
 async function patchNode(
@@ -592,6 +632,30 @@ async function touchConversation(
 function titleFrom(text: string): string {
   const line = text.trim().split("\n")[0].replace(/^#+\s*/, "");
   return line.length > 48 ? `${line.slice(0, 47)}…` : line || "Untitled";
+}
+
+/**
+ * Where the main chat box's cursor may sit: the end of the spine that starts at
+ * the conversation's root, and nowhere else.
+ *
+ * The window invariant is that a window shows one linear spine, so the main
+ * window can never show a branch — which means its cursor can never be inside
+ * one. A `preferred` node is honoured only if it is on that spine, which is what
+ * keeps a cursor persisted before this rule existed (or left behind by a delete)
+ * from reopening the conversation halfway down a lens.
+ */
+function mainSpineCursor(
+  nodes: NodeMap,
+  conversationId: string,
+  preferred: NodeId | null,
+): NodeId | null {
+  const outline = buildOutline(nodes, conversationId);
+  const main = outline.threads[0];
+  if (!main) return rootsOf(nodes, conversationId)[0]?.id ?? null;
+  if (preferred && nodes[preferred] && threadOf(outline, preferred)?.depth === 0) {
+    return spineLeaf(nodes, preferred);
+  }
+  return spineLeaf(nodes, main.headNodeId);
 }
 
 /** Record the choice at every fork on the way to `id`, so navigating into a

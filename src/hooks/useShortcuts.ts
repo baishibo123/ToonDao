@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useStore } from "@/store/useStore";
 import { useUI } from "@/store/useUI";
 import { siblingsOf } from "@/lib/tree";
+import { focusNode } from "@/store/focusNode";
 
 export interface Shortcut {
   keys: string;
@@ -12,6 +13,7 @@ export const SHORTCUTS: Shortcut[] = [
   { keys: "Enter", label: "Send" },
   { keys: "Shift ⏎", label: "Newline" },
   { keys: "Esc", label: "Drop the pending gesture, or close what is open" },
+  { keys: "⌘ ⇧ W", label: "Close the front branch window" },
   { keys: "⌘ ⇧ T", label: "Show or hide the tree" },
   { keys: "⌘ ⇧ N", label: "New conversation" },
   { keys: "⌘ ⇧ I", label: "Inspect the payload of the last message" },
@@ -41,11 +43,15 @@ export function useShortcuts(): void {
       const typing = isTyping(e.target);
 
       if (e.key === "Escape") {
-        // One key, unwound in the order the user layered it.
+        // One key, unwound in the order the user layered it. A composer holding
+        // a gesture stops this chain itself, so Escape there drops the gesture
+        // without also closing the window it was typed into.
         if (ui.selection) return void ui.setSelection(null);
         if (ui.pending) return void ui.setPending(null);
         if (ui.settingsOpen) return void ui.setSettingsOpen(false);
         if (ui.shortcutsOpen) return void ui.setShortcutsOpen(false);
+        const focused = focusedWindowId();
+        if (focused) return void ui.closeBranchWindow(focused);
         if (store.streamingNodeId) return void store.stop();
         return;
       }
@@ -75,14 +81,26 @@ export function useShortcuts(): void {
         const next = siblings[index + (e.key === "ArrowDown" ? 1 : -1)];
         if (!next) return;
         e.preventDefault();
-        store.setActiveLeafFrom(next.id);
-        ui.requestScrollTo(next.id);
+        focusNode(next.id);
         return;
       }
 
       if (!mod || !e.shiftKey) return;
 
       switch (e.key.toLowerCase()) {
+        case "w": {
+          // The front window, or the one the caret is in.
+          const focused = focusedWindowId();
+          const front = ui.windows.reduce<typeof ui.windows[number] | null>(
+            (top, w) => (!top || w.z > top.z ? w : top),
+            null,
+          );
+          const target = focused ?? front?.id;
+          if (!target) break;
+          e.preventDefault();
+          ui.closeBranchWindow(target);
+          break;
+        }
         case "t":
           e.preventDefault();
           ui.setTreeOpen(!ui.treeOpen);
@@ -110,6 +128,13 @@ export function useShortcuts(): void {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+}
+
+/** The branch window the caret is in, if any. */
+function focusedWindowId(): string | null {
+  const el = document.activeElement;
+  if (!(el instanceof HTMLElement)) return null;
+  return el.closest("[data-window-id]")?.getAttribute("data-window-id") ?? null;
 }
 
 function isTyping(target: EventTarget | null): boolean {

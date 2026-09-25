@@ -36,6 +36,11 @@
   --danger: #d2664a;
   --focus: #7fb6e8;
 
+  /* The sidebar's width, shared with the window layer: a new branch window is
+     placed clear of the outline, because the outline is how you get back to
+     the branches and covering it on open would be a strange first act. */
+  --sidebar-w: 248px;
+
   --radius: 8px;
   --radius-sm: 5px;
   --radius-lg: 14px;
