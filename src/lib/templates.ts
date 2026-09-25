@@ -30,6 +30,12 @@ I stopped reading right here. I am not confused about a specific term — I am c
 
 Treat the text above as the entire context. Answer only about it.`,
 
+  // Not a gesture: a standing instruction, appended to the system message of
+  // every request while Settings → Pace answers is on. An answer longer than
+  // the reader can hold is the reading problem at its source, so the cheapest
+  // fix is to ask for less, and a checkpoint to decide what comes next.
+  pacing: `Pace your answers like a conversation, not a lecture. Give me one idea at a time — the next thing I need, not everything you know — and keep it to what fits on one screen. If there is more to say, stop at a natural checkpoint and end with one real question: either to check that I followed, or to ask which way to go next.`,
+
   // §4: quote_reply has no wrapper. The quote is rendered as a `>` blockquote
   // prepended to the user's message. The body is kept in the template set only
   // so the editor can show it; {{quote}} / {{message}} are the two slots.
@@ -61,6 +67,11 @@ export const TEMPLATE_META: Record<
     label: "Quote reply",
     vars: ["quote", "message"],
     note: "§5.4 — quoted policy. {{quote}} is already prefixed with `> ` on every line.",
+  },
+  pacing: {
+    label: "Pacing",
+    vars: [],
+    note: "Appended to the system message of every request while Settings → Pace answers is on. No variables.",
   },
 };
 

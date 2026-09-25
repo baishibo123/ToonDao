@@ -8,6 +8,7 @@ const IDS: TemplateId[] = [
   "structural_crop",
   "isolated_selection",
   "quote_reply",
+  "pacing",
 ];
 
 /**

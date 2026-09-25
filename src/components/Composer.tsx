@@ -43,6 +43,7 @@ export function Composer() {
   const assemble = useStore((s) => s.assemble);
   const templates = useStore((s) => s.templates);
   const systemPrompt = useStore((s) => s.settings.systemPrompt);
+  const pacing = useStore((s) => s.settings.pacing);
   const modelForBranch = useStore((s) => s.modelForBranch);
   const providers = useStore((s) => s.settings.providers);
   const activeProviderId = useStore((s) => s.settings.activeProviderId);
@@ -80,7 +81,7 @@ export function Composer() {
     if (!conversationId) return [];
     return assemble(draftNode(plan, conversationId));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plan, conversationId, nodes, templates, systemPrompt, assemble]);
+  }, [plan, conversationId, nodes, templates, systemPrompt, pacing, assemble]);
 
   // An aside with neither a gesture nor a first message has nothing to attach
   // a message to — sending would start a stray root — so it cannot send.

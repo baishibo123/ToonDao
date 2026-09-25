@@ -174,6 +174,22 @@ export function Settings() {
           <section className="pane">
             <h3 className="pane__title">Generation</h3>
 
+            <label className="toggle">
+              <input
+                type="checkbox"
+                checked={settings.pacing}
+                onChange={(e) => void updateSettings({ pacing: e.target.checked })}
+              />
+              <span>
+                <span className="toggle__label">Pace answers</span>
+                <span className="toggle__hint">
+                  Ask for one idea at a time, ending at a checkpoint, instead of
+                  everything at once. The wording is the Pacing template below, and
+                  it appears in every payload's system message.
+                </span>
+              </span>
+            </label>
+
             <div className="field">
               <label className="field__label" htmlFor="system-prompt">
                 System prompt

@@ -1,9 +1,8 @@
 import { useMemo } from "react";
-import type { ChatMessage, ContextPolicy, ConversationNode } from "@/types";
+import type { ChatMessage, ContextPolicy } from "@/types";
 import { policyLabel } from "@/lib/assembleContext";
 import { POLICY_CLASS, policyExplanation } from "@/lib/policyMeta";
 import { estimateMessageTokens, formatTokens } from "@/lib/tokens";
-import { useStore } from "@/store/useStore";
 import { useUI } from "@/store/useUI";
 
 /**
@@ -129,21 +128,4 @@ export function parsePayload(text: string): ChatMessage[] {
         content: block.slice(match[0].length),
       };
     });
-}
-
-/** The composer's live chip: assembles a hypothetical node so the user can see
- *  the payload *before* sending it. */
-export function useHypotheticalPayload(node: ConversationNode | null): ChatMessage[] {
-  const assemble = useStore((s) => s.assemble);
-  const nodes = useStore((s) => s.nodes);
-  const templates = useStore((s) => s.templates);
-  const systemPrompt = useStore((s) => s.settings.systemPrompt);
-
-  return useMemo(() => {
-    if (!node) return [];
-    return assemble(node);
-    // nodes/templates/systemPrompt are the inputs assemble() reads; listing them
-    // keeps the chip live as the user edits a template or types.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [node, nodes, templates, systemPrompt, assemble]);
 }

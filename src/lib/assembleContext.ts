@@ -21,6 +21,9 @@ export interface AssembleOptions {
   /** Global system prompt from settings. Applied to every policy, including
    *  `isolated` (§3: "no system prompt inheritance beyond the global one"). */
   systemPrompt?: string;
+  /** Append the `pacing` template to the system message. Global, like the
+   *  system prompt, so it reaches every policy the same way. */
+  pacing?: boolean;
 }
 
 export function assembleContext(
@@ -34,7 +37,7 @@ export function assembleContext(
   // lets the inspector open on any node in the tree.
   if (node.role === "assistant") {
     const parent = node.parentId ? store.get(node.parentId) : undefined;
-    if (!parent) return withSystem([], opts);
+    if (!parent) return withSystem([], opts, templates);
     return assembleContext(parent, store, templates, opts);
   }
 
@@ -45,6 +48,7 @@ export function assembleContext(
       return withSystem(
         lineageMessages(node, store, templates, { inclusive: true }),
         opts,
+        templates,
       );
 
     case "windowed": {
@@ -58,7 +62,7 @@ export function assembleContext(
         context_turns: asProse(window),
         concept: node.content,
       });
-      return withSystem([{ role: "user", content: body }], opts);
+      return withSystem([{ role: "user", content: body }], opts, templates);
     }
 
     case "truncated": {
@@ -79,14 +83,14 @@ export function assembleContext(
       const body = renderTemplate(templates.structural_crop, {
         truncated_context: asProse(truncated),
       });
-      return withSystem([{ role: "user", content: appendNote(body, node) }], opts);
+      return withSystem([{ role: "user", content: appendNote(body, node) }], opts, templates);
     }
 
     case "isolated": {
       const body = renderTemplate(templates.isolated_selection, {
         selection: policy.payload,
       });
-      return withSystem([{ role: "user", content: appendNote(body, node) }], opts);
+      return withSystem([{ role: "user", content: appendNote(body, node) }], opts, templates);
     }
 
     case "quoted": {
@@ -99,7 +103,7 @@ export function assembleContext(
             : lineageMessages(parent, store, templates, { inclusive: true });
       }
       const body = `${asBlockquote(policy.quote)}\n\n${node.content}`.trimEnd();
-      return withSystem([...base, { role: "user", content: body }], opts);
+      return withSystem([...base, { role: "user", content: body }], opts, templates);
     }
   }
 }
@@ -232,10 +236,22 @@ function clampOffset(offset: number, content: string): number {
   return Math.max(0, Math.min(Math.floor(offset), content.length));
 }
 
-function withSystem(messages: ChatMessage[], opts: AssembleOptions): ChatMessage[] {
-  const system = opts.systemPrompt?.trim();
-  if (!system) return messages;
-  return [{ role: "system", content: system }, ...messages];
+/**
+ * The one system message: the user's own prompt first, then the pacing
+ * instruction when it is on. Either may be absent; with neither, there is no
+ * system message at all.
+ */
+function withSystem(
+  messages: ChatMessage[],
+  opts: AssembleOptions,
+  templates: TemplateSet,
+): ChatMessage[] {
+  const parts = [
+    opts.systemPrompt?.trim() ?? "",
+    opts.pacing ? (templates.pacing ?? "").trim() : "",
+  ].filter(Boolean);
+  if (parts.length === 0) return messages;
+  return [{ role: "system", content: parts.join("\n\n") }, ...messages];
 }
 
 /* ------------------------------------------------------------------ */

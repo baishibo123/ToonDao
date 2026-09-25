@@ -35,6 +35,62 @@ describe("full-ancestry", () => {
     expect(assembleContext(u, t, T, { systemPrompt: "   " })).toHaveLength(1);
   });
 
+  describe("pacing", () => {
+    it("puts the pacing template in the system message when it is on", () => {
+      const t = new TreeFixture();
+      const u = t.add("user", "hi", null);
+      const msgs = assembleContext(u, t, T, { pacing: true });
+      expect(msgs[0]).toEqual({ role: "system", content: T.pacing.trim() });
+      expect(msgs).toHaveLength(2);
+    });
+
+    it("comes after the user's own system prompt, in one system message", () => {
+      const t = new TreeFixture();
+      const u = t.add("user", "hi", null);
+      const msgs = assembleContext(u, t, T, { systemPrompt: "be terse", pacing: true });
+      expect(msgs.filter((m) => m.role === "system")).toHaveLength(1);
+      expect(msgs[0].content).toBe(`be terse\n\n${T.pacing.trim()}`);
+    });
+
+    it("is absent when off, and absent by default", () => {
+      const t = new TreeFixture();
+      const u = t.add("user", "hi", null);
+      expect(assembleContext(u, t, T, { pacing: false })).toHaveLength(1);
+      expect(assembleContext(u, t, T)).toHaveLength(1);
+    });
+
+    it("reaches every policy the same way, isolation included", () => {
+      const t = new TreeFixture();
+      t.linear(3);
+      const leaf = t.all().at(-1)!;
+      const iso = t.add("user", "", leaf.id, { kind: "isolated", payload: "x" }, "isolated-selection");
+      const lens = t.add(
+        "user", "term", leaf.id,
+        { kind: "windowed", turns: 1, upToNodeId: leaf.id }, "concept-lens",
+      );
+      for (const node of [iso, lens]) {
+        const msgs = assembleContext(node, t, T, { pacing: true });
+        expect(msgs.map((m) => m.role)).toEqual(["system", "user"]);
+        expect(msgs[0].content).toBe(T.pacing.trim());
+      }
+    });
+
+    it("uses the edited template, never a hardcoded copy", () => {
+      const t = new TreeFixture();
+      const u = t.add("user", "hi", null);
+      const edited = { ...T, pacing: "one thing at a time" };
+      expect(assembleContext(u, t, edited, { pacing: true })[0].content).toBe(
+        "one thing at a time",
+      );
+    });
+
+    it("sends no empty system message when the template is blanked", () => {
+      const t = new TreeFixture();
+      const u = t.add("user", "hi", null);
+      expect(assembleContext(u, t, { ...T, pacing: "  " }, { pacing: true })).toHaveLength(1);
+    });
+  });
+
   it("follows only the node's own branch, not sibling branches", () => {
     const t = new TreeFixture();
     const u1 = t.add("user", "q1", null);

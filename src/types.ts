@@ -119,7 +119,8 @@ export type TemplateId =
   | "concept_lens"
   | "structural_crop"
   | "isolated_selection"
-  | "quote_reply";
+  | "quote_reply"
+  | "pacing";
 
 export interface PromptTemplate {
   id: TemplateId;
@@ -147,6 +148,11 @@ export interface Settings {
   providers: ProviderConfig[];
   activeProviderId: string | null;
   systemPrompt: string;
+  /**
+   * Ask the model to answer one idea at a time and stop at a checkpoint. The
+   * wording is the `pacing` template, appended to the system message.
+   */
+  pacing: boolean;
   /** Default turn count for the concept lens (§5.1), range 1–5. */
   conceptLensTurns: number;
   temperature: number;

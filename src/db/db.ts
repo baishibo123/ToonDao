@@ -110,6 +110,10 @@ export const DEFAULT_SETTINGS: Settings = {
   ],
   activeProviderId: "openai",
   systemPrompt: "",
+  // On by default, and merged into existing profiles by ensureSeeded(): the
+  // point is that answers arrive at a readable size without anyone having to
+  // know the setting exists. One checkbox turns it off.
+  pacing: true,
   conceptLensTurns: 2,
   temperature: 0.7,
   maxTokens: null,

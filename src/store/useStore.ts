@@ -137,6 +137,7 @@ export const useStore = create<AppState>((set, get) => ({
   assemble: (node) =>
     assembleContext(node, get().nodeStore(), get().templates, {
       systemPrompt: get().settings.systemPrompt,
+      pacing: get().settings.pacing,
     }),
 
   init: async () => {
