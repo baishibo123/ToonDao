@@ -2,15 +2,20 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useStore } from "@/store/useStore";
 import { useUI, type PendingGesture } from "@/store/useUI";
 import { useStartGesture } from "@/hooks/useStartGesture";
-import { BRANCH_META } from "@/lib/policyMeta";
+import { BRANCH_META, LATER_META } from "@/lib/policyMeta";
+import { findParked } from "@/lib/later";
 
 /**
  * The toolbar that appears on a passage: what a reader does when the text gets
  * hard, named the way a reader would name it.
  *
  *   Explain    "wait — what's this?"    §5.1, opens an aside
+ *   Later      "not now"                parks it on the Later list
  *   Reply      "about this —"           §5.4, stays in this conversation
  *   Just this  "take only this"         §5.3, opens an aside
+ *
+ * Explain and Later are the two answers to the same question — does this block
+ * me right now? — so they sit side by side.
  *
  * A click has been expanded to a term (§5.1) and a drag resolves to its range;
  * both offer the same moves, so the toolbar is learnt once. No action sends
@@ -25,6 +30,9 @@ export function SelectionPopover() {
 
   const nodes = useStore((s) => s.nodes);
   const conceptLensTurns = useStore((s) => s.settings.conceptLensTurns);
+  const later = useStore((s) => s.conversations.find((c) => c.id === s.conversationId)?.later);
+  const park = useStore((s) => s.park);
+  const unpark = useStore((s) => s.unpark);
 
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
 
@@ -96,6 +104,7 @@ export function SelectionPopover() {
   if (!selection || !sourceNode || !pos) return null;
 
   const anchor = selection.anchor;
+  const parked = findParked(later ?? [], selection.nodeId, anchor);
   /**
    * Every action leaves through here. Whether it opens an aside or docks into a
    * composer is `useStartGesture()`'s decision, not this toolbar's — the
@@ -133,6 +142,23 @@ export function SelectionPopover() {
           }
         />
         <Action
+          glyph={LATER_META.glyph}
+          hue={LATER_META.cssVar}
+          label={parked ? "Parked" : LATER_META.label}
+          pressed={Boolean(parked)}
+          hint={
+            parked
+              ? "Already on the Later list. Click to take it off."
+              : "Not now. Marks it here and adds it to the Later list in the sidebar."
+          }
+          onClick={() => {
+            void (parked ? unpark(parked.id) : park(selection.nodeId, anchor));
+            setSelection(null);
+            // Let go of the browser's selection too, so the mark is visible.
+            window.getSelection()?.removeAllRanges();
+          }}
+        />
+        <Action
           kind="quote-reply"
           label="Reply"
           hint="Reply to this passage, here in the conversation. It is quoted above what you type."
@@ -153,22 +179,29 @@ export function SelectionPopover() {
 
 function Action({
   kind,
+  glyph,
+  hue,
   label,
   hint,
+  pressed,
   onClick,
 }: {
-  kind: keyof typeof BRANCH_META;
   label: string;
   hint: string;
   onClick: () => void;
-}) {
-  const meta = BRANCH_META[kind];
+  pressed?: boolean;
+} & (
+  | { kind: keyof typeof BRANCH_META; glyph?: never; hue?: never }
+  | { kind?: never; glyph: string; hue: string }
+)) {
+  const meta = kind ? BRANCH_META[kind] : { glyph: glyph!, cssVar: hue! };
   return (
     <button
       type="button"
       className="selpop__action"
       title={hint}
       onClick={onClick}
+      {...(pressed !== undefined ? { "aria-pressed": pressed } : {})}
       style={{ ["--kind" as string]: `var(${meta.cssVar})` }}
     >
       <span className="selpop__glyph" aria-hidden>

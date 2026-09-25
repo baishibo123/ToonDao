@@ -5,6 +5,7 @@ import { draftNode, planIsSendable, planSubmission } from "@/lib/draft";
 import { ContextChip, Inspector } from "@/components/ContextChip";
 import { BRANCH_META, branchKindForGesture } from "@/lib/policyMeta";
 import { useSurface } from "@/components/Surface";
+import { findParked } from "@/lib/later";
 
 const GESTURE_COPY: Record<
   string,
@@ -61,6 +62,8 @@ export function Composer() {
   const modelForBranch = useStore((s) => s.modelForBranch);
   const providers = useStore((s) => s.settings.providers);
   const activeProviderId = useStore((s) => s.settings.activeProviderId);
+  const later = useStore((s) => s.conversations.find((c) => c.id === s.conversationId)?.later);
+  const unpark = useStore((s) => s.unpark);
 
   const frame = useUI((s) => (asideId ? s.asides.find((f) => f.id === asideId) : undefined));
   const globalPending = useUI((s) => s.pending);
@@ -147,6 +150,13 @@ export function Composer() {
 
   const send = () => {
     if (!sendable) return;
+    // Asking anything about a parked passage takes it off the Later list. The
+    // list is what is still owed; this is the paying of it.
+    const settled =
+      pending && "anchor" in pending
+        ? findParked(later ?? [], pending.sourceNodeId, pending.anchor)
+        : undefined;
+    if (settled) void unpark(settled.id);
     void submit({
       text: plan.content,
       parentId: plan.parentId,

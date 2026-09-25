@@ -222,6 +222,69 @@ describe("id collisions", () => {
   });
 });
 
+describe("the Later list", () => {
+  function parked() {
+    const { conversation, nodes, t } = richFixture();
+    const source = t.all()[3]; // an assistant reply on the trunk
+    const withLater: Conversation = {
+      ...conversation,
+      later: [
+        {
+          id: "l1",
+          sourceNodeId: source.id,
+          anchor: { start: 0, end: 6, text: "answer", blockPath: "0" },
+          createdAt: 5,
+        },
+        {
+          id: "l2",
+          sourceNodeId: "gone",
+          anchor: { start: 0, end: 1, text: "x" },
+          createdAt: 6,
+        },
+      ],
+    };
+    return { withLater, nodes, source };
+  }
+
+  it("survives a round trip, and drops a passage whose message is not in it", () => {
+    const { withLater, nodes, source } = parked();
+    const raw = JSON.stringify(
+      buildBundle({ conversations: [withLater], nodes, templates: T, settings: DEFAULT_SETTINGS }),
+    );
+    const [conversation] = parseBundle(raw).conversations;
+    expect(conversation.later).toEqual([
+      {
+        id: "l1",
+        sourceNodeId: source.id,
+        anchor: { start: 0, end: 6, text: "answer", blockPath: "0" },
+        createdAt: 5,
+      },
+    ]);
+  });
+
+  it("follows its message through an id remap", () => {
+    const { withLater, nodes, source } = parked();
+    const raw = JSON.stringify(
+      buildBundle({ conversations: [withLater], nodes, templates: T, settings: DEFAULT_SETTINGS }),
+    );
+    const parsed = parseBundle(raw, {
+      conversations: new Set([withLater.id]),
+      nodes: new Set(nodes.map((n) => n.id)),
+    });
+    const index = nodes.findIndex((n) => n.id === source.id);
+    const [conversation] = parsed.conversations;
+    expect(conversation.later?.map((i) => i.sourceNodeId)).toEqual([parsed.nodes[index].id]);
+  });
+
+  it("is simply absent on a conversation that never parked anything", () => {
+    const { conversation, nodes } = richFixture();
+    const raw = JSON.stringify(
+      buildBundle({ conversations: [conversation], nodes, templates: T, settings: DEFAULT_SETTINGS }),
+    );
+    expect(parseBundle(raw).conversations[0]).not.toHaveProperty("later");
+  });
+});
+
 describe("hostile and damaged input", () => {
   it("rejects non-JSON", () => {
     expect(() => parseBundle("not json")).toThrow(ImportError);

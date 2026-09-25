@@ -75,6 +75,18 @@ export function branchKindForGesture(kind: string): BranchKind {
   }
 }
 
+/**
+ * Not a branch kind: a passage parked for later is not in the tree at all
+ * until it is asked about. It still needs one name, one glyph and one hue, used
+ * alike by the toolbar, the sidebar list and the mark in the text.
+ */
+export const LATER_META = {
+  label: "Later",
+  glyph: "◷",
+  cssVar: "--hue-later",
+  blurb: "Parked, not chased: marked where it is, listed in the sidebar, asked when you are ready.",
+} as const;
+
 export const POLICY_CLASS: Record<PolicyKind, string> = {
   "full-ancestry": "",
   windowed: "chip--windowed",

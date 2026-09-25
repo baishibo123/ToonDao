@@ -5,11 +5,13 @@ import type {
   Conversation,
   ConversationNode,
   ContextPolicy,
+  LaterItem,
   NodeId,
   NodeStore,
   Settings,
   TemplateId,
   TemplateSet,
+  TextAnchor,
 } from "@/types";
 import { DEFAULT_SETTINGS, db, ensureSeeded, loadTemplateSet } from "@/db/db";
 import { DEFAULT_TEMPLATES } from "@/lib/templates";
@@ -19,6 +21,7 @@ import { newId } from "@/lib/id";
 import { buildBundle, parseBundle } from "@/lib/transfer";
 import { rootsOf, subtreeIds, type NodeMap } from "@/lib/tree";
 import { buildOutline, spineLeaf, threadOf } from "@/lib/outline";
+import { parkPassage, pruneParked } from "@/lib/later";
 
 export interface SubmitRequest {
   /** The human-readable ask. Becomes node.content. */
@@ -78,6 +81,11 @@ interface AppState {
   selectConversation: (id: string) => Promise<void>;
   deleteConversation: (id: string) => Promise<void>;
   renameConversation: (id: string, title: string) => Promise<void>;
+
+  /** Park a passage on the open conversation's Later list. */
+  park: (sourceNodeId: NodeId, anchor: TextAnchor) => Promise<void>;
+  /** Take a passage off the Later list — asked about, or let go. */
+  unpark: (itemId: string) => Promise<void>;
 
   setActiveNode: (id: NodeId) => void;
 
@@ -221,6 +229,28 @@ export const useStore = create<AppState>((set, get) => ({
     }));
   },
 
+  park: async (sourceNodeId, anchor) => {
+    const conversation = openConversation(get);
+    if (!conversation) return;
+    const later = parkPassage(conversation.later ?? [], {
+      id: newId("l"),
+      sourceNodeId,
+      anchor,
+      createdAt: Date.now(),
+    });
+    await saveLater(set, conversation.id, later);
+  },
+
+  unpark: async (itemId) => {
+    const conversation = openConversation(get);
+    if (!conversation?.later?.some((item) => item.id === itemId)) return;
+    await saveLater(
+      set,
+      conversation.id,
+      conversation.later.filter((item) => item.id !== itemId),
+    );
+  },
+
   setActiveNode: (id) => {
     const { nodes } = get();
     if (!nodes[id]) return;
@@ -321,6 +351,12 @@ export const useStore = create<AppState>((set, get) => ({
     if (node.parentId && nodes[node.parentId]) {
       const remaining = nodes[node.parentId].childrenIds.filter((c) => c !== id);
       await db.nodes.update(node.parentId, { childrenIds: remaining });
+    }
+    // A parked passage whose message is gone can never be asked about.
+    const parked = get().conversations.find((c) => c.id === node.conversationId)?.later;
+    if (parked?.length) {
+      const kept = pruneParked(parked, idSet);
+      if (kept.length !== parked.length) await saveLater(set, node.conversationId, kept);
     }
 
     set((s) => {
@@ -603,6 +639,22 @@ async function patchNode(
     s.nodes[id] ? { nodes: { ...s.nodes, [id]: { ...s.nodes[id], ...patch } } } : {},
   );
   await db.nodes.update(id, patch);
+}
+
+function openConversation(get: Getter): Conversation | undefined {
+  const { conversations, conversationId } = get();
+  return conversations.find((c) => c.id === conversationId);
+}
+
+async function saveLater(
+  set: Setter,
+  conversationId: string,
+  later: LaterItem[],
+): Promise<void> {
+  set((s) => ({
+    conversations: s.conversations.map((c) => (c.id === conversationId ? { ...c, later } : c)),
+  }));
+  await db.conversations.update(conversationId, { later });
 }
 
 async function persistActive(conversationId: string | null, nodeId: NodeId): Promise<void> {

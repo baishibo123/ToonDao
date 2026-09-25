@@ -1,6 +1,7 @@
 import type {
   Conversation,
   ConversationNode,
+  LaterItem,
   NodeId,
   Settings,
   TemplateId,
@@ -207,6 +208,7 @@ export function parseBundle(
       const rootId = own.find((n) => n.parentId === null)?.id ?? null;
       const activeRaw =
         typeof value.activeNodeId === "string" ? mapNode(value.activeNodeId) : null;
+      const later = parseLater(value.later, mapNode, nodesById);
       return {
         id,
         title: typeof value.title === "string" && value.title ? value.title : "Imported",
@@ -214,6 +216,7 @@ export function parseBundle(
         updatedAt: typeof value.updatedAt === "number" ? value.updatedAt : Date.now(),
         rootId,
         activeNodeId: activeRaw && nodesById.has(activeRaw) ? activeRaw : rootId,
+        ...(later.length > 0 ? { later } : {}),
       };
     });
 
@@ -248,6 +251,40 @@ export function parseBundle(
 }
 
 /* ------------------------------------------------------------------ */
+
+/**
+ * A conversation's parked passages. Their node ids go through the same remap as
+ * everything else — a parked passage pointing at the pre-import id of its
+ * message would be unaskable — and one whose message did not make it into the
+ * bundle is dropped rather than kept as a dangling promise.
+ */
+function parseLater(
+  value: unknown,
+  mapNode: (id: string) => string,
+  nodesById: Map<NodeId, ConversationNode>,
+): LaterItem[] {
+  if (!Array.isArray(value)) return [];
+  const out: LaterItem[] = [];
+  for (const entry of value) {
+    if (!isRecord(entry) || !isRecord(entry.anchor)) continue;
+    const sourceNodeId = mapNode(String(entry.sourceNodeId ?? ""));
+    if (!nodesById.has(sourceNodeId)) continue;
+    out.push({
+      id: typeof entry.id === "string" && entry.id ? entry.id : newId("l"),
+      sourceNodeId,
+      anchor: {
+        start: numberOr(entry.anchor.start, 0),
+        end: numberOr(entry.anchor.end, 0),
+        text: typeof entry.anchor.text === "string" ? entry.anchor.text : "",
+        ...(typeof entry.anchor.blockPath === "string"
+          ? { blockPath: entry.anchor.blockPath }
+          : {}),
+      },
+      createdAt: numberOr(entry.createdAt, Date.now()),
+    });
+  }
+  return out;
+}
 
 function parseOrigin(
   value: unknown,

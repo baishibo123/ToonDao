@@ -9,6 +9,7 @@ import { SelectionPopover } from "@/components/SelectionPopover";
 import { AsidePane } from "@/components/AsidePane";
 import { useSelectionWatcher } from "@/hooks/useSelectionWatcher";
 import { useTermHover } from "@/hooks/useTermHover";
+import { useParkedMarks } from "@/hooks/useParkedMarks";
 import { useShortcuts } from "@/hooks/useShortcuts";
 import { Shortcuts } from "@/components/Shortcuts";
 
@@ -24,6 +25,7 @@ export default function App() {
 
   useSelectionWatcher();
   useTermHover();
+  useParkedMarks();
   useShortcuts();
 
   useEffect(() => {

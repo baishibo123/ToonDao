@@ -1,4 +1,4 @@
-import type { NodeId } from "@/types";
+import type { LaterItem, NodeId } from "@/types";
 import { useStore } from "@/store/useStore";
 import { useUI, type AsideTarget } from "@/store/useUI";
 import { ancestorThreadIds, buildOutline, spineLeaf, threadOf } from "@/lib/outline";
@@ -55,4 +55,33 @@ export function focusNode(nodeId: NodeId): void {
   if (chain.length === 0) return;
   showAsides(chain);
   requestScrollTo(nodeId);
+}
+
+/**
+ * Explain a parked passage now: scroll to it where it sits, then open its lens
+ * beside it. If the passage is inside an aside, the lens opens nested under
+ * that aside, so the breadcrumb still leads home the way it came.
+ *
+ * The item stays on the list until something is actually sent about it —
+ * opening it and changing your mind is not the same as having asked.
+ */
+export function explainParked(item: LaterItem): void {
+  const { nodes, conversationId, settings } = useStore.getState();
+  if (!conversationId || !nodes[item.sourceNodeId]) return;
+
+  focusNode(item.sourceNodeId);
+  const inAside =
+    (threadOf(buildOutline(nodes, conversationId), item.sourceNodeId)?.depth ?? 0) > 0;
+  const { asides, openAside } = useUI.getState();
+  const host = inAside ? asides.at(-1)?.id : undefined;
+  openAside({
+    gesture: {
+      kind: "concept",
+      sourceNodeId: item.sourceNodeId,
+      anchor: item.anchor,
+      turns: settings.conceptLensTurns,
+    },
+    conversationId,
+    ...(host ? { from: host } : {}),
+  });
 }

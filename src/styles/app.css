@@ -910,6 +910,11 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   background: color-mix(in oklab, var(--kind) 13%, transparent);
   color: var(--text);
 }
+/* Already parked: the toggle reads as on. */
+.selpop__action[aria-pressed="true"] {
+  background: color-mix(in oklab, var(--kind) 16%, transparent);
+  color: var(--text);
+}
 .selpop__glyph {
   flex: none;
   width: 16px;
@@ -920,6 +925,13 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 
 /* Hover affordance for clickable terms (§5.1). Painted with the CSS Custom
    Highlight API, so no wrapper elements are injected into React's DOM. */
+/* A parked passage: dotted, because it is a promise rather than a link. */
+::highlight(toondao-later) {
+  text-decoration: underline dotted 1.5px var(--hue-later);
+  text-underline-offset: 3px;
+  background: color-mix(in oklab, var(--hue-later) 9%, transparent);
+}
+
 ::highlight(toondao-term) {
   text-decoration: underline 1.5px var(--accent);
   text-underline-offset: 3px;

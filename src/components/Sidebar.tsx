@@ -1,6 +1,7 @@
 import { useStore } from "@/store/useStore";
 import { useUI } from "@/store/useUI";
 import { Outline } from "@/components/Outline";
+import { LaterList } from "@/components/LaterList";
 
 export function Sidebar() {
   const newConversation = useStore((s) => s.newConversation);
@@ -17,6 +18,8 @@ export function Sidebar() {
       <div className="sidebar__list">
         <Outline />
       </div>
+
+      <LaterList />
 
       <div className="sidebar__foot">
         <button

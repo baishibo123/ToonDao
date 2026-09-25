@@ -98,6 +98,21 @@ export interface Conversation {
   rootId: NodeId | null;
   /** The leaf the composer is currently attached to. */
   activeNodeId: NodeId | null;
+  /**
+   * Passages parked for later, oldest first (src/lib/later.ts). Optional, and
+   * stored on the conversation rather than in a table of its own, so no schema
+   * version bump is needed and older builds simply ignore the field.
+   */
+  later?: LaterItem[];
+}
+
+/** A passage the reader chose not to chase yet. */
+export interface LaterItem {
+  id: string;
+  /** The message the passage is in. */
+  sourceNodeId: NodeId;
+  anchor: TextAnchor;
+  createdAt: number;
 }
 
 export type TemplateId =

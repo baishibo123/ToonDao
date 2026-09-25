@@ -146,3 +146,96 @@
    reports that one is already open. */
 .row__open { opacity: 1; color: var(--kind, var(--accent)); cursor: default; }
 .row__kill:focus-visible { opacity: 1; }
+
+/* ------------------------------------------------------------------
+   Later — what is still owed
+
+   Below the outline and above the footer, always in view while it has
+   anything in it: a queue nobody looks at is a graveyard. Capped in
+   height so a long list scrolls instead of pushing the outline away.
+   ------------------------------------------------------------------ */
+
+.later {
+  flex: none;
+  max-height: 34%;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border);
+  padding: 8px 8px 6px;
+}
+
+.later__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 4px;
+  padding: 0 6px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.later__glyph { color: var(--kind); font-size: 12px; letter-spacing: 0; }
+.later__count {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--kind);
+}
+
+.later__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.later__item {
+  display: flex;
+  align-items: center;
+  border-radius: var(--radius-sm);
+}
+.later__item:hover { background: var(--surface-hover); }
+
+.later__open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 4px 6px;
+  text-align: left;
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+.later__item:hover .later__open { color: var(--text); }
+.later__text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-decoration: underline dotted 1px color-mix(in oklab, var(--kind) 70%, transparent);
+  text-underline-offset: 3px;
+}
+.later__where {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-faint);
+}
+
+.later__drop {
+  flex: none;
+  opacity: 0;
+  padding: 0 6px;
+  font-size: 10px;
+  line-height: 22px;
+  color: var(--text-faint);
+}
+.later__item:hover .later__drop,
+.later__drop:focus-visible { opacity: 1; }
+.later__drop:hover { color: var(--danger); }
