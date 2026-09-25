@@ -155,7 +155,8 @@
 .main {
   position: relative;
   display: flex;
-  flex-direction: column;
+  /* The thread, and beside it the aside pane when one is open. */
+  flex-direction: row;
   min-width: 0;
   min-height: 0;
   background: var(--bg);

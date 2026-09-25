@@ -17,7 +17,7 @@ import { focusNode } from "@/store/focusNode";
  * disclosure triangle, an indentation guide and one selected row — the Finder
  * idiom, because that is the one hierarchical list every user of this app
  * already knows how to drive. What it borrows is the *interaction*: triangles
- * toggle, arrow keys walk, ⌘-less single click selects, double click opens.
+ * toggle, arrow keys walk, a click goes there.
  *
  * Only the open conversation has its nodes in memory, so only it can show its
  * branches. Another conversation's triangle selects it first — which loads its
@@ -36,13 +36,13 @@ export function Outline() {
   const collapsedRows = useUI((s) => s.collapsedRows);
   const toggleRow = useUI((s) => s.toggleRow);
   const setRowCollapsed = useUI((s) => s.setRowCollapsed);
-  const windows = useUI((s) => s.windows);
+  const asides = useUI((s) => s.asides);
 
   const outline = useMemo(() => buildOutline(nodes, conversationId), [nodes, conversationId]);
-  /** Branch roots that already have a window, so a row can say so. */
-  const windowRoots = useMemo(
-    () => new Set(windows.map((w) => w.rootNodeId).filter((id): id is string => Boolean(id))),
-    [windows],
+  /** Branch roots open in the aside pane, so a row can say so. */
+  const asideRoots = useMemo(
+    () => new Set(asides.map((f) => f.rootNodeId).filter((id): id is string => Boolean(id))),
+    [asides],
   );
 
   /** Which row holds the cursor, so the selection follows navigation anywhere. */
@@ -83,7 +83,7 @@ export function Outline() {
   /**
    * One click, one place to go — and `focusNode()` decides where that is. A row
    * for the root spine moves the chat box's cursor; a row for anything else
-   * opens or fronts that thread's window, because the chat box cannot show it.
+   * opens it in the aside pane, because the thread cannot show it.
    *
    * The row's *own* leaf, never the deepest node beneath it: its children are
    * the rows below it and they have their own leaves. Clicking a row must select
@@ -189,7 +189,7 @@ export function Outline() {
                     isOpen={isOpen}
                     toggleRow={toggleRow}
                     selectedThreadId={selectedThreadId}
-                    windowRoots={windowRoots}
+                    asideRoots={asideRoots}
                     onSelect={goToThread}
                   />
                 ))
@@ -207,7 +207,7 @@ interface ThreadRowsProps {
   isOpen: (id: string) => boolean;
   toggleRow: (id: string) => void;
   selectedThreadId: string | null;
-  windowRoots: Set<string>;
+  asideRoots: Set<string>;
   onSelect: (thread: OutlineThread) => void;
 }
 
@@ -217,14 +217,14 @@ function ThreadRows({
   isOpen,
   toggleRow,
   selectedThreadId,
-  windowRoots,
+  asideRoots,
   onSelect,
 }: ThreadRowsProps) {
   const meta = BRANCH_META[thread.kind];
   const hasKids = thread.children.length > 0;
   const expanded = hasKids && isOpen(thread.id);
   const selected = selectedThreadId === thread.id;
-  const inWindow = windowRoots.has(thread.headNodeId);
+  const inAside = asideRoots.has(thread.headNodeId);
 
   return (
     <>
@@ -258,7 +258,7 @@ function ThreadRows({
           type="button"
           className="row__label"
           title={`${meta.label} · ${meta.blurb}${
-            thread.depth > 0 ? "\nOpens in its own window" : ""
+            thread.depth > 0 ? "\nOpens beside the thread" : ""
           }`}
           onClick={() => onSelect(thread)}
         >
@@ -272,8 +272,8 @@ function ThreadRows({
           </span>
         </button>
 
-        {inWindow ? (
-          <span className="row__open" title="Open in a window" aria-label="Open in a window">
+        {inAside ? (
+          <span className="row__open" title="Open beside the thread" aria-label="Open beside the thread">
             ⧉
           </span>
         ) : null}
@@ -288,7 +288,7 @@ function ThreadRows({
               isOpen={isOpen}
               toggleRow={toggleRow}
               selectedThreadId={selectedThreadId}
-              windowRoots={windowRoots}
+              asideRoots={asideRoots}
               onSelect={onSelect}
             />
           ))

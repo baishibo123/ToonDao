@@ -41,14 +41,14 @@ const GESTURE_COPY: Record<
  * One composer, two surfaces.
  *
  * Rendered bare it is the thread's composer, attached to the app's active leaf.
- * Rendered inside a branch window (which provides a `Surface`) it is that
- * window's composer: it reads that window's pending gesture, submits detached
- * so the thread behind it does not move, and binds the branch to the window on
- * the first send. Both routes go through `planSubmission()` — the surface
+ * Rendered inside an aside (which provides a `Surface`) it is that aside's
+ * composer: it reads that aside's pending gesture, submits detached so the
+ * thread beside it does not move, and binds the branch to the aside on the
+ * first send. Both routes go through `planSubmission()` — the surface
  * changes where a message lands, never what gets sent.
  */
 export function Composer() {
-  const { windowId } = useSurface();
+  const { asideId } = useSurface();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [text, setText] = useState("");
   /** null means "whatever this branch inherits" (§8 P3). */
@@ -67,22 +67,22 @@ export function Composer() {
   const providers = useStore((s) => s.settings.providers);
   const activeProviderId = useStore((s) => s.settings.activeProviderId);
 
-  const win = useUI((s) => (windowId ? s.windows.find((w) => w.id === windowId) : undefined));
+  const frame = useUI((s) => (asideId ? s.asides.find((f) => f.id === asideId) : undefined));
   const globalPending = useUI((s) => s.pending);
   const setGlobalPending = useUI((s) => s.setPending);
   const setConceptTurns = useUI((s) => s.setConceptTurns);
-  const setBranchWindowPending = useUI((s) => s.setBranchWindowPending);
-  const setBranchWindowTurns = useUI((s) => s.setBranchWindowTurns);
-  const attachBranchWindow = useUI((s) => s.attachBranchWindow);
+  const setAsidePending = useUI((s) => s.setAsidePending);
+  const setAsideTurns = useUI((s) => s.setAsideTurns);
+  const attachAside = useUI((s) => s.attachAside);
   const focusNonce = useUI((s) => s.composerFocusNonce);
-  const key = draftKey(windowId);
+  const key = draftKey(asideId);
   const showDraftInspector = useUI((s) => s.openInspectors.has(key));
 
-  const pending: PendingGesture | null = windowId ? (win?.pending ?? null) : globalPending;
-  const activeLeafId = windowId ? (win?.activeNodeId ?? null) : appActiveNodeId;
+  const pending: PendingGesture | null = asideId ? (frame?.pending ?? null) : globalPending;
+  const activeLeafId = asideId ? (frame?.activeNodeId ?? null) : appActiveNodeId;
 
   const setPending = (next: PendingGesture | null) => {
-    if (windowId) setBranchWindowPending(windowId, next);
+    if (asideId) setAsidePending(asideId, next);
     else setGlobalPending(next);
   };
 
@@ -103,20 +103,20 @@ export function Composer() {
 
   const sendable = planIsSendable(plan, pending) && !streaming && Boolean(conversationId);
 
-  // The thread's composer answers the global focus request; a window's answers
+  // The thread's composer answers the global focus request; an aside's answers
   // its own gesture changing, which is what docking a quote into it looks like.
   useEffect(() => {
-    if (windowId) return;
+    if (asideId) return;
     textareaRef.current?.focus();
-  }, [windowId, focusNonce, globalPending]);
+  }, [asideId, focusNonce, globalPending]);
 
   useEffect(() => {
-    if (!windowId) return;
+    if (!asideId) return;
     textareaRef.current?.focus();
-  }, [windowId, win?.pending]);
+  }, [asideId, frame?.pending]);
 
-  // "Compare with…" arrives as seed text on the window that opened for it.
-  const seed = win?.seed;
+  // "Compare with…" arrives as seed text on the aside that opened for it.
+  const seed = frame?.seed;
   useEffect(() => {
     if (!seed) return;
     setText(seed);
@@ -170,14 +170,14 @@ export function Composer() {
       policy: plan.policy,
       origin: plan.origin,
       ...(modelOverride ? { model: modelOverride } : {}),
-      ...(windowId
+      ...(asideId
         ? {
             detached: true,
-            // Bind on the first send — after that the window already owns the
+            // Bind on the first send — after that the aside already owns the
             // branch and only its leaf moves. Bound at commit rather than on
-            // completion so the reply streams into the window live.
+            // completion so the reply streams into the aside live.
             onCommitted: ({ userNodeId, assistantNodeId }) =>
-              attachBranchWindow(windowId, win?.rootNodeId ?? userNodeId, assistantNodeId),
+              attachAside(asideId, frame?.rootNodeId ?? userNodeId, assistantNodeId),
           }
         : {}),
     });
@@ -188,10 +188,10 @@ export function Composer() {
 
   const gesture = pending ? GESTURE_COPY[pending.kind] : null;
   const sourceNode = pending ? nodes[pending.sourceNodeId] : undefined;
-  // Inside a window the header already says which gesture this is, in more
+  // Inside an aside the header already says which gesture this is, in more
   // detail and next to the passage itself. Repeating it above the textarea
-  // would spend a third of a small window saying it twice.
-  const showGestureBand = Boolean(pending && gesture && !windowId);
+  // would say it twice.
+  const showGestureBand = Boolean(pending && gesture && !asideId);
 
   return (
     <div className="composer">
@@ -247,7 +247,7 @@ export function Composer() {
               if (e.key === "Escape" && pending) {
                 e.preventDefault();
                 // Handled here, so the global Escape chain does not also fire
-                // and close the window (or stop a stream) on the same keypress.
+                // and close the aside (or stop a stream) on the same keypress.
                 e.stopPropagation();
                 setPending(null);
               }
@@ -291,8 +291,8 @@ export function Composer() {
                   aria-label="Fewer turns"
                   disabled={pending.turns <= 1}
                   onClick={() =>
-                    windowId
-                      ? setBranchWindowTurns(windowId, pending.turns - 1)
+                    asideId
+                      ? setAsideTurns(asideId, pending.turns - 1)
                       : setConceptTurns(pending.turns - 1)
                   }
                 >
@@ -304,8 +304,8 @@ export function Composer() {
                   aria-label="More turns"
                   disabled={pending.turns >= 5}
                   onClick={() =>
-                    windowId
-                      ? setBranchWindowTurns(windowId, pending.turns + 1)
+                    asideId
+                      ? setAsideTurns(asideId, pending.turns + 1)
                       : setConceptTurns(pending.turns + 1)
                   }
                 >
@@ -316,7 +316,7 @@ export function Composer() {
             </span>
           ) : null}
 
-          {plan.forks && !windowId ? (
+          {plan.forks && !asideId ? (
             <span className="msg__branchcount">branches off the source message</span>
           ) : null}
 
@@ -342,7 +342,7 @@ export function Composer() {
             </label>
           ) : null}
 
-          {windowId ? null : (
+          {asideId ? null : (
             <span className="composer__hint">
               <kbd>Enter</kbd> send · <kbd>Shift</kbd>+<kbd>Enter</kbd> newline
             </span>

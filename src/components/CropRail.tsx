@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import type { ConversationNode } from "@/types";
 import { cropBoundaries, type CropBoundary } from "@/lib/anchor";
 import { useUI } from "@/store/useUI";
+import { useSurface } from "@/components/Surface";
 import { useStartGesture } from "@/hooks/useStartGesture";
 
 /**
@@ -37,11 +38,12 @@ export function CropRail({ node, contentRef }: CropRailProps) {
 
   const setCropHover = useUI((s) => s.setCropHover);
   const startGesture = useStartGesture();
-  // A crop now lands in a window, so "this crop is docked somewhere" is a
-  // question about the open windows rather than about the composer.
+  const { asideId } = useSurface();
+  // A crop lands in an aside, so "this crop is pending somewhere" is a question
+  // about the open asides rather than about the composer.
   const pendingIsThisCrop = useUI((s) =>
-    s.windows.some(
-      (w) => w.pending?.kind === "crop" && w.pending.sourceNodeId === node.id,
+    s.asides.some(
+      (f) => f.pending?.kind === "crop" && f.pending.sourceNodeId === node.id,
     ),
   );
 
@@ -131,12 +133,9 @@ export function CropRail({ node, contentRef }: CropRailProps) {
         setHoverIndex(null);
         setCropHover(null);
       }}
-      onClick={(e) => {
+      onClick={() => {
         if (hoverIndex === null) return;
         const cut = cuts[hoverIndex];
-        // The rail is a thin gutter, so the cut line itself is the rect the
-        // window should appear beside.
-        const rail = e.currentTarget.getBoundingClientRect();
         startGesture(
           {
             kind: "crop",
@@ -145,14 +144,8 @@ export function CropRail({ node, contentRef }: CropRailProps) {
             blockPath: cut.blockPath,
             discardedChars: node.content.length - cut.charOffset,
           },
-          {
-            near: {
-              top: rail.top + cut.y,
-              bottom: rail.top + cut.y,
-              left: rail.left,
-              right: rail.right,
-            },
-          },
+          // A crop made inside an aside nests under it rather than replacing it.
+          asideId ? { asideId } : {},
         );
         setCropHover(null);
         setHoverIndex(null);

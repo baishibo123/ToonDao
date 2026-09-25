@@ -6,10 +6,6 @@ export function Sidebar() {
   const newConversation = useStore((s) => s.newConversation);
 
   const setSettingsOpen = useUI((s) => s.setSettingsOpen);
-  // Selected whole rather than mapped: a selector that builds a new array on
-  // every call re-renders on every unrelated store write.
-  const windows = useUI((s) => s.windows);
-  const closeWindow = useUI((s) => s.closeBranchWindow);
 
   return (
     <aside className="sidebar">
@@ -23,16 +19,6 @@ export function Sidebar() {
       </div>
 
       <div className="sidebar__foot">
-        {windows.length > 0 ? (
-          <button
-            type="button"
-            className="btn btn--wide btn--ghost"
-            onClick={() => windows.forEach((w) => closeWindow(w.id))}
-            title="Close every open branch window. The branches stay in the tree."
-          >
-            Close {windows.length} branch window{windows.length === 1 ? "" : "s"}
-          </button>
-        ) : null}
         <button
           type="button"
           className="btn btn--wide"

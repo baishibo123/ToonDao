@@ -18,14 +18,14 @@ interface MessageViewProps {
 
 export const MessageView = memo(function MessageView({ node, turn }: MessageViewProps) {
   const contentRef = useRef<HTMLDivElement>(null);
-  const { windowId } = useSurface();
+  const { asideId } = useSurface();
   const nodes = useStore((s) => s.nodes);
   const preferredChild = useStore((s) => s.preferredChild);
   const streamingNodeId = useStore((s) => s.streamingNodeId);
   const regenerate = useStore((s) => s.regenerate);
   const deleteSubtree = useStore((s) => s.deleteSubtree);
   const assemble = useStore((s) => s.assemble);
-  const setBranchWindowActive = useUI((s) => s.setBranchWindowActive);
+  const setAsideActive = useUI((s) => s.setAsideActive);
 
   const openInspector = useUI((s) => s.openInspectors.has(node.id));
   const cropHover = useUI((s) => (s.cropHover?.nodeId === node.id ? s.cropHover.charOffset : null));
@@ -39,7 +39,7 @@ export const MessageView = memo(function MessageView({ node, turn }: MessageView
    * belong to that one.
    */
   const goTo = (id: string) => {
-    if (windowId) setBranchWindowActive(windowId, spineLeaf(nodes, id, preferredChild));
+    if (asideId) setAsideActive(asideId, spineLeaf(nodes, id, preferredChild));
     else focusNode(id);
   };
   /**
@@ -90,7 +90,7 @@ export const MessageView = memo(function MessageView({ node, turn }: MessageView
   return (
     <article
       className={`msg msg--${node.role}`}
-      id={messageDomId(node.id, windowId)}
+      id={messageDomId(node.id, asideId)}
       data-node-id={node.id}
     >
       <div className="msg__rail">
@@ -163,11 +163,11 @@ export const MessageView = memo(function MessageView({ node, turn }: MessageView
                 className="btn btn--ghost btn--sm"
                 onClick={() =>
                   void regenerate(node.id, {
-                    detached: Boolean(windowId),
-                    ...(windowId
+                    detached: Boolean(asideId),
+                    ...(asideId
                       ? {
                           onCommitted: (id: string) =>
-                            setBranchWindowActive(windowId, id),
+                            setAsideActive(asideId, id),
                         }
                       : {}),
                   })
@@ -247,13 +247,13 @@ export const MessageView = memo(function MessageView({ node, turn }: MessageView
 function ForkMark({ fork }: { fork: ConversationNode }) {
   const kind = fork.origin?.kind ?? "continuation";
   const meta = BRANCH_META[kind];
-  const open = useUI((s) => s.windows.some((w) => w.rootNodeId === fork.id));
+  const open = useUI((s) => s.asides.some((f) => f.rootNodeId === fork.id));
   return (
     <button
       type="button"
       className={`fork${open ? " fork--open" : ""}`}
       style={{ ["--kind" as string]: branchColor(kind) }}
-      title={`${meta.label} — ${meta.blurb}\n${open ? "Its window is open" : "Opens in its own window"}`}
+      title={`${meta.label} — ${meta.blurb}\n${open ? "It is open beside the thread" : "Opens beside the thread"}`}
       onClick={() => focusNode(fork.id)}
     >
       <span className="fork__glyph" aria-hidden>

@@ -40,14 +40,14 @@ export function useSelectionWatcher(): void {
           setSelection(null);
           return;
         }
-        // Which surface the passage was read in. A quote reply started inside a
-        // branch window belongs to that window's composer, not the thread's.
-        const windowId = target?.closest?.("[data-window-id]")?.getAttribute("data-window-id");
+        // Which surface the passage was read in. A quote reply started inside an
+        // aside belongs to that aside's composer, not the thread's.
+        const asideId = target?.closest?.("[data-aside-id]")?.getAttribute("data-aside-id");
         setSelection({
           nodeId: found.nodeId,
           anchor: found.anchor,
           rect: found.rect,
-          ...(windowId ? { windowId } : {}),
+          ...(asideId ? { asideId } : {}),
         });
       });
     };

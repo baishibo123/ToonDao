@@ -12,8 +12,8 @@ export interface Shortcut {
 export const SHORTCUTS: Shortcut[] = [
   { keys: "Enter", label: "Send" },
   { keys: "Shift ⏎", label: "Newline" },
-  { keys: "Esc", label: "Drop the pending gesture, or close what is open" },
-  { keys: "⌘ ⇧ W", label: "Close the front branch window" },
+  { keys: "Esc", label: "Drop the pending gesture, or back out of what is open" },
+  { keys: "⌘ ⇧ W", label: "Close the side conversation" },
   { keys: "⌘ ⇧ N", label: "New conversation" },
   { keys: "⌘ ⇧ I", label: "Inspect the payload of the last message" },
   { keys: "⌘ ⇧ ,", label: "Settings" },
@@ -44,13 +44,14 @@ export function useShortcuts(): void {
       if (e.key === "Escape") {
         // One key, unwound in the order the user layered it. A composer holding
         // a gesture stops this chain itself, so Escape there drops the gesture
-        // without also closing the window it was typed into.
+        // without also closing the aside it was typed into.
         if (ui.selection) return void ui.setSelection(null);
         if (ui.pending) return void ui.setPending(null);
         if (ui.settingsOpen) return void ui.setSettingsOpen(false);
         if (ui.shortcutsOpen) return void ui.setShortcutsOpen(false);
-        const focused = focusedWindowId();
-        if (focused) return void ui.closeBranchWindow(focused);
+        // An aside backs out one level, the way the breadcrumb does.
+        if (ui.asides.length > 1) return void ui.popAsidesTo(ui.asides.at(-2)!.id);
+        if (ui.asides.length === 1) return void ui.closeAsides();
         if (store.streamingNodeId) return void store.stop();
         return;
       }
@@ -87,19 +88,11 @@ export function useShortcuts(): void {
       if (!mod || !e.shiftKey) return;
 
       switch (e.key.toLowerCase()) {
-        case "w": {
-          // The front window, or the one the caret is in.
-          const focused = focusedWindowId();
-          const front = ui.windows.reduce<typeof ui.windows[number] | null>(
-            (top, w) => (!top || w.z > top.z ? w : top),
-            null,
-          );
-          const target = focused ?? front?.id;
-          if (!target) break;
+        case "w":
+          if (ui.asides.length === 0) break;
           e.preventDefault();
-          ui.closeBranchWindow(target);
+          ui.closeAsides();
           break;
-        }
         case "n":
           e.preventDefault();
           void store.newConversation();
@@ -123,13 +116,6 @@ export function useShortcuts(): void {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
-}
-
-/** The branch window the caret is in, if any. */
-function focusedWindowId(): string | null {
-  const el = document.activeElement;
-  if (!(el instanceof HTMLElement)) return null;
-  return el.closest("[data-window-id]")?.getAttribute("data-window-id") ?? null;
 }
 
 function isTyping(target: EventTarget | null): boolean {

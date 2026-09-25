@@ -20,7 +20,7 @@ import {
   threadOf,
   type OutlineThread,
 } from "@/lib/outline";
-import { gestureOpensWindow, planSubmission } from "@/lib/draft";
+import { gestureOpensAside, planSubmission } from "@/lib/draft";
 import type { BranchKind, ConversationNode, NodeId } from "@/types";
 import type { NodeMap } from "@/lib/tree";
 import { TreeFixture } from "./helpers";
@@ -230,12 +230,12 @@ describe("which gestures open a window (requirement 2)", () => {
   const anchor = { start: 0, end: 3, text: "bit" };
 
   it("the three that fork open one", () => {
-    expect(gestureOpensWindow({ kind: "isolated", sourceNodeId: "n1", anchor })).toBe(true);
-    expect(gestureOpensWindow({ kind: "concept", sourceNodeId: "n1", anchor, turns: 2 })).toBe(
+    expect(gestureOpensAside({ kind: "isolated", sourceNodeId: "n1", anchor })).toBe(true);
+    expect(gestureOpensAside({ kind: "concept", sourceNodeId: "n1", anchor, turns: 2 })).toBe(
       true,
     );
     expect(
-      gestureOpensWindow({
+      gestureOpensAside({
         kind: "crop",
         sourceNodeId: "n1",
         charOffset: 10,
@@ -246,8 +246,8 @@ describe("which gestures open a window (requirement 2)", () => {
   });
 
   it("a quote reply and an ordinary turn do not", () => {
-    expect(gestureOpensWindow({ kind: "quote", sourceNodeId: "n1", anchor })).toBe(false);
-    expect(gestureOpensWindow(null)).toBe(false);
+    expect(gestureOpensAside({ kind: "quote", sourceNodeId: "n1", anchor })).toBe(false);
+    expect(gestureOpensAside(null)).toBe(false);
   });
 });
 
@@ -372,7 +372,7 @@ describe("a window is one linear spine", () => {
     expect(spineChild(nodes, reply.id)?.id).toBe(on.user.id);
     // ...and everything else off that message is a window of its own.
     expect(forksOf(nodes, reply.id).map((n) => n.id)).toEqual([lens.user.id, crop.user.id]);
-    // A second ordinary continuation is a fork too: two lines, two windows.
+    // A second ordinary continuation is a fork too: two lines, two panes.
     const second = fork(t, reply, "continuation", "and another thing");
     const after = mapOf(t);
     expect(spineChild(after, reply.id)?.id).toBe(on.user.id);
@@ -408,7 +408,7 @@ describe("the fork gesture", () => {
     expect(plan.policy).toEqual({ kind: "full-ancestry" });
     expect(plan.origin).toEqual({ kind: "continuation", sourceNodeId: "n4" });
     expect(plan.forks).toBe(true);
-    expect(gestureOpensWindow({ kind: "fork", sourceNodeId: "n4" })).toBe(true);
+    expect(gestureOpensAside({ kind: "fork", sourceNodeId: "n4" })).toBe(true);
   });
 
   it("is named by its ask, since it points at no passage", () => {

@@ -96,15 +96,14 @@ export function SelectionPopover() {
 
   const anchor = selection.anchor;
   /**
-   * Every action leaves through here. Whether it opens a window or docks into a
+   * Every action leaves through here. Whether it opens an aside or docks into a
    * composer is `useStartGesture()`'s decision, not this toolbar's — the
    * toolbar's job is to say what the user pointed at and what they asked for.
    */
   const start = (gesture: PendingGesture, seed?: string) =>
     startGesture(gesture, {
-      near: selection.rect,
       ...(seed ? { seed } : {}),
-      ...(selection.windowId ? { windowId: selection.windowId } : {}),
+      ...(selection.asideId ? { asideId: selection.asideId } : {}),
     });
 
   return (

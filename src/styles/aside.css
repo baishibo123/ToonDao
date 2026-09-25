@@ -1,0 +1,165 @@
+/* ------------------------------------------------------------------
+   The aside pane — side conversations, docked beside the thread.
+
+   A margin, not a window. A floating panel covers the passage it is
+   about and has to be dragged out of the way; a margin sits beside the
+   text, so the question and the passage that raised it are read side by
+   side. The pane carries its gesture's hue on its top edge, the same hue
+   the transcript's marks and the sidebar's rows use (policyMeta.ts).
+   ------------------------------------------------------------------ */
+
+.asidepane {
+  flex: 0 0 var(--aside-w);
+  min-width: 0;
+  display: flex;
+  padding: 12px 14px 14px 0;
+  animation: asidein 160ms cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+@keyframes asidein {
+  from { opacity: 0; transform: translateX(12px); }
+  to { opacity: 1; transform: none; }
+}
+
+.aside {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: color-mix(in oklab, var(--bg-raised) 94%, transparent);
+  border: 1px solid var(--border);
+  border-top: 2px solid var(--kind, var(--accent));
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-panel);
+  overflow: hidden;
+}
+.aside[hidden] { display: none; }
+/* Focus stays visible, in the aside's own hue, so "this has the keyboard"
+   and "this is the lens" are one mark rather than two. */
+.aside:focus-visible {
+  outline: none;
+  box-shadow:
+    var(--shadow-panel),
+    0 0 0 2px color-mix(in oklab, var(--kind, var(--accent)) 55%, transparent);
+}
+
+/* -- header: the way back, then the way out ------------------------- */
+
+.aside__head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 8px 6px 8px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in oklab, var(--kind, var(--accent)) 7%, transparent);
+}
+
+.crumbs {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: 11.5px;
+}
+.crumbs__step { display: inline-flex; align-items: center; min-width: 0; }
+.crumbs__sep { color: var(--text-faint); padding: 0 1px; }
+.crumb {
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: var(--text-dim);
+  transition: background var(--transition), color var(--transition);
+}
+.crumb:hover { background: var(--surface-hover); color: var(--text); }
+
+.aside__btn {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--text-faint);
+  transition: background var(--transition), color var(--transition);
+}
+.aside__btn:hover { background: var(--surface-hover); color: var(--text); }
+
+/* -- what this aside is about -------------------------------------- */
+
+.aside__about {
+  flex: none;
+  padding: 12px 16px 10px;
+  border-bottom: 1px solid color-mix(in oklab, var(--border) 60%, transparent);
+}
+.aside__title {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-family: var(--font-display);
+  font-size: 15.5px;
+  font-weight: 550;
+  line-height: 1.35;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.aside__glyph { flex: none; font-size: 13px; color: var(--kind, var(--accent)); }
+.aside__source {
+  margin: 3px 0 0 21px;
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+
+.aside__pending {
+  margin: 0;
+  padding: 18px 18px 0;
+  font-size: 12.5px;
+  color: var(--text-faint);
+}
+
+/* -- the aside's own conversation ---------------------------------- */
+
+/* A narrower column than the thread's, so less air around it. */
+.aside .transcript { padding: 10px 0 16px; }
+.aside .transcript__inner { max-width: none; padding: 0 16px; }
+
+.aside__composer {
+  flex: none;
+  max-height: 70%;
+  overflow-y: auto;
+  border-top: 1px solid var(--border);
+}
+.aside__composer .composer {
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  backdrop-filter: none;
+  padding: 10px 14px 12px;
+}
+.aside__composer .composer__inner {
+  max-width: none;
+  display: flex;
+  flex-direction: column;
+}
+/* What the aside will carry sits directly above the box you type into. It
+   is what goes out with your message, so it is read in that order. */
+.aside__composer .inspector { order: -1; margin: 0 0 9px; }
+.aside__composer .inspector__body { max-height: 38vh; }
+
+/* Too narrow for two columns: the pane overlays the thread rather than
+   squeezing it into a column nobody can read. */
+@media (max-width: 1100px) {
+  .asidepane {
+    position: absolute;
+    inset: 0 0 0 auto;
+    width: min(540px, 94%);
+    z-index: 20;
+  }
+}

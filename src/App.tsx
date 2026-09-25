@@ -6,7 +6,7 @@ import { Transcript } from "@/components/Transcript";
 import { Composer } from "@/components/Composer";
 import { Settings } from "@/components/Settings";
 import { SelectionPopover } from "@/components/SelectionPopover";
-import { BranchWindows } from "@/components/BranchWindows";
+import { AsidePane } from "@/components/AsidePane";
 import { useSelectionWatcher } from "@/hooks/useSelectionWatcher";
 import { useTermHover } from "@/hooks/useTermHover";
 import { useShortcuts } from "@/hooks/useShortcuts";
@@ -74,9 +74,9 @@ export default function App() {
           </div>
           <Composer />
         </div>
+        {/* Side conversations sit beside the thread, never over it. */}
+        <AsidePane />
       </main>
-      {/* Branches float in front of the thread, behind the toolbar and modals. */}
-      <BranchWindows />
       <SelectionPopover />
       <Settings />
       <Shortcuts />

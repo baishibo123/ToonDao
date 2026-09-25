@@ -152,17 +152,18 @@ function cutAnchor(charOffset: number, blockPath: string): TextAnchor {
 }
 
 /**
- * Does this gesture deserve a window of its own?
+ * Does this gesture leave the conversation you are reading — and so open an
+ * aside beside it, rather than docking into the composer you are typing in?
  *
  * Derived from `plan.forks` rather than re-listed as a set of kinds, because it
  * is the same question asked in the UI's vocabulary: a gesture that opens a
- * branch opens a window, and a gesture that continues the path you are reading
- * stays in the composer you are already typing in (§5.4 — a quote reply is the
- * messaging-app gesture, and messaging apps do not open a window for a reply).
- * Keeping the two answers derived from one another means a gesture can never
- * fork in the payload while behaving like a reply on screen.
+ * branch opens an aside, and a gesture that continues the path you are reading
+ * stays in its composer (§5.4 — a quote reply is the messaging-app gesture, and
+ * messaging apps do not open anything for a reply). Keeping the two answers
+ * derived from one another means a gesture can never fork in the payload while
+ * behaving like a reply on screen.
  */
-export function gestureOpensWindow(pending: PendingGesture | null): boolean {
+export function gestureOpensAside(pending: PendingGesture | null): boolean {
   if (!pending) return false;
   return planSubmission({ text: "", pending, activeLeafId: null }).forks;
 }

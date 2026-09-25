@@ -40,6 +40,8 @@
      placed clear of the outline, because the outline is how you get back to
      the branches and covering it on open would be a strange first act. */
   --sidebar-w: 248px;
+  /* The aside pane: wide enough to read, never wider than the thread. */
+  --aside-w: clamp(380px, 42%, 580px);
 
   --radius: 8px;
   --radius-sm: 5px;
