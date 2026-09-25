@@ -115,7 +115,7 @@ export function assembleContext(
 /**
  * Walk `parentId` to root, reverse.
  *
- * DECISION (see README "Design decisions"): the walk stops at — and includes —
+ * DECISION (docs/decisions.md, A-1): the walk stops at — and includes —
  * a node whose own policy is `isolated`. An isolated node declared itself a
  * fresh start; letting its descendants silently re-inherit the ancestry it
  * deliberately excluded would make §5.3 a lie one turn later. Isolated nodes

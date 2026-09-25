@@ -16,7 +16,7 @@ import {
  * SPEC §7 suggests the hast route; mdast carries the same `position` data with
  * one fewer lossy hop, and the leaf indices are read straight off the tree that
  * anchor.ts annotated, which removes the possibility of the renderer and the
- * resolver disagreeing. Recorded as a deviation in the README.
+ * resolver disagreeing. Recorded as decision A-10 in docs/decisions.md.
  *
  * Every block carries data-src-start/data-src-end/data-block-path.
  * Every text-bearing leaf carries data-leaf-index.
