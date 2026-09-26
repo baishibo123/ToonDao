@@ -18,6 +18,15 @@
         "PATH=/opt/homebrew/bin:$PATH exec node dev/mock-llm.mjs"
       ],
       "port": 8787
+    },
+    {
+      "name": "claude-bridge",
+      "runtimeExecutable": "/bin/sh",
+      "runtimeArgs": [
+        "-c",
+        "PATH=/opt/homebrew/bin:$HOME/.local/bin:$PATH exec node bridge/index.mjs"
+      ],
+      "port": 8788
     }
   ]
 }
