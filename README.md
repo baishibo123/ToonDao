@@ -74,6 +74,12 @@ may search and read the web, **Just this** and **Lost me here** never can, and
 ordinary replies can if you turn on *Let replies look things up*. Every lookup is
 listed above the reply it went into.
 
+The model picker lists versions by name (`claude-opus-5-5`, `claude-opus-5`, …);
+the default, `opus`, is whatever newest Opus your installed Claude Code supports,
+and each reply records which model actually answered. A newer model can need a
+newer Claude Code — if a reply says so, run `claude update`; the bridge picks up
+the new version without a restart.
+
 It costs nothing per token, but every request counts toward your subscription's
 usage window, which is shared with the rest of your Claude Code use; the
 composer shows how much of it is spent. Claude Code also adds a few hundred

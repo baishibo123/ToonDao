@@ -69,9 +69,11 @@ interface InspectorProps {
   harness?: "claude-code";
   toolUse?: ToolUse[];
   usage?: Usage;
+  /** The model that answered, for a reply. */
+  model?: string;
 }
 
-export function Inspector({ policy, messages, historical, harness, toolUse, usage }: InspectorProps) {
+export function Inspector({ policy, messages, historical, harness, toolUse, usage, model }: InspectorProps) {
   const shown = useMemo(
     () => (historical ? parsePayload(historical) : messages),
     [historical, messages],
@@ -95,8 +97,8 @@ export function Inspector({ policy, messages, historical, harness, toolUse, usag
       <p className="inspector__note">{policyExplanation(policy)}</p>
       {harness === "claude-code" ? (
         <p className="inspector__note inspector__note--bridge">
-          Sent through Claude Code, which adds a few hundred tokens of its own context that
-          this record cannot show.
+          {model ? `Answered by ${model}, sent` : "Sent"} through Claude Code, which adds a few
+          hundred tokens of its own context that this record cannot show.
           {toolUse?.length
             ? ` While answering it also used: ${toolUse.map((t) => `${t.name} (${t.query})`).join("; ")}.`
             : " It used no tools."}

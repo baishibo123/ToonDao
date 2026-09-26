@@ -235,6 +235,7 @@ export const MessageView = memo(function MessageView({ node }: MessageViewProps)
             {...(node.harness ? { harness: node.harness } : {})}
             {...(node.toolUse ? { toolUse: node.toolUse } : {})}
             {...(node.usage ? { usage: node.usage } : {})}
+            {...(node.role === "assistant" && node.model ? { model: node.model } : {})}
           />
         ) : null}
       </div>

@@ -61,6 +61,9 @@ export function createClaudeCodeProvider(config: ProviderConfig): Provider {
           case "usage":
             yield { text: "", usage: frame.usage };
             break;
+          case "model":
+            yield { text: "", model: frame.model };
+            break;
         }
       }
     },

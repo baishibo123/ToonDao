@@ -131,6 +131,15 @@ export function isSafeModel(model: string): boolean {
   return /^[a-z0-9][a-z0-9._-]{0,63}$/i.test(model);
 }
 
+/** Why a model name was refused, in words that point at the fix. */
+export function modelProblem(model: string): string | null {
+  if (isSafeModel(model)) return null;
+  if (model.includes("/")) {
+    return `"${model}" is another provider's model name (OpenRouter's, by the look of it). Claude Code takes names like claude-opus-5-5, or an alias such as opus.`;
+  }
+  return `Not a model name: ${model}`;
+}
+
 /* ------------------------------------------------------------------ */
 /* Messages → one stream-json user message                             */
 /* ------------------------------------------------------------------ */
@@ -299,7 +308,9 @@ export function createSseMapper() {
 
     if (type === "system" && event.subtype === "init") {
       summary.apiKeySource = typeof event.apiKeySource === "string" ? event.apiKeySource : null;
-      return [];
+      return typeof event.model === "string" && event.model
+        ? [sseEvent(BRIDGE_EVENT.model, { model: event.model })]
+        : [];
     }
 
     if (type === "stream_event") {
@@ -375,6 +386,13 @@ function resultError(event: Record<string, unknown>): string {
     return "Claude Code stopped after the most tool steps a reply may take here. The answer so far is above.";
   }
   const text = typeof event.result === "string" ? event.result.trim() : "";
+  if (/does not support this model/i.test(text)) {
+    // The server names the version it needs, and lately how to get it too; what
+    // it cannot know is that the bridge picks up the new Claude Code by itself.
+    return /claude update/i.test(text)
+      ? `${text} No need to restart the bridge.`
+      : `${text} Update Claude Code with \`claude update\`, then send again — no need to restart the bridge.`;
+  }
   return text || `Claude Code ended with ${String(event.subtype ?? "an error")}.`;
 }
 
@@ -586,9 +604,8 @@ async function chat(
     return json(res, 400, { error: { message: "`messages` must be an array of text messages." } }, cors);
   }
   const model = typeof body.model === "string" && body.model ? body.model : "opus";
-  if (!isSafeModel(model)) {
-    return json(res, 400, { error: { message: `Not a model name: ${model}` } }, cors);
-  }
+  const problem = modelProblem(model);
+  if (problem) return json(res, 400, { error: { message: problem } }, cors);
   const extension = (body.toondao ?? {}) as Record<string, unknown>;
   const toolScope: ToolScope = extension.toolScope === "research" ? "research" : "none";
 

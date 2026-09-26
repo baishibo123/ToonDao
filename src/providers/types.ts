@@ -21,6 +21,8 @@ export interface Delta {
   rateLimit?: RateLimit;
   /** Token usage for the whole request, reported once at the end. */
   usage?: Usage;
+  /** The model that actually answered, when the provider resolves aliases. */
+  model?: string;
 }
 
 export interface Provider {

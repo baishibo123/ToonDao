@@ -43,14 +43,27 @@ describe("mergeProviders", () => {
     expect(openai.model).toBe("some-other-model");
   });
 
-  it("adopts new knownModels only when the user has none of their own", () => {
+  it("adopts models a later preset adds, without dropping any the profile had", () => {
     const withNone = mergeProviders([{ ...preset("openai"), knownModels: [] }]);
     expect(withNone.find((p) => p.id === "openai")!.knownModels).toEqual(
       preset("openai").knownModels,
     );
 
     const withOwn = mergeProviders([{ ...preset("openai"), knownModels: ["only-mine"] }]);
-    expect(withOwn.find((p) => p.id === "openai")!.knownModels).toEqual(["only-mine"]);
+    expect(withOwn.find((p) => p.id === "openai")!.knownModels).toEqual([
+      ...preset("openai").knownModels,
+      "only-mine",
+    ]);
+  });
+
+  it("brings a newer model to a profile saved under an older preset", () => {
+    // The Claude Code preset as it first shipped, before explicit versions.
+    const saved = { ...preset("claude-code"), knownModels: ["opus", "sonnet", "haiku", "fable"] };
+    const known = mergeProviders([saved]).find((p) => p.id === "claude-code")!.knownModels;
+    expect(known).toContain("claude-opus-5-5");
+    expect(known.indexOf("claude-opus-5-5")).toBeLessThan(known.indexOf("opus"));
+    expect(known).toContain("fable");
+    expect(new Set(known).size).toBe(known.length);
   });
 
   it("keeps a provider the user added themselves, at the end", () => {

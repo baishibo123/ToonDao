@@ -12,6 +12,7 @@ import {
   createSseMapper,
   guardRequest,
   isSafeModel,
+  modelProblem,
   summarizeToolInput,
   toRateLimit,
   toStreamInput,
@@ -102,6 +103,20 @@ describe("model names", () => {
     for (const model of ["--dangerously-skip-permissions", "-p", "opus --tools default", "", "a".repeat(80)]) {
       expect(isSafeModel(model)).toBe(false);
     }
+  });
+});
+
+describe("model problems, in words that point at the fix", () => {
+  it("recognises another provider's model name", () => {
+    expect(modelProblem("anthropic/claude-opus-5")).toMatch(/another provider's model name/);
+    expect(modelProblem("anthropic/claude-opus-5")).toMatch(/claude-opus-5-5/);
+  });
+
+  it("refuses a flag plainly, and passes a real name", () => {
+    expect(modelProblem("--dangerously-skip-permissions")).toBe(
+      "Not a model name: --dangerously-skip-permissions",
+    );
+    expect(modelProblem("claude-opus-5-5")).toBeNull();
   });
 });
 
@@ -286,6 +301,35 @@ describe("Claude Code events → SSE", () => {
     ]) {
       expect(map(event)).toEqual([]);
     }
+  });
+
+  it("reports the model Claude Code resolved, so an alias never hides the version", () => {
+    const { map } = createSseMapper();
+    const frames = map({ type: "system", subtype: "init", apiKeySource: "none", model: "claude-opus-5" });
+    expect(decode(frames)).toEqual([{ kind: "model", model: "claude-opus-5" }]);
+  });
+
+  it("says how to fix a model the installed Claude Code is too old for", () => {
+    const { map } = createSseMapper();
+    const [error] = decode(
+      map({
+        type: "result",
+        subtype: "success",
+        is_error: true,
+        result: "API Error: 400 Claude Code 2.1.259 does not support this model; version 2.1.280 or later is required",
+      }),
+    );
+    expect(error.kind === "error" && error.message).toMatch(/claude update/);
+  });
+
+  it("does not repeat the fix when the server already gave it", () => {
+    const { map } = createSseMapper();
+    const server =
+      "API Error: 400 Claude Code 2.1.259 does not support this model; version 2.1.280 or newer is required. Run 'claude update', or update the Claude desktop app, then try again.";
+    const [error] = decode(map({ type: "result", subtype: "success", is_error: true, result: server }));
+    const message = error.kind === "error" ? error.message : "";
+    expect(message.match(/claude update/gi)).toHaveLength(1);
+    expect(message).toMatch(/No need to restart the bridge/);
   });
 
   it("remembers which credential Claude Code used", () => {

@@ -97,16 +97,30 @@ export const DEFAULT_SETTINGS: Settings = {
     {
       // A Claude subscription instead of an API key: `npm run bridge` runs the
       // user's own signed-in Claude Code behind this URL (bridge/claude-code.ts).
-      // No key, by design — the bridge never handles a credential. Model names
-      // are Claude Code's aliases, so they follow whatever it currently maps
-      // them to.
+      // No key, by design — the bridge never handles a credential.
+      //
+      // The default is the alias `opus`, which Claude Code maps to the newest
+      // Opus *that installed version supports* — so it works on an old install
+      // too, and moves up when Claude Code is updated. The list names versions
+      // explicitly, because an alias cannot tell you which one you are getting.
+      // A newer model can need a newer Claude Code (Opus 5.5 needs 2.1.280+);
+      // the bridge says so when that is the problem.
       id: "claude-code",
       kind: "claude-code",
       label: "Claude Code (local bridge)",
       baseUrl: "http://127.0.0.1:8788/v1",
       apiKey: "",
       model: "opus",
-      knownModels: ["opus", "sonnet", "haiku", "fable"],
+      knownModels: [
+        "claude-opus-5-5",
+        "claude-opus-5",
+        "claude-sonnet-5",
+        "claude-haiku-4-5",
+        "claude-fable-5-1",
+        "opus",
+        "sonnet",
+        "haiku",
+      ],
     },
     {
       // Pre-wired for `npm run dev:mock`. Present so that trying the app
@@ -175,17 +189,25 @@ export function mergeProviders(stored: ProviderConfig[]): ProviderConfig[] {
   const merged: ProviderConfig[] = [];
   for (const preset of DEFAULT_SETTINGS.providers) {
     const existing = byId.get(preset.id);
-    merged.push(
-      existing
-        ? // Adopt new knownModels, but never overwrite what the user typed.
-          { ...preset, ...existing, knownModels: existing.knownModels?.length ? existing.knownModels : preset.knownModels }
-        : preset,
-    );
+    merged.push(existing ? { ...preset, ...existing, knownModels: mergeModels(preset, existing) } : preset);
     byId.delete(preset.id);
   }
   // Anything the user added themselves keeps its place at the end.
   for (const custom of byId.values()) merged.push(custom);
   return merged;
+}
+
+/**
+ * The preset's models first, in the preset's order, then anything the stored
+ * profile had that the preset does not. Nothing is removed — there is no way to
+ * tell a model the user relies on from one an older preset listed — but a model
+ * a later version adds always arrives. (It used to be all-or-nothing: once a
+ * profile had any list, no new model could ever reach it.)
+ */
+function mergeModels(preset: ProviderConfig, existing: ProviderConfig): string[] {
+  const out = [...preset.knownModels];
+  for (const model of existing.knownModels ?? []) if (!out.includes(model)) out.push(model);
+  return out;
 }
 
 export async function loadTemplateSet(): Promise<TemplateSet> {

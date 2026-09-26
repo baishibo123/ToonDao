@@ -51,6 +51,15 @@ export interface RateLimit {
   resetsAt: number | null;
 }
 
+/**
+ * The model Claude Code actually ran. An alias like `opus` is resolved by the
+ * installed Claude Code, so which version answered depends on that install;
+ * the reply records the resolved id so the reader never has to ask the model.
+ */
+export interface ModelInfo {
+  model: string;
+}
+
 /** The body the adapter posts. Standard fields, plus one namespaced extension. */
 export interface BridgeRequest {
   model: string;
@@ -63,6 +72,7 @@ export const BRIDGE_EVENT = {
   tool: "toondao.tool",
   rate: "toondao.rate",
   usage: "toondao.usage",
+  model: "toondao.model",
 } as const;
 
 /* ------------------------------------------------------------------ */
@@ -75,7 +85,7 @@ export function sseText(text: string): string {
 
 export function sseEvent(
   name: (typeof BRIDGE_EVENT)[keyof typeof BRIDGE_EVENT],
-  payload: ToolUse | RateLimit | Usage,
+  payload: ToolUse | RateLimit | Usage | ModelInfo,
 ): string {
   return `event: ${name}\ndata: ${JSON.stringify(payload)}\n\n`;
 }
@@ -95,6 +105,7 @@ export type BridgeFrame =
   | { kind: "tool"; tool: ToolUse }
   | { kind: "rate"; rateLimit: RateLimit }
   | { kind: "usage"; usage: Usage }
+  | { kind: "model"; model: string }
   | { kind: "error"; message: string }
   | { kind: "done" };
 
@@ -124,6 +135,10 @@ export function decodeBridgeFrame(event: string, data: string): BridgeFrame | nu
           resetsAt: numOrNull(parsed.resetsAt),
         },
       };
+    case BRIDGE_EVENT.model:
+      return typeof parsed.model === "string" && parsed.model
+        ? { kind: "model", model: parsed.model }
+        : null;
     case BRIDGE_EVENT.usage:
       return {
         kind: "usage",

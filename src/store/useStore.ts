@@ -23,6 +23,7 @@ import { rootsOf, subtreeIds, type NodeMap } from "@/lib/tree";
 import { buildOutline, spineLeaf, threadOf } from "@/lib/outline";
 import { parkPassage, pruneParked } from "@/lib/later";
 import { toolScopeFor } from "@/lib/toolScope";
+import { branchModel } from "@/lib/model";
 import type { RateLimit, ToolUse, Usage } from "@/lib/bridgeProtocol";
 
 export interface SubmitRequest {
@@ -401,23 +402,16 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   /**
-   * Walk up the lineage for the nearest recorded model. A branch made under a
-   * node that overrode the model keeps that model; a branch made above it does
-   * not. Falling through to the provider default is the ordinary case.
+   * The nearest per-branch override the active provider offers, else its
+   * default. See branchModel() in src/lib/model.ts.
    */
   modelForBranch: (nodeId) => {
     const { nodes, settings } = get();
-    let cursor = nodeId;
-    const seen = new Set<NodeId>();
-    while (cursor) {
-      if (seen.has(cursor)) break;
-      seen.add(cursor);
-      const node: ConversationNode | undefined = nodes[cursor];
-      if (!node) break;
-      if (node.role === "user" && node.model) return node.model;
-      cursor = node.parentId;
-    }
-    return settings.providers.find((p) => p.id === settings.activeProviderId)?.model;
+    return branchModel(
+      nodes,
+      nodeId,
+      settings.providers.find((p) => p.id === settings.activeProviderId),
+    );
   },
 
   exportAll: async () => {
@@ -557,11 +551,18 @@ async function runStream(set: Setter, get: Getter, req: StreamRequest): Promise<
   let lastPersist = Date.now();
   const toolUse: ToolUse[] = [];
   let usage: Usage | undefined;
+  let resolvedModel: string | undefined;
   // What the bridge adds to a reply, recorded with it: which tools it used,
   // what it cost, and that it came through Claude Code at all.
   const extras = (): Partial<ConversationNode> =>
     config.kind === "claude-code"
-      ? { harness: "claude-code", ...(toolUse.length ? { toolUse: [...toolUse] } : {}), ...(usage ? { usage } : {}) }
+      ? {
+          harness: "claude-code",
+          ...(toolUse.length ? { toolUse: [...toolUse] } : {}),
+          ...(usage ? { usage } : {}),
+          // The id that answered, not the alias that was asked for.
+          ...(resolvedModel ? { model: resolvedModel } : {}),
+        }
       : {};
 
   try {
@@ -575,6 +576,7 @@ async function runStream(set: Setter, get: Getter, req: StreamRequest): Promise<
     })) {
       if (delta.rateLimit) set({ rateLimit: delta.rateLimit });
       if (delta.usage) usage = delta.usage;
+      if (delta.model) resolvedModel = delta.model;
       if (delta.tool) {
         toolUse.push(delta.tool);
         // Shown while the reply is still streaming, so a pause reads as
