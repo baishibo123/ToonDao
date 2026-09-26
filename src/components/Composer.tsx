@@ -6,6 +6,7 @@ import { ContextChip, Inspector } from "@/components/ContextChip";
 import { BRANCH_META } from "@/lib/policyMeta";
 import { useSurface } from "@/components/Surface";
 import { findParked } from "@/lib/later";
+import type { RateLimit } from "@/lib/bridgeProtocol";
 
 /**
  * The one gesture that docks into a composer rather than opening an aside: a
@@ -48,6 +49,7 @@ export function Composer() {
   const providers = useStore((s) => s.settings.providers);
   const activeProviderId = useStore((s) => s.settings.activeProviderId);
   const later = useStore((s) => s.conversations.find((c) => c.id === s.conversationId)?.later);
+  const rateLimit = useStore((s) => s.rateLimit);
   const unpark = useStore((s) => s.unpark);
 
   const frame = useUI((s) => (asideId ? s.asides.find((f) => f.id === asideId) : undefined));
@@ -290,6 +292,8 @@ export function Composer() {
             </span>
           ) : null}
 
+          {provider?.kind === "claude-code" && rateLimit ? <UsageWindow rateLimit={rateLimit} /> : null}
+
           {modelOptions.length > 0 ? (
             <label className="modelpick" title="Model for this branch onwards">
               <span className="modelpick__label">model</span>
@@ -335,4 +339,28 @@ function placeholderFor(kind: string | undefined, hasHistory: boolean): string {
     default:
       return hasHistory ? "Reply…" : "Start a conversation…";
   }
+}
+
+/**
+ * How much of the subscription's usage window is spent. Shown because the window
+ * is shared with everything else the account does — a long reading session here
+ * can lock the same account out of Claude Code until it resets.
+ */
+function UsageWindow({ rateLimit }: { rateLimit: RateLimit }) {
+  const percent =
+    rateLimit.utilization === null ? null : Math.round(rateLimit.utilization * 100);
+  const resets = rateLimit.resetsAt
+    ? new Date(rateLimit.resetsAt * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    : null;
+  const tone =
+    rateLimit.status === "rejected" ? "danger" : rateLimit.status === "allowed_warning" ? "warn" : "ok";
+  const window = rateLimit.window === "five_hour" ? "5h" : rateLimit.window || "usage";
+  return (
+    <span
+      className={`usagewin usagewin--${tone}`}
+      title={`Claude Code usage window${resets ? `, resets at ${resets}` : ""}. Shared with your other Claude Code use.`}
+    >
+      {window} {percent === null ? rateLimit.status : `${percent}%`}
+    </span>
+  );
 }

@@ -222,6 +222,35 @@ describe("id collisions", () => {
   });
 });
 
+describe("replies from the Claude Code bridge", () => {
+  it("keep their tool calls, usage and harness through a round trip", () => {
+    const { conversation, nodes } = richFixture();
+    const reply = nodes.find((n) => n.role === "assistant")!;
+    reply.harness = "claude-code";
+    reply.toolUse = [{ name: "WebSearch", query: "thermohaline circulation" }];
+    reply.usage = { inputTokens: 7565, cacheCreationInputTokens: 0, cacheReadInputTokens: 12, outputTokens: 624 };
+    const raw = JSON.stringify(
+      buildBundle({ conversations: [conversation], nodes, templates: T, settings: DEFAULT_SETTINGS }),
+    );
+    const back = parseBundle(raw).nodes.find((n) => n.id === reply.id)!;
+    expect(back.harness).toBe("claude-code");
+    expect(back.toolUse).toEqual(reply.toolUse);
+    expect(back.usage).toEqual(reply.usage);
+  });
+
+  it("drops a malformed tool record instead of failing the import", () => {
+    const { conversation, nodes } = richFixture();
+    const bundle = JSON.parse(
+      JSON.stringify(buildBundle({ conversations: [conversation], nodes, templates: T, settings: DEFAULT_SETTINGS })),
+    );
+    bundle.nodes[1].toolUse = [{ query: "no name" }, "junk", { name: "WebFetch", query: "https://x.org" }];
+    bundle.nodes[1].harness = "something-else";
+    const back = parseBundle(JSON.stringify(bundle)).nodes[1];
+    expect(back.toolUse).toEqual([{ name: "WebFetch", query: "https://x.org" }]);
+    expect(back.harness).toBeUndefined();
+  });
+});
+
 describe("the Later list", () => {
   function parked() {
     const { conversation, nodes, t } = richFixture();

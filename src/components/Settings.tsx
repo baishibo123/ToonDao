@@ -4,6 +4,7 @@ import { useUI } from "@/store/useUI";
 import type { ProviderConfig } from "@/types";
 import { TemplateEditor } from "@/components/TemplateEditor";
 import { DataPane } from "@/components/DataPane";
+import { BridgeStatus } from "@/components/BridgeStatus";
 
 /**
  * A key field that says "blank for local" on a hosted provider is telling the
@@ -118,10 +119,15 @@ export function Settings() {
                   <p className="field__hint">
                     {provider.kind === "anthropic"
                       ? "/v1/messages is appended."
-                      : "/chat/completions is appended. Works with OpenAI, Ollama, llama.cpp, vLLM, and relay (中转) endpoints."}
+                      : provider.kind === "claude-code"
+                        ? "Where the bridge listens. It runs your own Claude Code: start it with npm run bridge."
+                        : "/chat/completions is appended. Works with OpenAI, Ollama, llama.cpp, vLLM, and relay (中转) endpoints."}
                   </p>
                 </div>
 
+                {provider.kind === "claude-code" ? (
+                  <BridgeStatus baseUrl={provider.baseUrl} />
+                ) : (
                 <div className="field">
                   <label className="field__label" htmlFor={`key-${provider.id}`}>
                     API key
@@ -148,6 +154,7 @@ export function Settings() {
                     </button>
                   </div>
                 </div>
+                )}
 
                 <div className="field">
                   <label className="field__label" htmlFor={`model-${provider.id}`}>
@@ -186,6 +193,22 @@ export function Settings() {
                   Ask for one idea at a time, ending at a checkpoint, instead of
                   everything at once. The wording is the Pacing template below, and
                   it appears in every payload's system message.
+                </span>
+              </span>
+            </label>
+
+            <label className="toggle">
+              <input
+                type="checkbox"
+                checked={settings.chatTools}
+                onChange={(e) => void updateSettings({ chatTools: e.target.checked })}
+              />
+              <span>
+                <span className="toggle__label">Let replies look things up</span>
+                <span className="toggle__hint">
+                  Claude Code bridge only. Explain always may search the web; Just this and
+                  Lost me here never do. This decides ordinary replies and quotes. Every lookup
+                  is listed under the reply it went into.
                 </span>
               </span>
             </label>

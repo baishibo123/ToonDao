@@ -2,6 +2,7 @@ import type { ProviderConfig } from "@/types";
 import type { Provider } from "./types";
 import { createOpenAICompatibleProvider } from "./openai";
 import { createAnthropicProvider } from "./anthropic";
+import { createClaudeCodeProvider } from "./claudeCode";
 
 /**
  * The only place vendor identity is resolved. Everything above this line takes
@@ -13,6 +14,8 @@ export function createProvider(config: ProviderConfig): Provider {
       return createAnthropicProvider(config);
     case "openai-compatible":
       return createOpenAICompatibleProvider(config);
+    case "claude-code":
+      return createClaudeCodeProvider(config);
   }
 }
 

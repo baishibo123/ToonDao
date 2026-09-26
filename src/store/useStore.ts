@@ -22,6 +22,8 @@ import { buildBundle, parseBundle } from "@/lib/transfer";
 import { rootsOf, subtreeIds, type NodeMap } from "@/lib/tree";
 import { buildOutline, spineLeaf, threadOf } from "@/lib/outline";
 import { parkPassage, pruneParked } from "@/lib/later";
+import { toolScopeFor } from "@/lib/toolScope";
+import type { RateLimit, ToolUse, Usage } from "@/lib/bridgeProtocol";
 
 export interface SubmitRequest {
   /** The human-readable ask. Becomes node.content. */
@@ -75,6 +77,9 @@ interface AppState {
 
   streamingNodeId: NodeId | null;
   abort: AbortController | null;
+  /** The subscription's usage window, as the Claude Code bridge last reported
+   *  it. Null until a bridge request has run. Not persisted: it is live state. */
+  rateLimit: RateLimit | null;
 
   init: () => Promise<void>;
   newConversation: () => Promise<string>;
@@ -126,6 +131,7 @@ export const useStore = create<AppState>((set, get) => ({
   settings: DEFAULT_SETTINGS,
   streamingNodeId: null,
   abort: null,
+  rateLimit: null,
 
   nodeStore: () => {
     const nodes = get().nodes;
@@ -549,6 +555,14 @@ async function runStream(set: Setter, get: Getter, req: StreamRequest): Promise<
 
   let text = "";
   let lastPersist = Date.now();
+  const toolUse: ToolUse[] = [];
+  let usage: Usage | undefined;
+  // What the bridge adds to a reply, recorded with it: which tools it used,
+  // what it cost, and that it came through Claude Code at all.
+  const extras = (): Partial<ConversationNode> =>
+    config.kind === "claude-code"
+      ? { harness: "claude-code", ...(toolUse.length ? { toolUse: [...toolUse] } : {}), ...(usage ? { usage } : {}) }
+      : {};
 
   try {
     const provider = createProvider(config);
@@ -557,7 +571,19 @@ async function runStream(set: Setter, get: Getter, req: StreamRequest): Promise<
       temperature: settings.temperature,
       maxTokens: settings.maxTokens,
       signal: controller.signal,
+      toolScope: toolScopeFor(req.policy, settings.chatTools),
     })) {
+      if (delta.rateLimit) set({ rateLimit: delta.rateLimit });
+      if (delta.usage) usage = delta.usage;
+      if (delta.tool) {
+        toolUse.push(delta.tool);
+        // Shown while the reply is still streaming, so a pause reads as
+        // "looking something up" rather than as a stall.
+        set((s) => ({
+          nodes: { ...s.nodes, [assistantNode.id]: { ...s.nodes[assistantNode.id], toolUse: [...toolUse] } },
+        }));
+      }
+      if (!delta.text) continue;
       text += delta.text;
       set((s) => ({
         nodes: { ...s.nodes, [assistantNode.id]: { ...s.nodes[assistantNode.id], content: text } },
@@ -567,10 +593,11 @@ async function runStream(set: Setter, get: Getter, req: StreamRequest): Promise<
         void db.nodes.update(assistantNode.id, { content: text });
       }
     }
-    await patchNode(set, assistantNode.id, { content: text, status: "complete" });
+    await patchNode(set, assistantNode.id, { content: text, status: "complete", ...extras() });
   } catch (err) {
     const aborted = err instanceof DOMException && err.name === "AbortError";
     await patchNode(set, assistantNode.id, {
+      ...extras(),
       content: text,
       // A stopped stream keeps whatever arrived; it is a real partial answer,
       // not an error, and the user may well want to branch off it.

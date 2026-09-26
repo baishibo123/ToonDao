@@ -95,6 +95,20 @@ export const DEFAULT_SETTINGS: Settings = {
       ],
     },
     {
+      // A Claude subscription instead of an API key: `npm run bridge` runs the
+      // user's own signed-in Claude Code behind this URL (bridge/claude-code.ts).
+      // No key, by design — the bridge never handles a credential. Model names
+      // are Claude Code's aliases, so they follow whatever it currently maps
+      // them to.
+      id: "claude-code",
+      kind: "claude-code",
+      label: "Claude Code (local bridge)",
+      baseUrl: "http://127.0.0.1:8788/v1",
+      apiKey: "",
+      model: "opus",
+      knownModels: ["opus", "sonnet", "haiku", "fable"],
+    },
+    {
       // Pre-wired for `npm run dev:mock`. Present so that trying the app
       // without a key is "pick this provider" and nothing else — telling
       // someone to select a preset and *also* retype its base URL is one
@@ -114,6 +128,7 @@ export const DEFAULT_SETTINGS: Settings = {
   // point is that answers arrive at a readable size without anyone having to
   // know the setting exists. One checkbox turns it off.
   pacing: true,
+  chatTools: false,
   conceptLensTurns: 2,
   temperature: 0.7,
   maxTokens: null,

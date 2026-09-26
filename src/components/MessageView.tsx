@@ -110,6 +110,19 @@ export const MessageView = memo(function MessageView({ node }: MessageViewProps)
           </p>
         ) : null}
 
+        {node.toolUse?.length ? (
+          // Outside sources entered this reply's context; the reader should see
+          // which, without opening the inspector.
+          <p className="msg__lookups">
+            <span className="msg__lookups-label">{streaming ? "Looking up" : "Looked up"}</span>
+            {node.toolUse.map((tool, i) => (
+              <span key={i} className="msg__lookup" title={`${tool.name}: ${tool.query}`}>
+                {lookupLabel(tool.name)} <i>{tool.query}</i>
+              </span>
+            ))}
+          </p>
+        ) : null}
+
         <div className="msg__content" ref={contentRef}>
           <TailDimmedContent node={node} cropAt={cropHover} />
           {streaming ? <span className="caret" aria-label="streaming" /> : null}
@@ -219,6 +232,9 @@ export const MessageView = memo(function MessageView({ node }: MessageViewProps)
             policy={node.contextPolicy}
             messages={messages}
             historical={node.assembledPreview}
+            {...(node.harness ? { harness: node.harness } : {})}
+            {...(node.toolUse ? { toolUse: node.toolUse } : {})}
+            {...(node.usage ? { usage: node.usage } : {})}
           />
         ) : null}
       </div>
@@ -291,4 +307,12 @@ function anchorVerb(kind: string): string {
 function truncate(text: string, max: number): string {
   const flat = text.replace(/\s+/g, " ").trim();
   return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
+}
+
+/** A tool name as a reader would say it. Connectors keep their own name. */
+function lookupLabel(name: string): string {
+  if (name === "WebSearch") return "searched";
+  if (name === "WebFetch") return "read";
+  const connector = /^mcp__(?:claude_ai_)?([^_]+(?:_[^_]+)*?)__/.exec(name);
+  return connector ? connector[1].replace(/_/g, " ") : name;
 }

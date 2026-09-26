@@ -13,6 +13,8 @@
  * Nothing in this file may conflate the two.
  */
 
+import type { ToolUse, Usage } from "@/lib/bridgeProtocol";
+
 export type NodeId = string;
 
 export interface ConversationNode {
@@ -35,6 +37,17 @@ export interface ConversationNode {
   assembledPreview?: string;
   /** Set when status === "error". */
   error?: string;
+
+  /**
+   * Set on a reply produced through the Claude Code bridge. Claude Code adds
+   * context of its own that the recorded payload cannot show, so the inspector
+   * needs to know which replies it is describing.
+   */
+  harness?: "claude-code";
+  /** Outside sources the model used while writing this reply (bridge only). */
+  toolUse?: ToolUse[];
+  /** Tokens the request cost, as the bridge measured them. */
+  usage?: Usage;
 }
 
 /** Where in the tree — and where inside a message — this node was born. */
@@ -134,7 +147,7 @@ export type TemplateSet = Record<TemplateId, string>;
 export interface ProviderConfig {
   id: string;
   /** Which adapter implements this config. */
-  kind: "openai-compatible" | "anthropic";
+  kind: "openai-compatible" | "anthropic" | "claude-code";
   label: string;
   baseUrl: string;
   apiKey: string;
@@ -153,6 +166,12 @@ export interface Settings {
    * wording is the `pacing` template, appended to the system message.
    */
   pacing: boolean;
+  /**
+   * Let ordinary replies and quotes use research tools. The lens always may;
+   * an isolation and a crop never do (src/lib/toolScope.ts). Only the Claude
+   * Code bridge has tools, so this does nothing with other providers.
+   */
+  chatTools: boolean;
   /** Default turn count for the concept lens (§5.1), range 1–5. */
   conceptLensTurns: number;
   temperature: number;

@@ -183,6 +183,7 @@ export function parseBundle(
         ? { assembledPreview: value.assembledPreview }
         : {}),
       ...(typeof value.error === "string" ? { error: value.error } : {}),
+      ...parseBridgeRecord(value),
     };
   });
 
@@ -252,6 +253,33 @@ export function parseBundle(
 }
 
 /* ------------------------------------------------------------------ */
+
+/**
+ * What a reply produced through the Claude Code bridge recorded about itself.
+ * Malformed entries are dropped one by one rather than failing the import: this
+ * is a record of what happened, not something the tree depends on.
+ */
+function parseBridgeRecord(value: Record<string, unknown>): Partial<ConversationNode> {
+  const out: Partial<ConversationNode> = {};
+  if (value.harness === "claude-code") out.harness = "claude-code";
+  if (Array.isArray(value.toolUse)) {
+    const toolUse = value.toolUse
+      .filter(isRecord)
+      .filter((t) => typeof t.name === "string")
+      .map((t) => ({ name: t.name as string, query: typeof t.query === "string" ? t.query : "" }));
+    if (toolUse.length > 0) out.toolUse = toolUse;
+  }
+  if (isRecord(value.usage)) {
+    const u = value.usage;
+    out.usage = {
+      inputTokens: numberOr(u.inputTokens, 0),
+      cacheCreationInputTokens: numberOr(u.cacheCreationInputTokens, 0),
+      cacheReadInputTokens: numberOr(u.cacheReadInputTokens, 0),
+      outputTokens: numberOr(u.outputTokens, 0),
+    };
+  }
+  return out;
+}
 
 /**
  * A conversation's parked passages. Their node ids go through the same remap as

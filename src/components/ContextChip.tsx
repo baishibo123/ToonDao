@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import type { ChatMessage, ContextPolicy } from "@/types";
+import type { ToolUse, Usage } from "@/lib/bridgeProtocol";
 import { policyLabel } from "@/lib/assembleContext";
 import { POLICY_CLASS, policyExplanation } from "@/lib/policyMeta";
 import { estimateMessageTokens, formatTokens } from "@/lib/tokens";
@@ -64,9 +65,13 @@ interface InspectorProps {
   /** When present, the historical record takes precedence over a fresh
    *  assembly (§11 Q4: the preview is what was actually sent). */
   historical?: string;
+  /** Set for a reply produced through the Claude Code bridge. */
+  harness?: "claude-code";
+  toolUse?: ToolUse[];
+  usage?: Usage;
 }
 
-export function Inspector({ policy, messages, historical }: InspectorProps) {
+export function Inspector({ policy, messages, historical, harness, toolUse, usage }: InspectorProps) {
   const shown = useMemo(
     () => (historical ? parsePayload(historical) : messages),
     [historical, messages],
@@ -88,6 +93,18 @@ export function Inspector({ policy, messages, historical }: InspectorProps) {
         ) : null}
       </div>
       <p className="inspector__note">{policyExplanation(policy)}</p>
+      {harness === "claude-code" ? (
+        <p className="inspector__note inspector__note--bridge">
+          Sent through Claude Code, which adds a few hundred tokens of its own context that
+          this record cannot show.
+          {toolUse?.length
+            ? ` While answering it also used: ${toolUse.map((t) => `${t.name} (${t.query})`).join("; ")}.`
+            : " It used no tools."}
+          {usage
+            ? ` ${usage.inputTokens + usage.cacheCreationInputTokens + usage.cacheReadInputTokens} tokens in (${usage.cacheReadInputTokens} from cache), ${usage.outputTokens} out.`
+            : ""}
+        </p>
+      ) : null}
       <div className="inspector__body">
         {shown.length === 0 ? (
           <div className="inspector__empty">Nothing was sent for this node.</div>
