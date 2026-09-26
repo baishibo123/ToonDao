@@ -57,6 +57,33 @@ confirm that what the context action shows is what actually went out.
 
 Press `?` in the app for keyboard shortcuts.
 
+### Use a Claude subscription instead of an API key
+
+If you have Claude Code — through a school's or company's Claude seat, say —
+ToonDao can run on your own subscription:
+
+1. Install Claude Code and sign in once: run `claude`.
+2. In a second terminal: `npm run bridge` (Node 22.18 or newer).
+3. In ToonDao: **Settings → Provider → Active → "Claude Code (local bridge)"**.
+   Its status — running, signed in — is shown right there.
+
+Each message starts your own `claude -p` in an empty temporary folder, with
+Claude Code's coding prompt replaced by ToonDao's, nothing saved to your Claude
+Code history, and no tools unless the message's move allows them: **Explain**
+may search and read the web, **Just this** and **Lost me here** never can, and
+ordinary replies can if you turn on *Let replies look things up*. Every lookup is
+listed above the reply it went into.
+
+It costs nothing per token, but every request counts toward your subscription's
+usage window, which is shared with the rest of your Claude Code use; the
+composer shows how much of it is spent. Claude Code also adds a few hundred
+tokens of its own context to each request, and the inspector says so on every
+reply that came through it.
+
+**Before sharing the bridge with others**, read decision P-26 in
+`docs/decisions.md`: Anthropic's terms restrict third-party apps that let people
+use their Claude subscriptions, and distributing this needs Anthropic's approval.
+
 ## Tests
 
 ```bash
@@ -80,7 +107,10 @@ against real DOM ranges in `test/anchor.dom.test.tsx`.
 | `src/lib/anchor.ts` | Selections in the rendered DOM ↔ offsets in the raw markdown. |
 | `src/lib/templates.ts` | Every prompt text the app injects. User-editable in Settings. |
 | `src/lib/transfer.ts` | Export and import, with full fidelity. |
-| `src/providers/` | OpenAI-compatible and Anthropic adapters behind one interface. |
+| `src/providers/` | OpenAI-compatible, Anthropic and Claude Code adapters behind one interface. |
+| `bridge/claude-code.ts` | The local bridge that runs your own Claude Code as a provider. |
+| `src/lib/bridgeProtocol.ts` | The wire contract between the app and the bridge, shared by both ends. |
+| `src/lib/toolScope.ts` | The only place that decides whether a message may use outside sources. |
 | `CLAUDE.md` | Invariants that must keep holding. |
 | `docs/decisions.md` | Why things are the way they are. |
 

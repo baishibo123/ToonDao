@@ -57,6 +57,22 @@ Rules that hold for the life of the project. Why each one exists is in
 - **The Later list drains.** Sending anything about a parked passage removes it;
   deleting its message prunes it.
 
+## The Claude Code bridge
+
+- **The bridge never handles a credential.** It starts the user's own unmodified
+  `claude` and relays its output; it never reads, stores or forwards an OAuth
+  token or key.
+- **Nothing a request carries becomes a command-line flag.** Model names must pass
+  `isSafeModel()`; the system prompt goes through a file and the conversation
+  through stdin, never through argv.
+- **`toolScopeFor()` in `src/lib/toolScope.ts` is the only place a tool scope is
+  decided.** The bridge may narrow it, never widen it, and never adds a tool that
+  runs commands or writes files.
+- **`src/lib/bridgeProtocol.ts` has no imports.** Node runs it directly from the
+  bridge, where the app's `@/` alias does not exist; both ends encode and decode
+  through it.
+- **The bridge listens on 127.0.0.1 and answers only the app's origins.**
+
 ## Conventions
 
 - **Display vocabulary lives in `src/lib/policyMeta.ts`.** Glyphs, labels and hue

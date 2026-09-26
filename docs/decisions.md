@@ -5,8 +5,9 @@ why this one. Invariants that follow from these live in `CLAUDE.md`; what the
 code does now lives in the code.
 
 **Accepted** decisions are on `main`. **Proposed** decisions arrive with
-`feature/reading-first` (which includes `feature/branch-windows`) and are
-claimed intent until checked against the code and merged.
+`feature/reading-first` (which includes `feature/branch-windows`) or, from P-22
+on, with `feature/claude-code-bridge`, and are claimed intent until checked
+against the code and merged.
 
 ---
 
@@ -240,3 +241,49 @@ settings, so it works without anyone finding it; one checkbox turns it off.
 **P-21 · Pacing is a template.** The wording is the editable `pacing` template,
 appended after the user's own system prompt. Considered: a hardcoded string,
 which would break the rule that every injected prompt text is user-editable.
+
+### Claude Code bridge
+
+**P-22 · Run the user's own Claude Code behind a local bridge that poses as a
+provider.** A small local server takes the app's ordinary OpenAI-style request,
+runs `claude -p` as the user's own signed-in process, and streams the answer
+back in the same shape, so the app changes by one adapter. Considered: using the
+subscription's OAuth token directly (exactly what Anthropic prohibits, and a
+credential the app would then hold), and embedding the Agent SDK (the same
+authentication rules, plus a heavy dependency). The official, unmodified binary
+with the user's own login is the use Claude Code documents for scripts.
+
+**P-23 · Every request is a fresh, stateless run.** A new `claude -p` in an empty
+temporary directory, no session saved, the payload sent whole as one stream-json
+message with one block per turn. Considered: mapping each spine to a Claude Code
+session and resuming it, which would reuse the prompt cache but make Claude
+Code's session file a second history to keep in sync — and a second author of
+the prompt besides `assembleContext()`. Stateless forgoes most caching for now;
+each reply records its token usage, so whether that matters can be measured
+before anything is built for it. One block per turn keeps the prefix
+byte-identical between requests, which is what caching would need later, and
+stream-json input is also the only way to send an image.
+
+**P-24 · Tools follow the policy, and research means lookup only.** Explain may
+use web search and fetch, Just this and Lost me here get no tools at all, and
+ordinary replies follow one setting (`toolScopeFor()`), because an outside source
+is context too. Considered: Claude Code's default tool set (thirty tools, about
+21 times the input per request, including tools that run commands and write
+files), and `--restricted` (safe, but it drops the account's claude.ai
+connectors). ToolSearch is not shown to the reader: it only loads another tool.
+
+**P-25 · Show the usage window, and record usage on every reply.** The window is
+shared with everything else the account does, so a long reading session can lock
+the same account out of Claude Code; the composer shows how much is spent, and
+the inspector says what Claude Code added that the record cannot show.
+
+**P-26 · Sharing the bridge needs Anthropic's approval.** Anthropic's Agent SDK
+documentation says: "Unless previously approved, Anthropic does not allow third
+party developers to offer claude.ai login or rate limits for their products".
+Someone running the bridge with their own login is using Claude Code as
+documented; publishing it so that others use their subscriptions through it
+makes its author that third-party developer, whether or not money is involved.
+Considered: sharing anyway because each user signs in to the unmodified binary
+themselves, which the terms do allow — but the SDK note is explicit, and the
+risk would land on other people's accounts. Ask first.
+
