@@ -7,12 +7,14 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_ALLOWED_TOOLS,
+  RUN_DIR,
   argsFor,
   corsHeaders,
   createSseMapper,
   guardRequest,
   isSafeModel,
   modelProblem,
+  runEnv,
   summarizeToolInput,
   toRateLimit,
   toStreamInput,
@@ -373,5 +375,35 @@ describe("the protocol, app side", () => {
     });
     expect(decodeBridgeFrame("message", "[DONE]")).toEqual({ kind: "done" });
     expect(decodeBridgeFrame("message", "not json")).toBeNull();
+  });
+});
+
+describe("where a run happens", () => {
+  it("uses one folder for every run, so the prompt Claude Code builds stays the same", () => {
+    // P-23: a per-run folder put a different path ahead of the conversation on
+    // every request, and no request could reuse the prompt cache.
+    expect(RUN_DIR).toMatch(/toondao-bridge$/);
+  });
+
+  it("drops a host Claude Code session's variables when started inside one", () => {
+    const env = runEnv({
+      CLAUDECODE: "1",
+      CLAUDE_CODE_SESSION_ID: "host-session",
+      CLAUDE_CODE_MESSAGING_TOKEN: "secret",
+      CLAUDE_EFFORT: "max",
+      PATH: "/usr/bin",
+      HOME: "/Users/someone",
+      ANTHROPIC_BASE_URL: "https://api.anthropic.com",
+    });
+    expect(env).toEqual({
+      PATH: "/usr/bin",
+      HOME: "/Users/someone",
+      ANTHROPIC_BASE_URL: "https://api.anthropic.com",
+    });
+  });
+
+  it("passes a terminal's environment through untouched", () => {
+    const terminal = { PATH: "/usr/bin", CLAUDE_CODE_MAX_OUTPUT_TOKENS: "8000" };
+    expect(runEnv(terminal)).toBe(terminal);
   });
 });

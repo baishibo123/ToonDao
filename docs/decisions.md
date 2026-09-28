@@ -266,16 +266,18 @@ credential the app would then hold), and embedding the Agent SDK (the same
 authentication rules, plus a heavy dependency). The official, unmodified binary
 with the user's own login is the use Claude Code documents for scripts.
 
-**P-23 · Every request is a fresh, stateless run.** A new `claude -p` in an empty
-temporary directory, no session saved, the payload sent whole as one stream-json
-message with one block per turn. Considered: mapping each spine to a Claude Code
-session and resuming it, which would reuse the prompt cache but make Claude
-Code's session file a second history to keep in sync — and a second author of
-the prompt besides `assembleContext()`. Stateless forgoes most caching for now;
-each reply records its token usage, so whether that matters can be measured
-before anything is built for it. One block per turn keeps the prefix
-byte-identical between requests, which is what caching would need later, and
-stream-json input is also the only way to send an image.
+**P-23 · Every request is a fresh, stateless run.** A new `claude -p` in one
+empty working folder, the same for every request, no session saved, the payload
+sent whole as one stream-json message with one block per turn. Considered:
+mapping each spine to a Claude Code session and resuming it, which would reuse
+the prompt cache but make Claude Code's session file a second history to keep in
+sync — and a second author of the prompt besides `assembleContext()`. Stateless
+runs can still share the cache, because the prefix is byte-identical between
+requests: one block per turn, and nothing per-run in the context Claude Code
+builds ahead of ToonDao's prompt. Measured: with a fresh folder per run, which
+Claude Code writes into that context, no request read anything from the cache;
+with one folder, the next turn of a 10k-token thread read all of it back and
+wrote 55 new tokens. Stream-json input is also the only way to send an image.
 
 **P-24 · Tools follow the policy, and research means lookup only.** Explain may
 use web search and fetch, Just this and Lost me here get no tools at all, and

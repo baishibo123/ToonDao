@@ -23,7 +23,7 @@
  */
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { spawn } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
@@ -403,10 +403,36 @@ function resultError(event: Record<string, unknown>): string {
 export class BridgeError extends Error {}
 
 /**
- * One run of `claude -p`, as a stream of its stream-json events. A fresh empty
- * directory per run, so no project's CLAUDE.md, settings or files are in reach,
- * removed afterwards. Aborting sends SIGINT, which lets Claude Code end the turn
- * cleanly, and SIGKILL a few seconds later if it has not.
+ * Where every run happens: one empty folder, the same for every request.
+ *
+ * Claude Code writes its working directory into the context it builds ahead of
+ * ToonDao's prompt. A fresh folder per run made that prefix differ every time,
+ * so no request could reuse the prompt cache and each turn of a long thread was
+ * paid in full; one stable folder lets a turn read everything before it from
+ * the cache (P-23). Nothing is ever written here — the system prompt goes to a
+ * temporary folder of its own — so no project's CLAUDE.md, settings or files
+ * are in reach.
+ */
+export const RUN_DIR = join(tmpdir(), "toondao-bridge");
+
+/**
+ * The environment a run starts with. When the bridge itself was started from
+ * inside a Claude Code session (`CLAUDECODE` is set — a dev preview, say), every
+ * `CLAUDE*` variable describes that host session: its id, its messaging socket
+ * and token, its effort level. A run that inherited them would attach to the
+ * host and put per-session details into the prompt, so they are dropped and
+ * the run starts as it would from a terminal. Started from a terminal, the
+ * environment passes through untouched.
+ */
+export function runEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  if (!env.CLAUDECODE) return env;
+  return Object.fromEntries(Object.entries(env).filter(([name]) => !name.startsWith("CLAUDE")));
+}
+
+/**
+ * One run of `claude -p`, as a stream of its stream-json events, in `RUN_DIR`.
+ * Aborting sends SIGINT, which lets Claude Code end the turn cleanly, and
+ * SIGKILL a few seconds later if it has not.
  */
 export async function* runClaude(args: {
   bin: string;
@@ -417,14 +443,15 @@ export async function* runClaude(args: {
   allowedTools: readonly string[];
   signal: AbortSignal;
 }): AsyncGenerator<Record<string, unknown>> {
-  const dir = await mkdtemp(join(tmpdir(), "toondao-"));
+  await mkdir(RUN_DIR, { recursive: true });
+  const dir = await mkdtemp(join(tmpdir(), "toondao-prompt-"));
   const systemFile = join(dir, "system-prompt.txt");
   await writeFile(systemFile, args.system, "utf8");
 
   const child = spawn(
     args.bin,
     argsFor({ model: args.model, toolScope: args.toolScope, systemFile, allowedTools: args.allowedTools }),
-    { cwd: dir, stdio: ["pipe", "pipe", "pipe"], env: process.env },
+    { cwd: RUN_DIR, stdio: ["pipe", "pipe", "pipe"], env: runEnv(process.env) },
   );
 
   let stderr = "";
@@ -535,7 +562,7 @@ export async function claudeStatus(bin: string): Promise<ClaudeStatus> {
 
 function capture(bin: string, args: string[]): Promise<string | null> {
   return new Promise((resolve) => {
-    const child = spawn(bin, args, { stdio: ["ignore", "pipe", "ignore"] });
+    const child = spawn(bin, args, { stdio: ["ignore", "pipe", "ignore"], env: runEnv(process.env) });
     let out = "";
     child.stdout.on("data", (chunk: Buffer) => (out += chunk.toString("utf8")));
     child.once("error", () => resolve(null));

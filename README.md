@@ -69,7 +69,7 @@ ToonDao can run on your own subscription:
 3. In ToonDao: **Settings → Provider → Active → "Claude Code (local bridge)"**.
    Its status — running, signed in — is shown right there.
 
-Each message starts your own `claude -p` in an empty temporary folder, with
+Each message starts your own `claude -p` in an empty working folder, with
 Claude Code's coding prompt replaced by ToonDao's, nothing saved to your Claude
 Code history, and no tools unless the move allows them: **Explain** may search
 and read the web, for as long as you talk in its aside; **Just this** and **Lost

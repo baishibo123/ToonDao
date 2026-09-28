@@ -80,6 +80,10 @@ Rules that hold for the life of the project. Why each one exists is in
   bridge, where the app's `@/` alias does not exist; both ends encode and decode
   through it.
 - **The bridge listens on 127.0.0.1 and answers only the app's origins.**
+- **Nothing per-run reaches the prompt Claude Code builds.** Every run starts in
+  the same empty `RUN_DIR`, with a host session's variables dropped (`runEnv()`).
+  A path, id or time that differs between runs turns the prompt cache off for
+  every turn of every thread.
 
 ## Conventions
 
