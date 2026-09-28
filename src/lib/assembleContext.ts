@@ -42,56 +42,23 @@ export function assembleContext(
   }
 
   const policy = node.contextPolicy;
+  const none: ReadonlySet<NodeId> = new Set();
 
   switch (policy.kind) {
     case "full-ancestry":
+      return withSystem(lineageMessages(node, store, templates, none), opts, templates);
+
+    // A departure is sent as one user message (A-2), and the same text stands
+    // in for everything above the aside in every later turn there (P-27), so
+    // it is built in one place.
+    case "windowed":
+    case "truncated":
+    case "isolated":
       return withSystem(
-        lineageMessages(node, store, templates, { inclusive: true }),
+        [{ role: "user", content: departurePrompt(node, store, templates, none) }],
         opts,
         templates,
       );
-
-    case "windowed": {
-      const window = windowedMessages(
-        policy.upToNodeId,
-        policy.turns,
-        store,
-        templates,
-      );
-      const body = renderTemplate(templates.concept_lens, {
-        context_turns: asProse(window),
-        concept: node.content,
-      });
-      return withSystem([{ role: "user", content: body }], opts, templates);
-    }
-
-    case "truncated": {
-      const source = store.get(policy.upToNodeId);
-      const before = source?.parentId
-        ? lineageMessages(store.get(source.parentId)!, store, templates, {
-            inclusive: true,
-          })
-        : [];
-      const head = source
-        ? source.content.slice(0, clampOffset(policy.charOffset, source.content))
-        : "";
-      // Everything after charOffset is discarded here and can never re-enter
-      // the payload: the tail is not read again anywhere below this line.
-      const truncated: ChatMessage[] = source
-        ? [...before, { role: source.role, content: head }]
-        : before;
-      const body = renderTemplate(templates.structural_crop, {
-        truncated_context: asProse(truncated),
-      });
-      return withSystem([{ role: "user", content: appendNote(body, node) }], opts, templates);
-    }
-
-    case "isolated": {
-      const body = renderTemplate(templates.isolated_selection, {
-        selection: policy.payload,
-      });
-      return withSystem([{ role: "user", content: appendNote(body, node) }], opts, templates);
-    }
 
     case "quoted": {
       const parent = node.parentId ? store.get(node.parentId) : undefined;
@@ -99,12 +66,72 @@ export function assembleContext(
       if (parent) {
         base =
           policy.base === "windowed"
-            ? windowedMessages(parent.id, policy.turns ?? 2, store, templates)
-            : lineageMessages(parent, store, templates, { inclusive: true });
+            ? windowedMessages(parent.id, policy.turns ?? 2, store, templates, none)
+            : lineageMessages(parent, store, templates, none);
       }
       const body = `${asBlockquote(policy.quote)}\n\n${node.content}`.trimEnd();
       return withSystem([...base, { role: "user", content: body }], opts, templates);
     }
+  }
+}
+
+/**
+ * The one user message a departure is sent as: its template, filled with the
+ * context it carved out of the conversation it left — a window of turns, the
+ * conversation up to a cut, or a passage alone.
+ *
+ * A window or a cut is read from lineage that may itself start at an earlier
+ * departure (an aside inside an aside), so this recurses. In a well-formed
+ * tree it only ever moves upward; `visiting` keeps a corrupt cycle from
+ * hanging the UI.
+ */
+function departurePrompt(
+  node: ConversationNode,
+  store: NodeStore,
+  templates: TemplateSet,
+  visiting: ReadonlySet<NodeId>,
+): string {
+  if (visiting.has(node.id)) return node.content;
+  const inner = new Set(visiting).add(node.id);
+  const policy = node.contextPolicy;
+
+  switch (policy.kind) {
+    case "windowed": {
+      const window = windowedMessages(policy.upToNodeId, policy.turns, store, templates, inner);
+      return renderTemplate(templates.concept_lens, {
+        context_turns: asProse(window),
+        concept: node.content,
+      });
+    }
+
+    case "truncated": {
+      const source = store.get(policy.upToNodeId);
+      const above = source?.parentId ? store.get(source.parentId) : undefined;
+      const before = above ? lineageMessages(above, store, templates, inner) : [];
+      const head = source
+        ? source.content.slice(0, clampOffset(policy.charOffset, source.content))
+        : "";
+      // Everything after charOffset is discarded here and can never re-enter
+      // the payload: the tail is not read again anywhere below this line, and
+      // later turns in the aside carry this text instead of the source (P-27).
+      const truncated: ChatMessage[] = source
+        ? [...before, { role: source.role, content: head }]
+        : before;
+      const body = renderTemplate(templates.structural_crop, {
+        truncated_context: asProse(truncated),
+      });
+      return appendNote(body, node);
+    }
+
+    case "isolated":
+      return appendNote(
+        renderTemplate(templates.isolated_selection, { selection: policy.payload }),
+        node,
+      );
+
+    case "full-ancestry":
+    case "quoted":
+      return node.content;
   }
 }
 
@@ -113,14 +140,9 @@ export function assembleContext(
 /* ------------------------------------------------------------------ */
 
 /**
- * Walk `parentId` to root, reverse.
- *
- * DECISION (docs/decisions.md, A-1): the walk stops at — and includes —
- * a node whose own policy is `isolated`. An isolated node declared itself a
- * fresh start; letting its descendants silently re-inherit the ancestry it
- * deliberately excluded would make §5.3 a lie one turn later. Isolated nodes
- * are therefore *context roots*: lineage continues above them in Graph A, and
- * stops there in Graph B.
+ * Walk `parentId` to root, reverse — stopping at, and including, the nearest
+ * context root. Lineage continues above a root in Graph A; the walk that builds
+ * context (Graph B) stops there.
  */
 export function lineageChain(
   node: ConversationNode,
@@ -145,19 +167,58 @@ export function lineageChain(
   return chain.reverse();
 }
 
+/**
+ * Does this node start a context of its own?
+ *
+ * DECISION (docs/decisions.md, P-27, generalising A-1): every departure is a
+ * context root — `isolated`, `windowed` and `truncated`. An aside exists to
+ * leave the conversation with just enough of it; a later turn that re-inherited
+ * the whole ancestry, or the tail a crop discarded, would break that promise
+ * one turn after it was made.
+ *
+ * This must agree with `plan.forks` in `planSubmission()` — a gesture that
+ * opens an aside is exactly one that starts a context — and a test holds the
+ * two together. It reads the policy, never the origin: context is decided by
+ * Graph B alone.
+ */
 export function isContextRoot(node: ConversationNode): boolean {
-  return node.role === "user" && node.contextPolicy.kind === "isolated";
+  if (node.role !== "user") return false;
+  switch (node.contextPolicy.kind) {
+    case "isolated":
+    case "windowed":
+    case "truncated":
+      return true;
+    case "full-ancestry":
+    case "quoted":
+      return false;
+  }
+}
+
+/**
+ * The departure whose promise a message is under: the root of the aside it was
+ * asked in. Null on the thread, and null for a root itself, whose own policy
+ * already says what it carried. A reply answers for its question.
+ */
+export function contextStart(
+  node: ConversationNode,
+  store: NodeStore,
+): ConversationNode | null {
+  const asked =
+    node.role === "assistant" ? (node.parentId ? store.get(node.parentId) : undefined) : node;
+  if (!asked) return null;
+  const first = lineageChain(asked, store, { inclusive: true })[0];
+  return first && first.id !== asked.id && isContextRoot(first) ? first : null;
 }
 
 function lineageMessages(
   node: ConversationNode,
   store: NodeStore,
   templates: TemplateSet,
-  opts: { inclusive: boolean },
+  visiting: ReadonlySet<NodeId>,
 ): ChatMessage[] {
-  return lineageChain(node, store, opts).map((n) => ({
+  return lineageChain(node, store, { inclusive: true }).map((n) => ({
     role: n.role,
-    content: ancestorContent(n, templates),
+    content: ancestorContent(n, store, templates, visiting),
   }));
 }
 
@@ -171,10 +232,11 @@ function windowedMessages(
   turns: number,
   store: NodeStore,
   templates: TemplateSet,
+  visiting: ReadonlySet<NodeId>,
 ): ChatMessage[] {
   const target = store.get(upToNodeId);
   if (!target) return [];
-  const all = lineageMessages(target, store, templates, { inclusive: true });
+  const all = lineageMessages(target, store, templates, visiting);
   const wanted = Math.max(1, Math.floor(turns)) * 2;
   const slice = all.slice(Math.max(0, all.length - wanted));
   while (slice.length > 1 && slice[0].role === "assistant") slice.shift();
@@ -184,29 +246,23 @@ function windowedMessages(
 /**
  * What an ancestor message looked like *in the prompt*.
  *
- * For user nodes carrying a gesture policy this is the human-readable ask
- * (`content`), not the re-rendered template — re-inlining a window or a crop
- * that is already present as real ancestry would duplicate it. The exception is
- * a node whose policy carries the context itself (`isolated`, `quoted`):
- * dropping that payload would leave the following assistant reply answering a
- * question that is no longer in the transcript.
+ * A context root is always the first message of the walk, and it stands in for
+ * everything above it, so it contributes the prompt it was sent as — without
+ * it, the reply below would be answering a question no longer in the
+ * transcript. A quote keeps its blockquote for the same reason. Any other user
+ * node contributes its human-readable ask.
  */
-function ancestorContent(node: ConversationNode, templates: TemplateSet): string {
+function ancestorContent(
+  node: ConversationNode,
+  store: NodeStore,
+  templates: TemplateSet,
+  visiting: ReadonlySet<NodeId>,
+): string {
   if (node.role === "assistant") return node.content;
+  if (isContextRoot(node)) return departurePrompt(node, store, templates, visiting);
   const policy = node.contextPolicy;
-  switch (policy.kind) {
-    case "isolated":
-      return appendNote(
-        renderTemplate(templates.isolated_selection, {
-          selection: policy.payload,
-        }),
-        node,
-      );
-    case "quoted":
-      return `${asBlockquote(policy.quote)}\n\n${node.content}`.trimEnd();
-    default:
-      return node.content;
-  }
+  if (policy.kind === "quoted") return `${asBlockquote(policy.quote)}\n\n${node.content}`.trimEnd();
+  return node.content;
 }
 
 /* ------------------------------------------------------------------ */
@@ -258,10 +314,15 @@ function withSystem(
 /* Inspector support                                                   */
 /* ------------------------------------------------------------------ */
 
-export function policyLabel(policy: ContextPolicy): string {
+/**
+ * `start` is the policy of the aside a later turn is under (`contextStart()`):
+ * such a turn is `full-ancestry` by policy, but its ancestry begins at the
+ * aside, and the label says so.
+ */
+export function policyLabel(policy: ContextPolicy, start?: ContextPolicy): string {
   switch (policy.kind) {
     case "full-ancestry":
-      return "full ancestry";
+      return start ? "this aside" : "full ancestry";
     case "windowed":
       return `windowed · ${policy.turns} turn${policy.turns === 1 ? "" : "s"}`;
     case "truncated":

@@ -2,6 +2,8 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "@/store/useStore";
 import { draftKey, useUI, type PendingGesture } from "@/store/useUI";
 import { draftNode, planIsSendable, planSubmission } from "@/lib/draft";
+import { contextStart } from "@/lib/assembleContext";
+import { nodeStoreFromMap } from "@/types";
 import { ContextChip, Inspector } from "@/components/ContextChip";
 import { BRANCH_META } from "@/lib/policyMeta";
 import { useSurface } from "@/components/Surface";
@@ -84,6 +86,16 @@ export function Composer() {
     return assemble(draftNode(plan, conversationId));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plan, conversationId, nodes, templates, systemPrompt, pacing, assemble]);
+
+  // A later turn in an aside carries the aside, not the thread, and the chip
+  // names it by the move that opened the aside.
+  const start = useMemo(
+    () =>
+      conversationId
+        ? contextStart(draftNode(plan, conversationId), nodeStoreFromMap(nodes))?.contextPolicy
+        : undefined,
+    [plan, conversationId, nodes],
+  );
 
   // An aside with neither a gesture nor a first message has nothing to attach
   // a message to — sending would start a stray root — so it cannot send.
@@ -263,7 +275,7 @@ export function Composer() {
             thread, a cut answer, or nothing at all — so it always says what.
           */}
           {conversationId && (asideId || quote) ? (
-            <ContextChip nodeId={key} policy={plan.policy} messages={draftMessages} />
+            <ContextChip nodeId={key} policy={plan.policy} messages={draftMessages} start={start} />
           ) : null}
 
           {pending?.kind === "concept" ? (
@@ -319,7 +331,7 @@ export function Composer() {
         </div>
 
         {showDraftInspector ? (
-          <Inspector policy={plan.policy} messages={draftMessages} />
+          <Inspector policy={plan.policy} messages={draftMessages} start={start} />
         ) : null}
       </div>
     </div>

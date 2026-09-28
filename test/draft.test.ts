@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { draftNode, planIsSendable, planSubmission } from "@/lib/draft";
-import { assembleContext } from "@/lib/assembleContext";
+import { assembleContext, isContextRoot } from "@/lib/assembleContext";
 import { DEFAULT_TEMPLATES } from "@/lib/templates";
 import { TreeFixture } from "./helpers";
 import type { PendingGesture } from "@/store/useUI";
@@ -185,6 +185,22 @@ describe("plan → payload, end to end", () => {
       const plan = planSubmission({ text: "ask", pending, activeLeafId: leaf });
       const node = draftNode(plan, t.conversationId);
       expect(assembleContext(node, t, T)).toHaveLength(expected);
+    }
+  });
+
+  it("a gesture opens an aside exactly when its node starts a context of its own", () => {
+    // P-27: the aside's promise is kept by the context walk stopping at its
+    // root, so the two lists — what forks, what is a root — must never drift.
+    const gestures: Array<PendingGesture | null> = [
+      null,
+      { kind: "quote", sourceNodeId: "src", anchor },
+      { kind: "isolated", sourceNodeId: "src", anchor },
+      { kind: "concept", sourceNodeId: "src", anchor, turns: 2 },
+      { kind: "crop", sourceNodeId: "src", charOffset: 6, blockPath: "0", discardedChars: 7 },
+    ];
+    for (const pending of gestures) {
+      const plan = planSubmission({ text: "ask", pending, activeLeafId: "leaf" });
+      expect(isContextRoot(draftNode(plan, "conv"))).toBe(plan.forks);
     }
   });
 

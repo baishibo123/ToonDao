@@ -5,9 +5,10 @@ why this one. Invariants that follow from these live in `CLAUDE.md`; what the
 code does now lives in the code.
 
 **Accepted** decisions are on `main`. **Proposed** decisions arrive with
-`feature/reading-first` (which includes `feature/branch-windows`) or, from P-22
-on, with `feature/claude-code-bridge`, and are claimed intent until checked
-against the code and merged.
+`feature/reading-first` (which includes `feature/branch-windows`), from P-22
+on with `feature/claude-code-bridge`, and from P-27 on with
+`feature/aside-promise`; they are claimed intent until checked against the code
+and merged.
 
 ---
 
@@ -29,7 +30,7 @@ count — one — rather than a friendlier number.
 
 **A-3 · A windowed node's follow-ups do not inherit the window (§11 Q1).** The
 window governs the first prompt only; after that the branch has ordinary
-ancestry. This is the spec's own suggestion.
+ancestry. This is the spec's own suggestion. *Superseded by P-27.*
 
 **A-4 · `assembledPreview` is historical (§11 Q4).** It is recorded before the
 request goes out and never recomputed, so the inspector shows what was actually
@@ -186,6 +187,18 @@ passage into the thread's composer, so a side conversation ends the way one does
 between people — you come back with what you learned. Considered: a new "bring
 back" gesture with its own policy. Rejected: carrying a passage into a
 conversation is what a quote already is.
+
+**P-27 · An aside keeps its opening move's promise for as long as you talk in it
+(supersedes A-3).** Every departure — Explain, Just this, Lost me here — is a
+context root, as Just this already was (A-1). A later turn in an aside carries the
+aside's opening prompt, rebuilt from the same template and the same carved-out
+context, then the aside's own turns, and nothing from above the aside; an aside
+inside an aside is carved from the aside it left. Considered: A-3, under which the
+second message of an Explain aside silently carried the whole thread, and a
+follow-up after a crop carried the tail the crop had discarded. An aside exists to
+leave a conversation with just enough of it: the whole thread blurs the model's
+focus and the reader's alike. What an aside teaches goes back to the thread by
+To thread (P-12).
 
 ### Reading moves
 

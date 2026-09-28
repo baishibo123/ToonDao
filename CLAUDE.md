@@ -15,6 +15,12 @@ Rules that hold for the life of the project. Why each one exists is in
   `grep -rnE "ChatMessage\[\]|role: \"(user|assistant|system)\"" src` — every hit
   must be `assembleContext.ts`, a provider adapter reshaping an assembled array,
   a type, or `parsePayload()` (display only).
+- **A departure is a context root.** A user node whose policy is `isolated`,
+  `windowed` or `truncated` stops the context walk (`isContextRoot()`) and stands
+  in for everything above it with the prompt it was sent as (`departurePrompt()`).
+  So a later turn in an aside never re-inherits the thread, and a crop's tail
+  never comes back. `isContextRoot()` must agree with `plan.forks`; a test in
+  `test/draft.test.ts` holds them together.
 - **`planSubmission()` in `src/lib/draft.ts` is the only place a policy is chosen
   for a new node.** Check:
   `grep -rnE "kind: \"(full-ancestry|windowed|truncated|isolated|quoted)\"" src` —

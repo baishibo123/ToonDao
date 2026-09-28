@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { assembleContext, asProse, lineageChain } from "@/lib/assembleContext";
+import {
+  assembleContext,
+  asProse,
+  contextStart,
+  lineageChain,
+  policyLabel,
+} from "@/lib/assembleContext";
 import { DEFAULT_TEMPLATES } from "@/lib/templates";
 import { TreeFixture } from "./helpers";
 import type { TemplateSet } from "@/types";
@@ -217,7 +223,7 @@ describe("windowed (§5.1 concept lens)", () => {
     expect(src.id).toBeTruthy();
   });
 
-  it("§11 Q1: a follow-up under a windowed node uses its own subtree ancestry", () => {
+  it("P-27: a follow-up in an Explain aside carries the aside's opening, not the thread", () => {
     const t = new TreeFixture();
     t.linear(6);
     const src = t.all().at(-1)!;
@@ -231,17 +237,42 @@ describe("windowed (§5.1 concept lens)", () => {
     const lensReply = t.add("assistant", "about monotonicity", lens.id);
     const followUp = t.add("user", "and now?", lensReply.id);
 
+    const opening = assembleContext(lens, t, T)[0].content;
     const msgs = assembleContext(followUp, t, T);
-    // Full ancestry from the root down — the window governed the initial prompt only.
-    expect(msgs.map((m) => m.content)).toEqual([
-      ...Array.from({ length: 6 }, (_, i) => [
-        `question turn ${i + 1}`,
-        `answer turn ${i + 1}`,
-      ]).flat(),
+    // The opening prompt stands in for everything above the aside, word for word.
+    expect(msgs.map((m) => m.content)).toEqual([opening, "about monotonicity", "and now?"]);
+    expect(msgs.map((m) => m.role)).toEqual(["user", "assistant", "user"]);
+    // Only the window's two turns came along; the four before it stay out.
+    const body = JSON.stringify(msgs);
+    expect(body).toContain("question turn 5");
+    for (const i of [1, 2, 3, 4]) expect(body).not.toContain(`question turn ${i}`);
+  });
+
+  it("P-27: an aside inside an aside is carved from the aside, not the thread", () => {
+    const t = new TreeFixture();
+    t.linear(4);
+    const src = t.all().at(-1)!;
+    const outer = t.add(
+      "user",
       "monotonicity",
-      "about monotonicity",
-      "and now?",
-    ]);
+      src.id,
+      { kind: "windowed", turns: 1, upToNodeId: src.id },
+      "concept-lens",
+    );
+    const outerReply = t.add("assistant", "monotone means order-preserving", outer.id);
+    const inner = t.add(
+      "user",
+      "order-preserving",
+      outerReply.id,
+      { kind: "windowed", turns: 1, upToNodeId: outerReply.id },
+      "concept-lens",
+    );
+
+    const body = assembleContext(inner, t, T)[0].content;
+    // Its window is the outer aside's one turn, which itself carried turn 4 only.
+    expect(body).toContain("monotone means order-preserving");
+    expect(body).toContain("answer turn 4");
+    for (const i of [1, 2, 3]) expect(body).not.toContain(`question turn ${i}`);
   });
 });
 
@@ -344,6 +375,30 @@ describe("truncated (§5.2 structural crop)", () => {
     expect(assembleContext(crop, t, T)[0].content).toContain(
       "specifically the lemma step",
     );
+  });
+
+  it("P-27: keeps the tail out of every later turn in the aside", () => {
+    const t = new TreeFixture();
+    const u1 = t.add("user", "explain the proof", null);
+    const a1 = t.add("assistant", FIVE_PARAS, u1.id);
+    const cut = FIVE_PARAS.indexOf("Paragraph three");
+    const crop = t.add(
+      "user",
+      "",
+      a1.id,
+      { kind: "truncated", upToNodeId: a1.id, charOffset: cut },
+      "structural-crop",
+    );
+    const cropReply = t.add("assistant", "Up to the lemma, then.", crop.id);
+    const followUp = t.add("user", "so what is the lemma for?", cropReply.id);
+
+    const msgs = assembleContext(followUp, t, T);
+    expect(msgs).toHaveLength(3);
+    expect(msgs[0].content).toBe(assembleContext(crop, t, T)[0].content);
+    const body = JSON.stringify(msgs);
+    expect(body).toContain("Paragraph two introduces the lemma.");
+    expect(body).not.toContain("Paragraph three");
+    expect(body).not.toContain("Paragraph five");
   });
 });
 
@@ -613,5 +668,32 @@ describe("determinism and purity", () => {
     const t = new TreeFixture();
     const orphan = t.add("user", "hello", "does-not-exist");
     expect(assembleContext(orphan, t, T).map((m) => m.content)).toEqual(["hello"]);
+  });
+});
+
+describe("contextStart (P-27)", () => {
+  it("names the aside a later turn is under, and nothing on the thread or at a root", () => {
+    const t = new TreeFixture();
+    t.linear(3);
+    const src = t.all().at(-1)!;
+    const lens = t.add(
+      "user",
+      "monotonicity",
+      src.id,
+      { kind: "windowed", turns: 2, upToNodeId: src.id },
+      "concept-lens",
+    );
+    const lensReply = t.add("assistant", "about monotonicity", lens.id);
+    const followUp = t.add("user", "and now?", lensReply.id);
+    const followReply = t.add("assistant", "now this", followUp.id);
+
+    expect(contextStart(src, t)).toBeNull();
+    expect(contextStart(lens, t)).toBeNull();
+    expect(contextStart(lensReply, t)).toBeNull();
+    expect(contextStart(followUp, t)?.id).toBe(lens.id);
+    expect(contextStart(followReply, t)?.id).toBe(lens.id);
+
+    expect(policyLabel(followUp.contextPolicy)).toBe("full ancestry");
+    expect(policyLabel(followUp.contextPolicy, lens.contextPolicy)).toBe("this aside");
   });
 });

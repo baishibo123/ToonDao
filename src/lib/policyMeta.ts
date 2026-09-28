@@ -98,8 +98,18 @@ export const POLICY_CLASS: Record<PolicyKind, string> = {
 /**
  * The one sentence the inspector shows above the payload. Its job is to tell
  * the user what is *missing*, because that is the part they cannot infer.
+ *
+ * `start` is the policy of the aside a later turn is under (`contextStart()`).
+ * Such a turn carries the aside's opening prompt and the aside itself, and
+ * nothing from the conversation the aside left (P-27).
  */
-export function policyExplanation(policy: ContextPolicy): string {
+export function policyExplanation(policy: ContextPolicy, start?: ContextPolicy): string {
+  if (start && (policy.kind === "full-ancestry" || policy.kind === "quoted")) {
+    const carried = `This aside's opening prompt (${openingCarried(start)}), then every turn in the aside.`;
+    const quote =
+      policy.kind === "quoted" ? " The quoted passage is prepended to your message as a blockquote." : "";
+    return `${carried}${quote} Nothing from above the aside.`;
+  }
   switch (policy.kind) {
     case "full-ancestry":
       return "Every message from the root of this branch down to here, in order. The ordinary behaviour.";
@@ -113,6 +123,21 @@ export function policyExplanation(policy: ContextPolicy): string {
       return "Nothing but the selected text. No ancestry, no earlier turns. This node sits in the tree where it was born, but it inherited none of it.";
     case "quoted":
       return "The full path, plus the quoted passage prepended to your message as a blockquote.";
+  }
+}
+
+/** What an aside's opening move carried, in the words of policyExplanation(). */
+function openingCarried(start: ContextPolicy): string {
+  switch (start.kind) {
+    case "windowed":
+      return `the term, with the last ${start.turns} exchange${start.turns === 1 ? "" : "s"} before it`;
+    case "truncated":
+      return "the conversation up to the cut";
+    case "isolated":
+      return "the selected passage alone";
+    case "full-ancestry":
+    case "quoted":
+      return "the path it was asked from";
   }
 }
 

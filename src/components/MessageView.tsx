@@ -1,8 +1,8 @@
 import { memo, useMemo, useRef } from "react";
-import type { ConversationNode } from "@/types";
+import { nodeStoreFromMap, type ConversationNode } from "@/types";
 import { Markdown } from "@/components/Markdown";
 import { Inspector } from "@/components/ContextChip";
-import { policyLabel } from "@/lib/assembleContext";
+import { contextStart, policyLabel } from "@/lib/assembleContext";
 import { BRANCH_META, branchColor } from "@/lib/policyMeta";
 import { useStore } from "@/store/useStore";
 import { useUI } from "@/store/useUI";
@@ -79,6 +79,10 @@ export const MessageView = memo(function MessageView({ node }: MessageViewProps)
     // Only assembled when the inspector is actually open; a 200-node tree
     // should not be assembling 200 payloads on every keystroke.
     [openInspector, node, assemble],
+  );
+  const start = useMemo(
+    () => (openInspector ? contextStart(node, nodeStoreFromMap(nodes))?.contextPolicy : undefined),
+    [openInspector, node, nodes],
   );
   const origin = node.origin;
 
@@ -202,7 +206,7 @@ export const MessageView = memo(function MessageView({ node }: MessageViewProps)
               onClick={() => toggleInspector(node.id)}
               title="Show exactly what the model was sent"
             >
-              {policyLabel(node.contextPolicy) === "full ancestry"
+              {node.contextPolicy.kind === "full-ancestry"
                 ? "context"
                 : `context · ${policyLabel(node.contextPolicy)}`}
             </button>
@@ -232,6 +236,7 @@ export const MessageView = memo(function MessageView({ node }: MessageViewProps)
             policy={node.contextPolicy}
             messages={messages}
             historical={node.assembledPreview}
+            {...(start ? { start } : {})}
             {...(node.harness ? { harness: node.harness } : {})}
             {...(node.toolUse ? { toolUse: node.toolUse } : {})}
             {...(node.usage ? { usage: node.usage } : {})}

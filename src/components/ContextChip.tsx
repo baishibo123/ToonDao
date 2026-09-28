@@ -23,9 +23,11 @@ interface ContextChipProps {
   messages: ChatMessage[];
   /** Extra detail shown between the count and the policy name. */
   detail?: string;
+  /** The policy of the aside this turn is under, when it is a later turn in one. */
+  start?: ContextPolicy;
 }
 
-export function ContextChip({ nodeId, policy, messages, detail }: ContextChipProps) {
+export function ContextChip({ nodeId, policy, messages, detail, start }: ContextChipProps) {
   const open = useUI((s) => s.openInspectors.has(nodeId));
   const toggleInspector = useUI((s) => s.toggleInspector);
 
@@ -53,7 +55,7 @@ export function ContextChip({ nodeId, policy, messages, detail }: ContextChipPro
         </>
       ) : null}
       <span className="chip__sep">·</span>
-      <span>{policyLabel(policy)}</span>
+      <span>{policyLabel(policy, start)}</span>
       <span className="chip__sep">{open ? "▾" : "▸"}</span>
     </button>
   );
@@ -71,9 +73,11 @@ interface InspectorProps {
   usage?: Usage;
   /** The model that answered, for a reply. */
   model?: string;
+  /** The policy of the aside this turn is under, when it is a later turn in one. */
+  start?: ContextPolicy;
 }
 
-export function Inspector({ policy, messages, historical, harness, toolUse, usage, model }: InspectorProps) {
+export function Inspector({ policy, messages, historical, harness, toolUse, usage, model, start }: InspectorProps) {
   const shown = useMemo(
     () => (historical ? parsePayload(historical) : messages),
     [historical, messages],
@@ -84,7 +88,7 @@ export function Inspector({ policy, messages, historical, harness, toolUse, usag
       <div className="inspector__head">
         <span className="inspector__title">Exact payload</span>
         <span className="chip__sep">·</span>
-        <span>{policyLabel(policy)}</span>
+        <span>{policyLabel(policy, start)}</span>
         {historical ? (
           <>
             <span className="chip__sep">·</span>
@@ -94,7 +98,7 @@ export function Inspector({ policy, messages, historical, harness, toolUse, usag
           </>
         ) : null}
       </div>
-      <p className="inspector__note">{policyExplanation(policy)}</p>
+      <p className="inspector__note">{policyExplanation(policy, start)}</p>
       {harness === "claude-code" ? (
         <p className="inspector__note inspector__note--bridge">
           {model ? `Answered by ${model}, sent` : "Sent"} through Claude Code, which adds a few
