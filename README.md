@@ -71,10 +71,10 @@ ToonDao can run on your own subscription:
 
 Each message starts your own `claude -p` in an empty temporary folder, with
 Claude Code's coding prompt replaced by ToonDao's, nothing saved to your Claude
-Code history, and no tools unless the message's move allows them: **Explain**
-may search and read the web, **Just this** and **Lost me here** never can, and
-ordinary replies can if you turn on *Let replies look things up*. Every lookup is
-listed above the reply it went into.
+Code history, and no tools unless the move allows them: **Explain** may search
+and read the web, for as long as you talk in its aside; **Just this** and **Lost
+me here** never can; replies in the thread can if you turn on *Let replies look
+things up*. Every lookup is listed above the reply it went into.
 
 The model picker lists versions by name (`claude-opus-5-5`, `claude-opus-5`, …);
 the default, `opus`, is whatever newest Opus your installed Claude Code supports,

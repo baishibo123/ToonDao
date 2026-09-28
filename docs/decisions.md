@@ -284,6 +284,9 @@ is context too. Considered: Claude Code's default tool set (thirty tools, about
 21 times the input per request, including tools that run commands and write
 files), and `--restricted` (safe, but it drops the account's claude.ai
 connectors). ToolSearch is not shown to the reader: it only loads another tool.
+Inside an aside, every turn follows the move that opened it (P-27): an Explain
+aside can keep looking things up; a Just this or Lost me here aside never can,
+whatever the setting, which now decides the thread alone.
 
 **P-25 · Show the usage window, and record usage on every reply.** The window is
 shared with everything else the account does, so a long reading session can lock

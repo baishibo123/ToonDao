@@ -206,9 +206,10 @@ export function Settings() {
               <span>
                 <span className="toggle__label">Let replies look things up</span>
                 <span className="toggle__hint">
-                  Claude Code bridge only. Explain always may search the web; Just this and
-                  Lost me here never do. This decides ordinary replies and quotes. Every lookup
-                  is listed under the reply it went into.
+                  Claude Code bridge only. This decides replies and quotes in the thread. In an
+                  aside, the move that opened it decides: an Explain aside may search the web
+                  throughout; Just this and Lost me here never do. Every lookup is listed with
+                  the reply it went into.
                 </span>
               </span>
             </label>

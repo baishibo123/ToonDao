@@ -546,6 +546,9 @@ async function runStream(set: Setter, get: Getter, req: StreamRequest): Promise<
 
   const controller = new AbortController();
   set({ abort: controller, streamingNodeId: assistantNode.id });
+  // The question being answered decides the tools, through the aside it was
+  // asked in, if any.
+  const asked = get().nodes[req.parentId];
 
   let text = "";
   let lastPersist = Date.now();
@@ -572,7 +575,7 @@ async function runStream(set: Setter, get: Getter, req: StreamRequest): Promise<
       temperature: settings.temperature,
       maxTokens: settings.maxTokens,
       signal: controller.signal,
-      toolScope: toolScopeFor(req.policy, settings.chatTools),
+      toolScope: asked ? toolScopeFor(asked, get().nodeStore(), settings.chatTools) : "none",
     })) {
       if (delta.rateLimit) set({ rateLimit: delta.rateLimit });
       if (delta.usage) usage = delta.usage;

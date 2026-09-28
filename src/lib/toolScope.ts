@@ -1,5 +1,6 @@
-import type { ContextPolicy } from "@/types";
+import type { ConversationNode, NodeStore } from "@/types";
 import type { ToolScope } from "@/lib/bridgeProtocol";
+import { contextStart } from "@/lib/assembleContext";
 
 /**
  * Whether a request may reach outside the text ToonDao assembled — decided by
@@ -15,9 +16,18 @@ import type { ToolScope } from "@/lib/bridgeProtocol";
  *                                                     up is where sources help most
  *   full-ancestry, quoted                           → the reader's choice
  *
+ * Inside an aside, every turn is under the promise of the move that opened it
+ * (P-27): an Explain aside may keep looking things up, and a Just this or Lost
+ * me here aside never can, whatever the setting. The setting decides the thread.
+ *
  * Only the Claude Code bridge honours this; other providers have no tools.
  */
-export function toolScopeFor(policy: ContextPolicy, chatTools: boolean): ToolScope {
+export function toolScopeFor(
+  node: ConversationNode,
+  store: NodeStore,
+  chatTools: boolean,
+): ToolScope {
+  const policy = (contextStart(node, store) ?? node).contextPolicy;
   switch (policy.kind) {
     case "isolated":
     case "truncated":

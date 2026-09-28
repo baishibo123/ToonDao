@@ -72,8 +72,10 @@ Rules that hold for the life of the project. Why each one exists is in
   `isSafeModel()`; the system prompt goes through a file and the conversation
   through stdin, never through argv.
 - **`toolScopeFor()` in `src/lib/toolScope.ts` is the only place a tool scope is
-  decided.** The bridge may narrow it, never widen it, and never adds a tool that
-  runs commands or writes files.
+  decided**, from the question's node, never from a policy alone: inside an aside
+  the move that opened it decides every turn (`contextStart()`). The bridge may
+  narrow the scope, never widen it, and never adds a tool that runs commands or
+  writes files.
 - **`src/lib/bridgeProtocol.ts` has no imports.** Node runs it directly from the
   bridge, where the app's `@/` alias does not exist; both ends encode and decode
   through it.
