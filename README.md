@@ -92,6 +92,22 @@ reply that came through it.
 `docs/decisions.md`: Anthropic's terms restrict third-party apps that let people
 use their Claude subscriptions, and distributing this needs Anthropic's approval.
 
+### Learn from a project (in progress)
+
+ToonDao is learning to start a study conversation from a project you built with
+Claude Code. The first piece is the harvest: everything the model will read
+first, gathered by code.
+
+```bash
+npm run harvest -- "<project folder>" --out <folder for the result>
+```
+
+It writes `harvest.md` — the project's Claude Code sessions (your prompts, the
+errors you hit, compaction summaries), git history, notes and file list, within
+about 20k tokens, and a table of which of those the project has — plus every
+session in full under `sessions/`. It only reads, skips whatever git ignores, and
+redacts credentials pasted into chats.
+
 ## Tests
 
 ```bash
@@ -119,6 +135,7 @@ against real DOM ranges in `test/anchor.dom.test.tsx`.
 | `bridge/claude-code.ts` | The local bridge that runs your own Claude Code as a provider. |
 | `src/lib/bridgeProtocol.ts` | The wire contract between the app and the bridge, shared by both ends. |
 | `src/lib/toolScope.ts` | The only place that decides whether a message may use outside sources. |
+| `bridge/harvest.ts` | What a project already holds about how it was built, gathered for the model to read first. |
 | `CLAUDE.md` | Invariants that must keep holding. |
 | `docs/decisions.md` | Why things are the way they are. |
 

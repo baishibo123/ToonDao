@@ -85,6 +85,15 @@ Rules that hold for the life of the project. Why each one exists is in
   A path, id or time that differs between runs turns the prompt cache off for
   every turn of every thread.
 
+## Learning from a project
+
+- **The harvest only reads, and never reads what git ignores.** `projectFiles()`
+  lists tracked or trackable files — ignored ones are where captures, traces and
+  secrets live — and every text `renderHarvest()` or `renderSession()` emits
+  passes `redact()`.
+- **Nothing assumes a project has decision records, notes or history.** Every
+  source is optional, and the harvest's Sources table says which are missing.
+
 ## Conventions
 
 - **Display vocabulary lives in `src/lib/policyMeta.ts`.** Glyphs, labels and hue

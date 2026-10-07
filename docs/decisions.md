@@ -6,9 +6,9 @@ code does now lives in the code.
 
 **Accepted** decisions are on `main`. **Proposed** decisions arrive with
 `feature/reading-first` (which includes `feature/branch-windows`), from P-22
-on with `feature/claude-code-bridge`, and from P-27 on with
-`feature/aside-promise`; they are claimed intent until checked against the code
-and merged.
+on with `feature/claude-code-bridge`, P-27 with `feature/aside-promise`, and
+from P-28 on with `feature/learn-from-project`; they are claimed intent until
+checked against the code and merged.
 
 ---
 
@@ -305,3 +305,24 @@ Considered: sharing anyway because each user signs in to the unmodified binary
 themselves, which the terms do allow — but the SDK note is explicit, and the
 risk would land on other people's accounts. Ask first.
 
+### Learning from a project
+
+**P-28 · A project is learned from a harvest that code gathers.** A study
+conversation about a project starts from one page, built by `bridge/harvest.ts`
+— a port of the learn-project skill's `harvest.py` — from the project's Claude
+Code sessions (the person's prompts, the errors they hit, compaction summaries,
+each turn's last answer), its git history, its notes and its file list, within a
+token budget that keeps prompts and errors first. Every source is optional and
+the page says which were found: of the nine projects on this machine built with
+Claude Code, all had sessions, six had git history and three had decision
+records, so nothing may assume ADRs. Considered: letting the model read the
+folder (osmo dock holds about 1.35M tokens of text, most of it third-party
+repositories; study about 200k), and calling the skill's script from the bridge,
+which would tie ToonDao to one person's `~/.claude/skills`. Code reads
+everything for free; the model reads a page sized for one sitting and opens files
+when it needs them. The skill stays the reference for the method, so a change to
+one is made in both. Where the port departs from it: a prompt typed while Claude
+was busy (a `queued_command` attachment) is kept; a failed command's error keeps
+the line naming the failure, not only "Exit code 1"; and redaction never takes
+Chinese text for a password's value, because prose about passwords is what a
+project like osmo dock is there to teach.
