@@ -37,6 +37,14 @@ import {
   type ToolScope,
   type Usage,
 } from "../src/lib/bridgeProtocol.ts";
+import {
+  chooseFolder,
+  FolderDialogError,
+  listProjects,
+  projectBySlug,
+  snapshotProject,
+  TOONDAO_HOME,
+} from "./projects.ts";
 
 export const DEFAULT_PORT = 8788;
 
@@ -70,6 +78,12 @@ export interface BridgeOptions {
   allowedOrigins: string[];
   allowedTools: string[];
   claudeBin: string;
+  /** Where projects are registered; `~/.toondao` unless a test says otherwise. */
+  projectsHome?: string;
+  /** Where Claude Code keeps transcripts; `~/.claude/projects` unless a test says otherwise. */
+  sessionsRoot?: string;
+  /** The folder dialog; macOS's own unless a test stands in for the person. */
+  chooseFolder?: () => Promise<string | null>;
 }
 
 export interface ChatMessage {
@@ -616,7 +630,78 @@ async function route(req: IncomingMessage, res: ServerResponse, opts: BridgeOpti
   if (req.method === "POST" && path === "/v1/chat/completions") {
     return chat(req, res, opts, cors);
   }
+  if (path === "/v1/projects" || path.startsWith("/v1/projects/")) {
+    return projects(req, res, path, opts, cors);
+  }
   return json(res, 404, { error: { message: `No route for ${req.method} ${path}.` } }, cors);
+}
+
+/** Only one folder dialog at a time: a second click would stack another on top. */
+let dialogOpen = false;
+
+/**
+ * The project routes (P-29). None of them takes a folder from the request: a
+ * new project's folder comes from the dialog the person clicks through, a known
+ * one from the registry by its slug. They answer with summaries only — what a
+ * snapshot holds is read by the model, never served here.
+ *
+ *   GET  /v1/projects                  every registered project
+ *   POST /v1/projects/choose           open the folder dialog, then snapshot what was picked
+ *   POST /v1/projects/<slug>/snapshot  snapshot a registered project again
+ */
+async function projects(
+  req: IncomingMessage,
+  res: ServerResponse,
+  path: string,
+  opts: BridgeOptions,
+  cors: Record<string, string>,
+): Promise<void> {
+  const home = opts.projectsHome ?? TOONDAO_HOME;
+  const where = { home, ...(opts.sessionsRoot ? { sessionsRoot: opts.sessionsRoot } : {}) };
+  if (req.method === "GET" && path === "/v1/projects") {
+    return json(res, 200, { projects: await listProjects(home) }, cors);
+  }
+  if (req.method !== "POST") {
+    return json(res, 405, { error: { message: `Use POST for ${path}.` } }, cors);
+  }
+  await readJson(req);
+
+  if (path === "/v1/projects/choose") {
+    if (dialogOpen) {
+      return json(res, 409, { error: { message: "A folder dialog is already open — look behind this window." } }, cors);
+    }
+    dialogOpen = true;
+    let folder: string | null;
+    try {
+      folder = await (opts.chooseFolder ?? chooseFolder)();
+    } catch (err) {
+      const status = err instanceof FolderDialogError ? 501 : 500;
+      return json(res, status, { error: { message: err instanceof Error ? err.message : String(err) } }, cors);
+    } finally {
+      dialogOpen = false;
+    }
+    if (!folder) return json(res, 200, { cancelled: true }, cors);
+    return snapshotAnswer(res, folder, where, cors);
+  }
+
+  const match = /^\/v1\/projects\/([^/]+)\/snapshot$/.exec(path);
+  const project = match ? await projectBySlug(decodeURIComponent(match[1] ?? ""), home) : null;
+  if (!project) return json(res, 404, { error: { message: "No such project." } }, cors);
+  return snapshotAnswer(res, project.root, where, cors);
+}
+
+async function snapshotAnswer(
+  res: ServerResponse,
+  folder: string,
+  where: { home: string; sessionsRoot?: string },
+  cors: Record<string, string>,
+): Promise<void> {
+  try {
+    return json(res, 200, { project: await snapshotProject(folder, where) }, cors);
+  } catch (err) {
+    // Not a folder, the home folder, gone since it was registered: the person can act on it.
+    return json(res, 400, { error: { message: err instanceof Error ? err.message : String(err) } }, cors);
+  }
 }
 
 async function chat(

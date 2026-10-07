@@ -2,7 +2,13 @@ import type { ChatMessage, ProviderConfig } from "@/types";
 import { ProviderError, type ChatOpts, type Delta, type Provider } from "./types";
 import { readSSE } from "./sse";
 import { errorDetail, joinUrl } from "./openai";
-import { decodeBridgeFrame, type BridgeRequest } from "@/lib/bridgeProtocol";
+import {
+  decodeBridgeFrame,
+  decodeProject,
+  decodeProjects,
+  type BridgeRequest,
+  type ProjectSummary,
+} from "@/lib/bridgeProtocol";
 
 /**
  * The Claude Code bridge (bridge/claude-code.ts), as a provider.
@@ -87,4 +93,60 @@ export async function fetchBridgeHealth(baseUrl: string, signal?: AbortSignal): 
   } catch {
     return null;
   }
+}
+
+/* ------------------------------------------------------------------ */
+/* Projects (P-29)                                                     */
+/* ------------------------------------------------------------------ */
+
+/** The projects the bridge has registered, or null when it cannot be reached (or predates projects). */
+export async function fetchProjects(baseUrl: string): Promise<ProjectSummary[] | null> {
+  try {
+    const res = await fetch(joinUrl(baseUrl, "projects"));
+    if (!res.ok) return null;
+    return decodeProjects(await res.json());
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Ask the bridge to open the system folder dialog and snapshot the folder the
+ * person picks. Resolves when they choose or cancel; no path is ever sent.
+ */
+export async function chooseProject(baseUrl: string): Promise<ProjectSummary | "cancelled"> {
+  const body = await postToBridge(joinUrl(baseUrl, "projects/choose"));
+  if (body && typeof body === "object" && "cancelled" in body) return "cancelled";
+  return projectFrom(body);
+}
+
+/** Take a new snapshot of a registered project. */
+export async function snapshotAgain(baseUrl: string, slug: string): Promise<ProjectSummary> {
+  return projectFrom(await postToBridge(joinUrl(baseUrl, `projects/${encodeURIComponent(slug)}/snapshot`)));
+}
+
+function projectFrom(body: unknown): ProjectSummary {
+  const project = decodeProject(body && typeof body === "object" ? (body as { project?: unknown }).project : null);
+  if (!project) throw new ProviderError("The bridge answered without a project.");
+  return project;
+}
+
+async function postToBridge(url: string): Promise<unknown> {
+  let res: Response;
+  try {
+    res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+  } catch {
+    throw new ProviderError("The bridge is not running. Start it with: npm run bridge");
+  }
+  const body: unknown = await res.json().catch(() => null);
+  if (res.ok) return body;
+  const message =
+    body && typeof body === "object" && typeof (body as { error?: { message?: unknown } }).error?.message === "string"
+      ? String((body as { error: { message: string } }).error.message)
+      : `The bridge answered ${res.status}.`;
+  // A bridge started before projects existed has no such route at all.
+  if (res.status === 404 && message.startsWith("No route")) {
+    throw new ProviderError("This bridge is older than the app. Restart it: Ctrl-C, then npm run bridge.", 404);
+  }
+  throw new ProviderError(message, res.status);
 }

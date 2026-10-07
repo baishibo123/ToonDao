@@ -325,4 +325,25 @@ one is made in both. Where the port departs from it: a prompt typed while Claude
 was busy (a `queued_command` attachment) is kept; a failed command's error keeps
 the line naming the failure, not only "Exit code 1"; and redaction never takes
 Chinese text for a password's value, because prose about passwords is what a
-project like osmo dock is there to teach.
+project like osmo dock is there to teach. The harvest also reads Claude Code's
+own memory for the project — the `memory/` folder beside its transcripts, whose
+notes are lessons already written down — and matches a session by the folder's
+given path as well as its resolved one, since a session records whichever it
+ran in.
+
+**P-29 · A project is added by picking its folder in the system's dialog, and
+kept as dated snapshots.** "Add a project…" in Settings asks the bridge to open
+macOS's own folder dialog (`osascript`, `choose folder`). The folder the person
+picks is harvested and frozen under `~/.toondao/projects/<slug>/<snapshot id>/`
+— `harvest.md`, every session in full, the transcripts copied through
+`redact()`, and a manifest with the git commit — and `project.json` lists the
+snapshots, oldest first. A snapshot is never overwritten, so a clean "just
+imported" start can always be returned to, and every file is owner-only.
+Considered: the browser's folder picker, which never reveals a folder's absolute
+path, and the model will need it to read the project; typing a path into the
+app, which would have a web request name a folder for the bridge to act on; and
+a terminal command alone, which works anywhere but is not one step in the app —
+it stays, as `npm run harvest -- "<folder>" --snapshot`, the way to add a
+project off macOS. With the dialog, a folder is chosen only by the person's own
+click, so no page that got past the bridge's guards could point it anywhere;
+after that a project is named by its slug.

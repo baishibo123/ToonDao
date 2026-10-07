@@ -4,6 +4,7 @@ import { useUI } from "@/store/useUI";
 import type { ProviderConfig } from "@/types";
 import { TemplateEditor } from "@/components/TemplateEditor";
 import { DataPane } from "@/components/DataPane";
+import { ProjectsPane } from "@/components/ProjectsPane";
 import { BridgeStatus } from "@/components/BridgeStatus";
 
 /**
@@ -288,6 +289,11 @@ export function Settings() {
           <section className="pane">
             <h3 className="pane__title">Prompt templates</h3>
             <TemplateEditor />
+          </section>
+
+          <section className="pane">
+            <h3 className="pane__title">Projects</h3>
+            <ProjectsPane />
           </section>
 
           <section className="pane">

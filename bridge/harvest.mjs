@@ -7,5 +7,5 @@ if (major < 22 || (major === 22 && minor < 18)) {
   );
   process.exit(1);
 }
-const { main } = await import("./harvest.ts");
+const { main } = await import("./harvest-cli.ts");
 process.exitCode = await main(process.argv.slice(2));

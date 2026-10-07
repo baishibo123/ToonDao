@@ -95,18 +95,21 @@ use their Claude subscriptions, and distributing this needs Anthropic's approval
 ### Learn from a project (in progress)
 
 ToonDao is learning to start a study conversation from a project you built with
-Claude Code. The first piece is the harvest: everything the model will read
-first, gathered by code.
+Claude Code. So far it gathers what the model will read first:
 
-```bash
-npm run harvest -- "<project folder>" --out <folder for the result>
-```
+- **Settings → Projects → Add a project…** opens your system's folder dialog
+  (macOS, with the bridge running). ToonDao then gathers the project's Claude
+  Code sessions (your prompts, the errors you hit, compaction summaries), Claude
+  Code's own memory for it, its git history, notes and file list into a page of
+  about 20k tokens, with a table of which of those the project has, and keeps a
+  dated snapshot under `~/.toondao/projects/`: that page, every session in full,
+  and the transcripts copied with credentials redacted. **Snapshot again** adds a
+  new one; earlier snapshots are kept.
+- Off macOS, or from a terminal: `npm run harvest -- "<project folder>" --snapshot`.
+  Without `--snapshot` it prints the page; `--out <dir>` writes the page and
+  every session to a folder of your choice instead.
 
-It writes `harvest.md` — the project's Claude Code sessions (your prompts, the
-errors you hit, compaction summaries), git history, notes and file list, within
-about 20k tokens, and a table of which of those the project has — plus every
-session in full under `sessions/`. It only reads, skips whatever git ignores, and
-redacts credentials pasted into chats.
+It only reads, and skips whatever git ignores.
 
 ## Tests
 
@@ -136,6 +139,7 @@ against real DOM ranges in `test/anchor.dom.test.tsx`.
 | `src/lib/bridgeProtocol.ts` | The wire contract between the app and the bridge, shared by both ends. |
 | `src/lib/toolScope.ts` | The only place that decides whether a message may use outside sources. |
 | `bridge/harvest.ts` | What a project already holds about how it was built, gathered for the model to read first. |
+| `bridge/projects.ts` | Projects to learn from: the folder dialog, and dated snapshots under `~/.toondao/projects`. |
 | `CLAUDE.md` | Invariants that must keep holding. |
 | `docs/decisions.md` | Why things are the way they are. |
 

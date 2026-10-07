@@ -76,6 +76,76 @@ export const BRIDGE_EVENT = {
 } as const;
 
 /* ------------------------------------------------------------------ */
+/* Projects — learning from a project the person built (P-28, P-29)    */
+/* ------------------------------------------------------------------ */
+
+/** A source the harvest looked for, and whether the project had it. */
+export interface HarvestSource {
+  name: string;
+  found: boolean;
+  detail: string;
+}
+
+/** One frozen harvest of a project, as `~/.toondao/projects/<slug>/<id>/` holds it. */
+export interface SnapshotSummary {
+  /** The snapshot's folder name: when it was taken, e.g. `2026-10-07T14-55-02Z`. */
+  id: string;
+  createdAt: string;
+  /** The commit the project was at, when it is a git repository. */
+  gitHead: string | null;
+  sources: HarvestSource[];
+  sessions: Array<{ id: string; title: string | null }>;
+  /** Rough size of `harvest.md`, the page the model reads first. */
+  harvestTokens: number;
+}
+
+/** A project registered with the bridge. Its folder never travels in a request. */
+export interface ProjectSummary {
+  slug: string;
+  name: string;
+  root: string;
+  /** Oldest first; the last is the current one. */
+  snapshots: SnapshotSummary[];
+}
+
+/** The bridge's answer to "choose a project": the project, or that the dialog was cancelled. */
+export type ChooseResult = { project: ProjectSummary } | { cancelled: true };
+
+/** Lenient reading of a project list from the bridge; anything malformed is dropped. */
+export function decodeProjects(value: unknown): ProjectSummary[] {
+  const list = isRecord(value) && Array.isArray(value.projects) ? value.projects : [];
+  return list.flatMap((item) => {
+    const project = decodeProject(item);
+    return project ? [project] : [];
+  });
+}
+
+export function decodeProject(value: unknown): ProjectSummary | null {
+  if (!isRecord(value) || typeof value.slug !== "string" || typeof value.root !== "string") return null;
+  const snapshots = Array.isArray(value.snapshots) ? value.snapshots : [];
+  return {
+    slug: value.slug,
+    name: str(value.name) || value.slug,
+    root: value.root,
+    snapshots: snapshots.filter(isRecord).map((s) => ({
+      id: str(s.id),
+      createdAt: str(s.createdAt),
+      gitHead: typeof s.gitHead === "string" ? s.gitHead : null,
+      sources: (Array.isArray(s.sources) ? s.sources : []).filter(isRecord).map((src) => ({
+        name: str(src.name),
+        found: src.found === true,
+        detail: str(src.detail),
+      })),
+      sessions: (Array.isArray(s.sessions) ? s.sessions : []).filter(isRecord).map((x) => ({
+        id: str(x.id),
+        title: typeof x.title === "string" ? x.title : null,
+      })),
+      harvestTokens: num(s.harvestTokens),
+    })),
+  };
+}
+
+/* ------------------------------------------------------------------ */
 /* Encoding — the bridge side                                          */
 /* ------------------------------------------------------------------ */
 

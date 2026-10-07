@@ -80,6 +80,10 @@ Rules that hold for the life of the project. Why each one exists is in
   bridge, where the app's `@/` alias does not exist; both ends encode and decode
   through it.
 - **The bridge listens on 127.0.0.1 and answers only the app's origins.**
+- **A request never names a folder.** A new project's folder comes from the
+  system dialog the person clicks through (`chooseFolder()`); a registered one is
+  looked up by its slug. The project routes answer with summaries, never with
+  what a snapshot holds.
 - **Nothing per-run reaches the prompt Claude Code builds.** Every run starts in
   the same empty `RUN_DIR`, with a host session's variables dropped (`runEnv()`).
   A path, id or time that differs between runs turns the prompt cache off for
@@ -93,6 +97,9 @@ Rules that hold for the life of the project. Why each one exists is in
   passes `redact()`.
 - **Nothing assumes a project has decision records, notes or history.** Every
   source is optional, and the harvest's Sources table says which are missing.
+- **A snapshot is private, redacted and never overwritten.** Its files are
+  owner-only, transcripts are copied through `redactTranscript()`, and each
+  snapshot gets its own dated folder.
 
 ## Conventions
 

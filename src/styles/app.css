@@ -1185,6 +1185,41 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .bridgestatus__text { flex: 1; min-width: 0; line-height: 1.5; }
 .bridgestatus__text code { font-family: var(--font-mono); font-size: 0.9em; color: var(--text); }
 
+/* Projects to learn from (Settings). One card per project: what its latest
+   snapshot found, and what it lacks, in the same quiet register. */
+.project {
+  padding: 10px 12px 2px;
+  margin-bottom: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+}
+.project__head { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.project__name { font-weight: 600; color: var(--text); flex: none; }
+.project__root {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.project__sources {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 4px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-dim);
+}
+.project__sources strong { font-weight: 500; color: var(--text); }
+.project__source--missing,
+.project__source--missing strong { color: var(--text-faint); }
+.project__actions { margin: 8px 0 8px; }
+.pane__note code { font-family: var(--font-mono); font-size: 0.9em; }
+
 .msg__lookups {
   display: flex;
   flex-wrap: wrap;

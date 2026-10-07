@@ -8,13 +8,14 @@
  * found. Read-only throughout. Git-ignored files are never read, and everything
  * rendered passes `redact()`.
  *
- *   npm run harvest -- "<project folder>" [--out <dir>] [--budget <tokens>]
+ * Run it from a terminal with `npm run harvest` (bridge/harvest-cli.ts).
  */
 import { execFile } from "node:child_process";
-import { mkdir, readdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
+import { readdir, readFile, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
-import { basename, join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
+import type { HarvestSource } from "../src/lib/bridgeProtocol.ts";
 
 const run = promisify(execFile);
 
@@ -71,11 +72,7 @@ export interface FolderSummary {
   bytes: number;
 }
 
-export interface Source {
-  name: string;
-  found: boolean;
-  detail: string;
-}
+export type Source = HarvestSource;
 
 export interface Harvest {
   root: string;
@@ -136,7 +133,8 @@ const SUMMARY_LEAD = "This session is being continued";
  * noise. Unlike it, a prompt typed while Claude was busy — stored as a
  * `queued_command` attachment rather than a user record — is kept.
  */
-export function digestSession(jsonl: string, project: string, id = ""): SessionDigest {
+export function digestSession(jsonl: string, project: string | readonly string[], id = ""): SessionDigest {
+  const roots = typeof project === "string" ? [project] : project;
   const digest: SessionDigest = {
     id,
     title: null,
@@ -157,7 +155,7 @@ export function digestSession(jsonl: string, project: string, id = ""): SessionD
 
   for (const line of jsonl.split("\n")) {
     if (!line.trim()) continue;
-    if (line.includes(project)) digest.mentions++;
+    if (roots.some((root) => line.includes(root))) digest.mentions++;
     let parsed: unknown;
     try {
       parsed = JSON.parse(line);
@@ -193,7 +191,7 @@ export function digestSession(jsonl: string, project: string, id = ""): SessionD
     digest.records++;
     if (cwd) {
       digest.cwd ??= cwd;
-      if (inside(cwd, project)) digest.inside++;
+      if (roots.some((root) => inside(cwd, root))) digest.inside++;
     }
     if (!digest.first) digest.first = at;
     if (at) digest.last = at;
@@ -255,18 +253,24 @@ export function inside(path: string, project: string): boolean {
  */
 export function matchReason(
   digest: SessionDigest,
-  project: string,
+  project: string | readonly string[],
   { minRecords = 20, minMentions = 200 }: { minRecords?: number; minMentions?: number } = {},
 ): string | null {
-  if (digest.cwd && inside(digest.cwd, project)) return "started in the project";
+  const roots = typeof project === "string" ? [project] : project;
+  const cwd = digest.cwd;
+  if (cwd && roots.some((root) => inside(cwd, root))) return "started in the project";
   if (digest.inside >= minRecords) return `${digest.inside} of ${digest.records} records in the project`;
   if (digest.mentions >= minMentions) return `${digest.mentions} lines mention its path`;
   return null;
 }
 
-/** Every Claude Code transcript that worked on the project, oldest first. */
+/**
+ * Every Claude Code transcript that worked on the project, oldest first.
+ * `project` may name the folder by more than one path — the path it was given
+ * and the one symlinks resolve to — since a session records whichever it ran in.
+ */
 export async function findSessions(
-  project: string,
+  project: string | readonly string[],
   opts: { sessionsRoot?: string; minRecords?: number; minMentions?: number } = {},
 ): Promise<MatchedSession[]> {
   const root = opts.sessionsRoot ?? SESSIONS_ROOT;
@@ -413,6 +417,35 @@ export async function findNotes(root: string, files: readonly string[], maxBytes
   return notes;
 }
 
+/**
+ * What Claude Code remembered about the project: the `memory/` folder beside
+ * the transcripts of each session that worked on it. These are lessons already
+ * written down, so they are read with the notes, filed under `claude-memory/`.
+ */
+export async function findMemory(sessions: readonly MatchedSession[], maxBytes = 200_000): Promise<NoteFile[]> {
+  const folders = [...new Set(sessions.map((s) => join(dirname(s.file), "memory")))];
+  const notes: NoteFile[] = [];
+  for (const folder of folders) {
+    let names: string[];
+    try {
+      names = (await readdir(folder)).filter((name) => name.endsWith(".md")).sort();
+    } catch {
+      continue;
+    }
+    for (const name of names) {
+      try {
+        const full = join(folder, name);
+        if ((await stat(full)).size > maxBytes) continue;
+        const text = (await readFile(full, "utf8")).trim();
+        if (text) notes.push({ path: `claude-memory/${name}`, text });
+      } catch {
+        // Unreadable: leave it out.
+      }
+    }
+  }
+  return notes;
+}
+
 /** Folders two levels deep with file counts and sizes, plus the files at the top. */
 export async function summarizeTree(root: string, files: readonly string[]): Promise<FolderSummary[]> {
   const folders = new Map<string, FolderSummary>();
@@ -450,21 +483,30 @@ export async function harvestProject(
 ): Promise<Harvest> {
   const root = await realpath(folder);
   if (!(await stat(root)).isDirectory()) throw new Error(`Not a folder: ${folder}`);
+  const given = resolve(folder).replace(/\/+$/, "");
+  const aliases = given === root ? [root] : [root, given];
   if (root === "/" || root === (await realpath(homedir()))) {
     throw new Error("Pick a project folder, not your home folder: every session would match it.");
   }
   const [sessions, commits, files] = await Promise.all([
-    findSessions(root, opts.sessionsRoot ? { sessionsRoot: opts.sessionsRoot } : {}),
+    findSessions(aliases, opts.sessionsRoot ? { sessionsRoot: opts.sessionsRoot } : {}),
     gitHistory(root),
     projectFiles(root),
   ]);
-  const [notes, tree] = await Promise.all([findNotes(root, files), summarizeTree(root, files)]);
+  const [ownNotes, memory, tree] = await Promise.all([
+    findNotes(root, files),
+    findMemory(sessions),
+    summarizeTree(root, files),
+  ]);
+  // Claude Code's memory reads after the project's own README, CLAUDE.md and decisions.
+  const lead = ownNotes.filter((note) => noteRank(note.path) <= 2);
+  const notes = [...lead, ...memory, ...ownNotes.filter((note) => noteRank(note.path) > 2)];
   const name = basename(root).trim() || basename(root);
   return {
     root,
     name,
     gatheredAt: (opts.now ?? new Date()).toISOString(),
-    sources: describeSources(sessions, commits, notes, tree),
+    sources: describeSources(sessions, commits, notes, memory, tree),
     sessions,
     commits,
     notes,
@@ -475,9 +517,11 @@ export async function harvestProject(
 function describeSources(
   sessions: readonly MatchedSession[],
   commits: readonly Commit[],
-  notes: readonly NoteFile[],
+  allNotes: readonly NoteFile[],
+  memory: readonly NoteFile[],
   tree: readonly FolderSummary[],
 ): Source[] {
+  const notes = allNotes.filter((note) => !memory.includes(note));
   // Counted once: a resumed or forked session repeats the history before it.
   const unique = dedupe(sessions);
   const count = (kind: ItemKind) => unique.filter(({ item }) => item.kind === kind).length;
@@ -506,6 +550,13 @@ function describeSources(
       detail: notes.length
         ? `${plural(notes.length, "file")}: ${notes.slice(0, 6).map((n) => n.path).join(", ")}${notes.length > 6 ? ", …" : ""}`
         : "no README, docs or other notes",
+    },
+    {
+      name: "Claude Code memory",
+      found: memory.length > 0,
+      detail: memory.length
+        ? `${plural(memory.length, "file")}: ${memory.slice(0, 6).map((n) => n.path.replace(/^claude-memory\//, "")).join(", ")}${memory.length > 6 ? ", …" : ""}`
+        : "none",
     },
     {
       name: "Decision records",
@@ -744,52 +795,6 @@ export function renderSession(s: MatchedSession): string {
   const caps: Record<ItemKind, number> = { prompt: 4000, error: 600, summary: 6000, answer: 4000 };
   const body = s.items.map((item) => itemBlock(item, caps[item.kind])).join("\n");
   return `${sessionHeading(s).replace(/^### /, "# ")}\n\nTranscript: \`${s.file}\`\n\n${body}`;
-}
-
-/* ------------------------------------------------------------------ */
-/* Command line                                                        */
-/* ------------------------------------------------------------------ */
-
-/** `npm run harvest -- "<folder>" [--out <dir>] [--budget <tokens>]`. Returns an exit code. */
-export async function main(argv: readonly string[]): Promise<number> {
-  const args = [...argv];
-  let out: string | null = null;
-  let budget = 20_000;
-  const positional: string[] = [];
-  while (args.length) {
-    const arg = args.shift() ?? "";
-    if (arg === "--out") out = args.shift() ?? null;
-    else if (arg === "--budget") budget = Number(args.shift());
-    else positional.push(arg);
-  }
-  const folder = positional[0];
-  if (!folder || !Number.isFinite(budget) || budget < 2000) {
-    console.error('usage: npm run harvest -- "<project folder>" [--out <dir>] [--budget <tokens, at least 2000>]');
-    return 2;
-  }
-
-  let harvest: Harvest;
-  try {
-    harvest = await harvestProject(folder);
-  } catch (err) {
-    console.error(err instanceof Error ? err.message : String(err));
-    return 1;
-  }
-  const page = renderHarvest(harvest, { budgetTokens: budget });
-  if (!out) {
-    process.stdout.write(page);
-    console.error(`\n[harvest] ~${estimateTokens(page)} tokens. Pass --out <dir> to also write every session in full.`);
-    return 0;
-  }
-
-  await mkdir(join(out, "sessions"), { recursive: true });
-  await writeFile(join(out, "harvest.md"), page, "utf8");
-  for (const session of harvest.sessions) {
-    await writeFile(join(out, "sessions", `${session.id}.md`), renderSession(session), "utf8");
-  }
-  for (const source of harvest.sources) console.log(`${source.found ? "✓" : "·"} ${source.name}: ${source.detail}`);
-  console.log(`\nWrote ${join(out, "harvest.md")} (~${estimateTokens(page)} tokens) and ${plural(harvest.sessions.length, "session file")}.`);
-  return 0;
 }
 
 /* ------------------------------------------------------------------ */
