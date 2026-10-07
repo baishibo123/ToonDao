@@ -19,8 +19,14 @@ export function ProjectsPane() {
     setProjects(baseUrl ? await fetchProjects(baseUrl) : null);
   }, [baseUrl]);
 
+  // Asked on open, and again whenever the window comes back into focus: the
+  // bridge is started or restarted in a terminal, so coming back from one is
+  // exactly when the answer may have changed.
   useEffect(() => {
     void load();
+    const onFocus = () => void load();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
   }, [load]);
 
   const act = async (key: string, waiting: string, task: () => Promise<string>) => {
@@ -61,10 +67,16 @@ export function ProjectsPane() {
       </p>
 
       {projects === null ? (
-        <p className="tmpl__warn" role="status">
-          The Claude Code bridge is not running, or was started before projects existed. Start or
-          restart it with <code>npm run bridge</code>.
-        </p>
+        <div className="bridgestatus bridgestatus--warn" role="status">
+          <span className="bridgestatus__dot" aria-hidden />
+          <span className="bridgestatus__text">
+            The Claude Code bridge is not running, or was started before projects existed. Start or
+            restart it with <code>npm run bridge</code>.
+          </span>
+          <button type="button" className="btn btn--sm" onClick={() => void load()}>
+            check again
+          </button>
+        </div>
       ) : null}
 
       <div className="pane__row">
