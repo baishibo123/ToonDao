@@ -4,7 +4,7 @@
  * transcripts in Claude Code's JSONL shape; folders are made in a temp dir.
  */
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -225,6 +225,16 @@ describe("the project's own files", () => {
     const root = folder();
     const notes = await findNotes(root, await projectFiles(root));
     expect(notes.map((n) => n.path).slice(0, 2)).toEqual(["README.md", "docs/decisions.md"]);
+  });
+
+  it("does not follow a note that links out of the project", async () => {
+    const root = folder();
+    const outside = join(mkdtempSync(join(tmpdir(), "harvest-outside-")), "diary.md");
+    writeFileSync(outside, "private diary");
+    symlinkSync(outside, join(root, "docs", "diary.md"));
+    const notes = await findNotes(root, await projectFiles(root));
+    expect(notes.map((n) => n.path)).not.toContain("docs/diary.md");
+    expect(JSON.stringify(notes)).not.toContain("private diary");
   });
 
   it("reads the history oldest first, and nothing without a repository", async () => {

@@ -398,3 +398,15 @@ of reach of the reading moves; and reading the newest snapshot on every turn,
 which would let a turn read files the map never saw. It needs the Claude Code
 provider, and the button says so when another is chosen.
 
+**P-33 · A person's own Claude Code instructions come along, and the inspector
+says so.** Claude Code adds `~/.claude/CLAUDE.md` — the person's standing
+instructions — to every request the bridge makes, as it does in their own
+sessions; it surfaced when the first learning map came back in English and said
+so, citing them. Kept: they are the person's own words (the language they want
+answers in, for one), and they do not change between requests, so the cache
+holds. Considered: `--setting-sources` without `user`, which would drop their
+other settings too; and copying the instructions into ToonDao's system prompt, a
+second copy to keep in sync. The inspector now names them among what Claude Code
+adds, and the learning-map template defers to them on language instead of
+overriding them.
+

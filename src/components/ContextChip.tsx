@@ -101,9 +101,10 @@ export function Inspector({ policy, messages, historical, harness, toolUse, usag
       <p className="inspector__note">{policyExplanation(policy, start)}</p>
       {harness === "claude-code" ? (
         <p className="inspector__note inspector__note--bridge">
-          {model ? `Answered by ${model}, sent` : "Sent"} through Claude Code, which adds a few
-          hundred tokens of its own that this record cannot show: a line naming itself, its
-          working folder, platform and shell, the model, today's date and your account email.
+          {model ? `Answered by ${model}, sent` : "Sent"} through Claude Code, which adds context of
+          its own that this record cannot show: a line naming itself, its working folder,
+          platform and shell, the model, today's date, your account email, and your own Claude
+          Code instructions (<code>~/.claude/CLAUDE.md</code>) if you have them.
           {toolUse?.length
             ? ` While answering it also used: ${toolUse.map((t) => `${t.name} (${t.query})`).join("; ")}.`
             : " It used no tools."}

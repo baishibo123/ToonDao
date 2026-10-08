@@ -4,7 +4,16 @@
  * Everything runs in temp folders; the dialog is stood in for.
  */
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -155,6 +164,19 @@ describe("snapshotReadDir", () => {
     const old = { ...project, snapshots: project.snapshots.map(({ files: _files, ...rest }) => rest) };
     writeFileSync(join(f.home, "projects", "osmo-dock", "project.json"), JSON.stringify(old));
     expect(await snapshotReadDir("osmo-dock", project.snapshots[0]!.id, f.home)).toBeNull();
+  });
+});
+
+describe("copying the project", () => {
+  it("never follows a symbolic link out of the project", async () => {
+    const f = fixture();
+    const outside = join(f.base, "id_rsa_lookalike");
+    writeFileSync(outside, "PRIVATE KEY MATERIAL");
+    symlinkSync(outside, join(f.project, "Sources", "linked.txt"));
+    const project = await snapshotProject(f.project, { home: f.home, sessionsRoot: f.sessionsRoot });
+    const files = join(f.home, "projects", "osmo-dock", project.snapshots[0]!.id, "read", "files");
+    expect(existsSync(join(files, "Sources", "linked.txt"))).toBe(false);
+    expect(existsSync(join(files, "Sources", "WifiJoiner.swift"))).toBe(true);
   });
 });
 

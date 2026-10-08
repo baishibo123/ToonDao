@@ -84,9 +84,9 @@ the new version without a restart.
 
 It costs nothing per token, but every request counts toward your subscription's
 usage window, which is shared with the rest of your Claude Code use; the
-composer shows how much of it is spent. Claude Code also adds a few hundred
-tokens of its own context to each request, and the inspector says so on every
-reply that came through it.
+composer shows how much of it is spent. Claude Code also adds context of its
+own to each request — including your own `~/.claude/CLAUDE.md` instructions, if
+you have them — and the inspector says so on every reply that came through it.
 
 **Before sharing the bridge with others**, read decision P-26 in
 `docs/decisions.md`: Anthropic's terms restrict third-party apps that let people

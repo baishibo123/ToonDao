@@ -11,7 +11,7 @@
  * Run it from a terminal with `npm run harvest` (bridge/harvest-cli.ts).
  */
 import { execFile } from "node:child_process";
-import { readdir, readFile, realpath, stat } from "node:fs/promises";
+import { lstat, readdir, readFile, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -402,7 +402,11 @@ function noteRank(path: string): number {
   return 4;
 }
 
-/** The project's own notes, whatever it has of them — possibly none. */
+/**
+ * The project's own notes, whatever it has of them — possibly none. A note that
+ * is a symbolic link is not followed, so a link pointing out of the project
+ * cannot bring outside text into the harvest.
+ */
 export async function findNotes(root: string, files: readonly string[], maxBytes = 200_000): Promise<NoteFile[]> {
   const picked = files
     .filter((path) => NOTE_FILE.test(path))
@@ -411,7 +415,8 @@ export async function findNotes(root: string, files: readonly string[], maxBytes
   for (const path of picked) {
     try {
       const full = join(root, path);
-      if ((await stat(full)).size > maxBytes) continue;
+      const info = await lstat(full);
+      if (!info.isFile() || info.size > maxBytes) continue;
       const text = (await readFile(full, "utf8")).trim();
       if (text) notes.push({ path, text });
     } catch {

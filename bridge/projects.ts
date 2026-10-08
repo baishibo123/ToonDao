@@ -18,7 +18,7 @@
  * summaries in project.json.
  */
 import { execFile } from "node:child_process";
-import { chmod, copyFile, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { chmod, copyFile, lstat, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
@@ -143,7 +143,9 @@ const MAX_TOTAL_BYTES = 64 * 1024 * 1024;
 /**
  * Copy the project's own files into a snapshot for the model to read: what git
  * tracks or would track, minus credential files, files over 1 MB, and anything
- * past the totals. Returns how many were copied.
+ * past the totals. A symbolic link is never followed: a link to `~/.ssh/id_rsa`
+ * committed by mistake would otherwise copy the key itself. Returns how many
+ * were copied.
  */
 export async function copyProjectFiles(root: string, files: readonly string[], dest: string): Promise<number> {
   let copied = 0;
@@ -153,8 +155,8 @@ export async function copyProjectFiles(root: string, files: readonly string[], d
     const from = join(root, path);
     let size: number;
     try {
-      const info = await stat(from);
-      if (!info.isFile()) continue;
+      const info = await lstat(from);
+      if (!info.isFile()) continue; // directories, and links, which isFile() is false for under lstat
       size = info.size;
     } catch {
       continue;

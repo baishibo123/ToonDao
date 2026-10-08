@@ -38,7 +38,8 @@ Treat the text above as the entire context. Answer only about it.`,
 
   // P-32: the first message of a conversation that learns from a project. The
   // method is the learn-project skill's, kept general: no project is assumed to
-  // have decision records, and the language follows the reader.
+  // have decision records, and the language is the reader's — their standing
+  // instructions first (P-33), since this message itself is in English.
   learning_map: `I built {{project}} with Claude Code, and I want to learn from it. Your working directory is a snapshot of the project. Read harvest.md first: it gathers what the project holds about how it was built — my prompts and the errors I hit in its Claude Code sessions, Claude Code's own notes, its git history, its notes and its files, with a table of which of those it has. sessions/ holds each session in full, and files/ the project as it was.
 
 Then draw me a study map:
@@ -47,7 +48,7 @@ Then draw me a study map:
 - For each module: what happened, in two to four lines with a pointer to where; the concept in plain words, with key terms under their English names; what it builds on; and three questions — one to recall, one about the mechanism (why or how), one to transfer it (what if…).
 - End with a Queue: concepts that came up in passing and are worth learning later.
 
-Show me the list of modules, recommend where to start and why, and ask me where I want to begin. From then on, teach one question at a time, story first, grounded in this project's code. Write in the language I write to you in.`,
+Show me the list of modules, recommend where to start and why, and ask me where I want to begin. From then on, teach one question at a time, story first, grounded in this project's code. If my standing instructions say which language to use, write in it; otherwise write in the language I write to you in.`,
 
   // §4: quote_reply has no wrapper. The quote is rendered as a `>` blockquote
   // prepended to the user's message. The body is kept in the template set only
