@@ -104,9 +104,9 @@ const ASSIGNED =
  * Credentials pasted into a chat — API keys, tokens, `password:` values —
  * replaced, with harvest.py's patterns. Deliberately greedy: an English word
  * after "password" or "token" may go too, which costs a little meaning and
- * never a secret. Unlike harvest.py, the value is never Chinese: a password is
- * not, and prose such as "用蓝牙读 Wi-Fi 密码、再握手" is what a project about
- * passwords is there to teach.
+ * never a secret. The value is never Chinese: a password is not, and prose
+ * such as "用蓝牙读 Wi-Fi 密码、再握手" is what a project about passwords is
+ * there to teach.
  */
 export function redact(text: string): string {
   let out = text;
@@ -128,10 +128,11 @@ const SUMMARY_LEAD = "This session is being continued";
  * One transcript → the user's prompts, the tool errors they hit, compaction
  * summaries and the final text of each answer, in order. Pure.
  *
- * As in harvest.py, an answer is the last assistant text before the next
- * prompt, and errors the harness raised about its own tools are dropped as
- * noise. Unlike it, a prompt typed while Claude was busy — stored as a
- * `queued_command` attachment rather than a user record — is kept.
+ * As in harvest.py: an answer is the last assistant text before the next
+ * prompt; errors the harness raised about its own tools are dropped as noise;
+ * and a prompt typed while Claude was busy, stored as a `queued_command`
+ * attachment rather than a user record, is kept — unless it is marked meta,
+ * which is a background subagent handing back its report, not the person.
  */
 export function digestSession(jsonl: string, project: string | readonly string[], id = ""): SessionDigest {
   const roots = typeof project === "string" ? [project] : project;
@@ -175,7 +176,7 @@ export function digestSession(jsonl: string, project: string | readonly string[]
       continue;
     }
     if (type === "attachment" && isRecord(record.attachment)) {
-      if (record.attachment.type === "queued_command") {
+      if (record.attachment.type === "queued_command" && !record.attachment.isMeta) {
         const text = str(record.attachment.prompt).trim();
         if (text && !NOISE.some((lead) => text.startsWith(lead))) {
           flush();
@@ -225,10 +226,11 @@ export function digestSession(jsonl: string, project: string | readonly string[]
 }
 
 /**
- * The line of a failed tool call that says what went wrong. harvest.py keeps
- * the first line, but a failed command's first line is only "Exit code 1": then
- * the line naming an error is kept beside it, or failing that the last one.
- * Errors the harness raised about its own tools are noise, and dropped.
+ * The line of a failed tool call that says what went wrong, picked as
+ * harvest.py's `error_line()` does. That is the first line, unless a failed
+ * command's first line is only "Exit code 1": then the first later line naming
+ * an error is kept beside it, or failing that the last one. Errors the harness
+ * raised about its own tools are noise, and dropped.
  */
 export function errorLine(raw: string): string {
   const lines = raw.split("\n").map((l) => l.trim()).filter(Boolean);

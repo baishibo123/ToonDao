@@ -329,7 +329,8 @@ project like osmo dock is there to teach. The harvest also reads Claude Code's
 own memory for the project — the `memory/` folder beside its transcripts, whose
 notes are lessons already written down — and matches a session by the folder's
 given path as well as its resolved one, since a session records whichever it
-ran in.
+ran in. *Amended by P-30: `harvest.py` has since taken up the three departures
+above.*
 
 **P-29 · A project is added by picking its folder in the system's dialog, and
 kept as dated snapshots.** "Add a project…" in Settings asks the bridge to open
@@ -347,3 +348,18 @@ it stays, as `npm run harvest -- "<folder>" --snapshot`, the way to add a
 project off macOS. With the dialog, a folder is chosen only by the person's own
 click, so no page that got past the bridge's guards could point it anywhere;
 after that a project is named by its slug.
+
+**P-30 · The skill took up the port's departures, and both drop a subagent's
+report (amends P-28).** On 2026-10-07 the learn-project skill's `harvest.py`
+took up the three departures P-28 lists: a prompt typed while Claude was
+busy is kept, a failed command's error keeps the line naming the failure, and
+redaction never takes Chinese text for a password's value. In those the port
+no longer departs from the skill. The skill also went one step further, and
+the port follows: a `queued_command` attachment marked `isMeta` is dropped.
+Such an attachment is a background subagent handing back its final report
+(`origin.kind` "peer", the prompt opening with `<agent-message from="…">` and
+"[Subagent hand-back]"). Kept, each one read as something the person asked
+and split the turn it arrived in. On this machine they were 3 of 73 queued
+commands, beside 63 task notifications the noise prefixes already drop and 7
+prompts the person typed. The test is the harness's own `isMeta` mark, as for
+user records, rather than the report's wording.

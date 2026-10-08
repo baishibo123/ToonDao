@@ -107,6 +107,28 @@ describe("digestSession", () => {
     expect(digest.items.map((i) => i.text)).toEqual(["first", "working", "also check the BLE side"]);
   });
 
+  it("drops a background subagent's report, which is queued the same way but marked meta", () => {
+    const report = {
+      type: "attachment",
+      timestamp: "t3",
+      attachment: {
+        type: "queued_command",
+        isMeta: true,
+        origin: { kind: "peer", name: "general-purpose" },
+        prompt: '<agent-message from="a66fa281">\n[Subagent hand-back] The text below is the final report of a subagent.\n  The BLE side is fine.\n</agent-message>',
+      },
+    };
+    const digest = digestSession(
+      jsonl(user("first", "t1"), assistant("working", "t2"), report, assistant("done", "t4")),
+      PROJECT,
+    );
+    // Not a prompt, and not a turn boundary: the answer is still the turn's last text.
+    expect(digest.items.map((i) => [i.kind, i.text])).toEqual([
+      ["prompt", "first"],
+      ["answer", "done"],
+    ]);
+  });
+
   it("falls back to the generated title when the session was never renamed", () => {
     expect(digestSession(jsonl({ type: "ai-title", aiTitle: "Wi-Fi debugging" }), PROJECT).title).toBe(
       "Wi-Fi debugging",
