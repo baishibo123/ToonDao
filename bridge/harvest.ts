@@ -83,6 +83,8 @@ export interface Harvest {
   commits: Commit[];
   notes: NoteFile[];
   tree: FolderSummary[];
+  /** The project's own files, relative to its root (`projectFiles()`): what a snapshot copies. */
+  files: string[];
 }
 
 /* ------------------------------------------------------------------ */
@@ -513,6 +515,7 @@ export async function harvestProject(
     commits,
     notes,
     tree,
+    files,
   };
 }
 

@@ -1,5 +1,5 @@
 import type { ChatMessage, ProviderConfig } from "@/types";
-import type { RateLimit, ToolScope, ToolUse, Usage } from "@/lib/bridgeProtocol";
+import type { ProjectRef, RateLimit, ToolScope, ToolUse, Usage } from "@/lib/bridgeProtocol";
 
 export interface ChatOpts {
   model: string;
@@ -9,6 +9,8 @@ export interface ChatOpts {
   /** What the request may reach beyond the assembled text. Adapters without
    *  tools ignore it. */
   toolScope?: ToolScope;
+  /** A project snapshot the request may read (Claude Code bridge only, P-31). */
+  project?: ProjectRef | null;
 }
 
 export interface Delta {

@@ -36,6 +36,19 @@ Treat the text above as the entire context. Answer only about it.`,
   // fix is to ask for less, and a checkpoint to decide what comes next.
   pacing: `Pace your answers like a conversation, not a lecture. Give me one idea at a time — the next thing I need, not everything you know — and keep it to what fits on one screen. If there is more to say, stop at a natural checkpoint and end with one real question: either to check that I followed, or to ask which way to go next.`,
 
+  // P-32: the first message of a conversation that learns from a project. The
+  // method is the learn-project skill's, kept general: no project is assumed to
+  // have decision records, and the language follows the reader.
+  learning_map: `I built {{project}} with Claude Code, and I want to learn from it. Your working directory is a snapshot of the project. Read harvest.md first: it gathers what the project holds about how it was built — my prompts and the errors I hit in its Claude Code sessions, Claude Code's own notes, its git history, its notes and its files, with a table of which of those it has. sessions/ holds each session in full, and files/ the project as it was.
+
+Then draw me a study map:
+- Five to ten modules. A module is a cluster of concepts this project actually exercised, ordered by how much the project leaned on it and how often it broke.
+- Anchor each module in the strongest evidence there is: an incident (a session where something broke, a fix commit), then a decision (a decision record or a note), then a place in the code (file and line). Never invent an incident. If there is little history, ask me what was hardest instead.
+- For each module: what happened, in two to four lines with a pointer to where; the concept in plain words, with key terms under their English names; what it builds on; and three questions — one to recall, one about the mechanism (why or how), one to transfer it (what if…).
+- End with a Queue: concepts that came up in passing and are worth learning later.
+
+Show me the list of modules, recommend where to start and why, and ask me where I want to begin. From then on, teach one question at a time, story first, grounded in this project's code. Write in the language I write to you in.`,
+
   // §4: quote_reply has no wrapper. The quote is rendered as a `>` blockquote
   // prepended to the user's message. The body is kept in the template set only
   // so the editor can show it; {{quote}} / {{message}} are the two slots.
@@ -72,6 +85,11 @@ export const TEMPLATE_META: Record<
     label: "Pacing",
     vars: [],
     note: "Appended to the system message of every request while Settings → Pace answers is on. No variables.",
+  },
+  learning_map: {
+    label: "Learning map",
+    vars: ["project"],
+    note: "P-32 — the first message of a conversation started from Settings → Projects. {{project}} is the project's name; the model reads the snapshot it is pinned to.",
   },
 };
 

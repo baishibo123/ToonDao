@@ -117,6 +117,19 @@ export interface Conversation {
    * version bump is needed and older builds simply ignore the field.
    */
   later?: LaterItem[];
+  /**
+   * The project this conversation learns from, pinned to one snapshot so every
+   * turn reads the same files the learning map was drawn from (P-32). Optional,
+   * like `later`.
+   */
+  project?: ConversationProject;
+}
+
+/** A registered project and the snapshot a conversation reads (names only; the bridge holds the folder). */
+export interface ConversationProject {
+  slug: string;
+  snapshot: string;
+  name: string;
 }
 
 /** A passage the reader chose not to chase yet. */
@@ -133,7 +146,8 @@ export type TemplateId =
   | "structural_crop"
   | "isolated_selection"
   | "quote_reply"
-  | "pacing";
+  | "pacing"
+  | "learning_map";
 
 export interface PromptTemplate {
   id: TemplateId;

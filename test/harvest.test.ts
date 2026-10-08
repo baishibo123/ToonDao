@@ -273,6 +273,7 @@ describe("renderHarvest", () => {
       commits: [],
       notes: [],
       tree: [{ path: "main.swift", files: 1, bytes: 9 }],
+      files: ["main.swift"],
       ...extra,
     };
   }

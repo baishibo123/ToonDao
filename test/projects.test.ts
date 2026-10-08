@@ -4,7 +4,7 @@
  * Everything runs in temp folders; the dialog is stood in for.
  */
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -13,11 +13,13 @@ import { startBridge, type BridgeOptions } from "../bridge/claude-code.ts";
 import {
   chooseFolder,
   FolderDialogError,
+  isSecretFile,
   listProjects,
   redactTranscript,
   slugFor,
   snapshotId,
   snapshotProject,
+  snapshotReadDir,
 } from "../bridge/projects.ts";
 
 /** A small git project with one matching session (which pasted a password) and a memory note. */
@@ -27,6 +29,9 @@ function fixture() {
   mkdirSync(join(project, "docs"), { recursive: true });
   writeFileSync(join(project, "README.md"), "# Osmo Dock\n\nPulls clips off the camera.");
   writeFileSync(join(project, "docs", "decisions.md"), "## ADR-001: Keep the Mac online\n");
+  mkdirSync(join(project, "Sources"), { recursive: true });
+  writeFileSync(join(project, "Sources", "WifiJoiner.swift"), "// joins the camera's hotspot\n");
+  writeFileSync(join(project, ".env"), "OPENAI_API_KEY=not-for-the-model\n");
   const git = (...args: string[]) =>
     execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...args], { cwd: project });
   git("init", "-q");
@@ -93,16 +98,25 @@ describe("snapshotProject", () => {
     expect(snap.sources.find((s) => s.name === "Claude Code memory")?.found).toBe(true);
 
     const dir = join(f.home, "projects", "osmo-dock", snap.id);
-    const page = readFileSync(join(dir, "harvest.md"), "utf8");
+    const read = join(dir, "read");
+    const page = readFileSync(join(read, "harvest.md"), "utf8");
     expect(page).toContain("claude-memory/camera-silent-state.md");
     expect(page).not.toContain("hunter2");
     const copy = readFileSync(join(dir, "transcripts", "aaaa1111.jsonl"), "utf8");
     expect(copy).not.toContain("hunter2");
     for (const line of copy.split("\n")) expect(() => JSON.parse(line)).not.toThrow();
-    expect(readFileSync(join(dir, "sessions", "aaaa1111.md"), "utf8")).toContain("AP mode.");
+    expect(readFileSync(join(read, "sessions", "aaaa1111.md"), "utf8")).toContain("AP mode.");
+    // What the model may read: the harvest, the sessions and the project's own files —
+    // never the transcripts, and never a credential file the project forgot to ignore.
+    expect(readFileSync(join(read, "files", "Sources", "WifiJoiner.swift"), "utf8")).toContain("hotspot");
+    expect(existsSync(join(read, "files", "docs", "decisions.md"))).toBe(true);
+    expect(existsSync(join(read, "files", ".env"))).toBe(false);
+    expect(existsSync(join(read, "transcripts"))).toBe(false);
+    expect(snap.files).toBe(3);
     expect(JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8")).root).toBe(realpathSync(f.project));
 
-    expect(statSync(join(dir, "harvest.md")).mode & 0o777).toBe(0o600);
+    expect(statSync(join(read, "harvest.md")).mode & 0o777).toBe(0o600);
+    expect(statSync(join(read, "files", "README.md")).mode & 0o777).toBe(0o600);
     expect(statSync(dir).mode & 0o777).toBe(0o700);
     expect(statSync(join(f.home, "projects")).mode & 0o777).toBe(0o700);
   });
@@ -120,6 +134,38 @@ describe("snapshotProject", () => {
     const other = await snapshotProject(twin, opts);
     expect(other.slug).toBe("osmo-dock-2");
     expect((await listProjects(f.home)).map((p) => p.slug).sort()).toEqual(["osmo-dock", "osmo-dock-2"]);
+  });
+});
+
+describe("snapshotReadDir", () => {
+  it("finds a snapshot's read folder only through the registry", async () => {
+    const f = fixture();
+    const project = await snapshotProject(f.project, { home: f.home, sessionsRoot: f.sessionsRoot });
+    const id = project.snapshots[0]!.id;
+    expect(await snapshotReadDir("osmo-dock", id, f.home)).toBe(join(f.home, "projects", "osmo-dock", id, "read"));
+    expect(await snapshotReadDir("osmo-dock", "2020-01-01T00-00-00Z", f.home)).toBeNull();
+    expect(await snapshotReadDir("no-such-project", id, f.home)).toBeNull();
+    expect(await snapshotReadDir("../osmo-dock", id, f.home)).toBeNull();
+    expect(await snapshotReadDir("osmo-dock", "../../etc", f.home)).toBeNull();
+  });
+
+  it("refuses a snapshot taken before the model could read one", async () => {
+    const f = fixture();
+    const project = await snapshotProject(f.project, { home: f.home, sessionsRoot: f.sessionsRoot });
+    const old = { ...project, snapshots: project.snapshots.map(({ files: _files, ...rest }) => rest) };
+    writeFileSync(join(f.home, "projects", "osmo-dock", "project.json"), JSON.stringify(old));
+    expect(await snapshotReadDir("osmo-dock", project.snapshots[0]!.id, f.home)).toBeNull();
+  });
+});
+
+describe("isSecretFile", () => {
+  it("keeps credential files out of what the model reads, and nothing else", () => {
+    for (const path of [".env", "config/.env.local", "id_ed25519", "certs/server.pem", "app.keystore", "credentials.json"]) {
+      expect(isSecretFile(path)).toBe(true);
+    }
+    for (const path of ["README.md", "Sources/Keychain.swift", "docs/secrets-handling.md", "env.ts"]) {
+      expect(isSecretFile(path)).toBe(false);
+    }
   });
 });
 
@@ -162,7 +208,7 @@ describe("the bridge's project routes", () => {
       });
       return { status: res.status, body: (await res.json()) as Record<string, unknown> };
     };
-    return { call, close: () => server.close() };
+    return { call, close: () => server.close(), port: () => opts.port };
   }
 
   it("registers the folder the dialog returned, lists it, and snapshots it again by slug", async () => {
@@ -178,6 +224,28 @@ describe("the bridge's project routes", () => {
       const again = await b.call("POST", "/v1/projects/osmo-dock/snapshot");
       expect((again.body.project as { snapshots: unknown[] }).snapshots.length).toBeGreaterThanOrEqual(1);
       expect((await b.call("POST", "/v1/projects/no-such-project/snapshot")).status).toBe(404);
+    } finally {
+      b.close();
+    }
+  });
+
+  it("refuses to answer a chat that names a snapshot the registry does not hold, before starting Claude Code", async () => {
+    const f = fixture();
+    await snapshotProject(f.project, { home: f.home, sessionsRoot: f.sessionsRoot });
+    const b = await bridge({ projectsHome: f.home, claudeBin: "/nonexistent/claude-must-not-run" });
+    try {
+      for (const project of [
+        { slug: "osmo-dock", snapshot: "2020-01-01T00-00-00Z" },
+        { slug: "../../etc", snapshot: "passwd" },
+      ]) {
+        const res = await fetch(`http://127.0.0.1:${b.port()}/v1/chat/completions`, {
+          method: "POST",
+          headers: { Origin: "http://localhost:5273", "Content-Type": "application/json" },
+          body: JSON.stringify({ model: "haiku", stream: true, messages: [{ role: "user", content: "hi" }], toondao: { project } }),
+        });
+        expect(res.status).toBe(400);
+        expect(JSON.stringify(await res.json())).toMatch(/not available/);
+      }
     } finally {
       b.close();
     }

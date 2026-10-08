@@ -319,6 +319,10 @@ function truncate(text: string, max: number): string {
 function lookupLabel(name: string): string {
   if (name === "WebSearch") return "searched";
   if (name === "WebFetch") return "read";
+  // Reading the project snapshot a learning conversation is pinned to (P-31).
+  if (name === "Read") return "opened";
+  if (name === "Grep") return "searched the project for";
+  if (name === "Glob") return "listed";
   const connector = /^mcp__(?:claude_ai_)?([^_]+(?:_[^_]+)*?)__/.exec(name);
   return connector ? connector[1].replace(/_/g, " ") : name;
 }

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useStore } from "@/store/useStore";
+import { useUI } from "@/store/useUI";
 import { chooseProject, fetchProjects, snapshotAgain } from "@/providers/claudeCode";
 import type { ProjectSummary } from "@/lib/bridgeProtocol";
 
@@ -11,6 +12,11 @@ import type { ProjectSummary } from "@/lib/bridgeProtocol";
  */
 export function ProjectsPane() {
   const baseUrl = useStore((s) => s.settings.providers.find((p) => p.kind === "claude-code")?.baseUrl ?? "");
+  const bridgeActive = useStore(
+    (s) => s.settings.providers.find((p) => p.id === s.settings.activeProviderId)?.kind === "claude-code",
+  );
+  const startLearning = useStore((s) => s.startLearning);
+  const setSettingsOpen = useUI((s) => s.setSettingsOpen);
   const [projects, setProjects] = useState<ProjectSummary[] | null | "loading">("loading");
   const [busy, setBusy] = useState<string | null>(null);
   const [status, setStatus] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
@@ -49,6 +55,21 @@ export function ProjectsPane() {
       const current = result.snapshots.at(-1);
       return `Snapshot of "${result.name}" taken: about ${current?.harvestTokens ?? 0} tokens for the model to read first.`;
     });
+
+  // The conversation opens behind Settings, so Settings closes once it exists;
+  // the learning map then streams into the thread.
+  const learn = async (project: ProjectSummary) => {
+    setBusy(`learn:${project.slug}`);
+    try {
+      setSettingsOpen(false);
+      await startLearning(project);
+    } catch (err) {
+      setSettingsOpen(true);
+      setStatus({ kind: "error", text: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const again = (project: ProjectSummary) =>
     act(project.slug, `Taking a new snapshot of "${project.name}"…`, async () => {
@@ -96,7 +117,9 @@ export function ProjectsPane() {
               key={project.slug}
               project={project}
               busy={busy !== null}
+              bridgeActive={bridgeActive}
               onSnapshot={() => void again(project)}
+              onLearn={() => void learn(project)}
             />
           ))
         : null}
@@ -113,14 +136,25 @@ export function ProjectsPane() {
 function ProjectCard({
   project,
   busy,
+  bridgeActive,
   onSnapshot,
+  onLearn,
 }: {
   project: ProjectSummary;
   busy: boolean;
+  bridgeActive: boolean;
   onSnapshot: () => void;
+  onLearn: () => void;
 }) {
   const current = project.snapshots.at(-1);
   const count = project.snapshots.length;
+  // A snapshot the model can read carries a copy of the project's files.
+  const readable = typeof current?.files === "number";
+  const blocked = !readable
+    ? "This snapshot was taken before the model could read one — take a new snapshot to start learning."
+    : !bridgeActive
+      ? "Learning reads the snapshot through Claude Code: choose “Claude Code (local bridge)” as the provider above."
+      : null;
   return (
     <div className="project">
       <div className="project__head">
@@ -147,10 +181,20 @@ function ProjectCard({
         </>
       ) : null}
       <div className="pane__row project__actions">
+        <button
+          type="button"
+          className="btn btn--sm btn--primary"
+          disabled={busy || blocked !== null}
+          onClick={onLearn}
+          title="Open a conversation that reads this snapshot and starts with a study map"
+        >
+          Start learning
+        </button>
         <button type="button" className="btn btn--sm" disabled={busy} onClick={onSnapshot}>
           Snapshot again
         </button>
       </div>
+      {blocked ? <p className="field__hint project__blocked">{blocked}</p> : null}
     </div>
   );
 }

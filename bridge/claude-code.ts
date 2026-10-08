@@ -43,6 +43,7 @@ import {
   listProjects,
   projectBySlug,
   snapshotProject,
+  snapshotReadDir,
   TOONDAO_HOME,
 } from "./projects.ts";
 
@@ -60,6 +61,15 @@ export const DEFAULT_ORIGINS = [
 
 /** Research tools: look things up, never run or write anything. */
 export const RESEARCH_TOOLS = ["WebSearch", "WebFetch", "ToolSearch"];
+
+/**
+ * Tools for reading a project snapshot (P-31): read-only, in a run whose working
+ * directory is the snapshot's `read/` folder. Claude Code reads inside its
+ * working directory without asking and asks for anything outside it;
+ * `--permission-mode dontAsk` turns every such ask into a refusal, so nothing
+ * outside the snapshot can be read.
+ */
+export const PROJECT_TOOLS = ["Read", "Grep", "Glob"];
 
 /**
  * Tools that run without a prompt in research scope. `-p` has nobody to answer a
@@ -219,6 +229,9 @@ export function argsFor(args: {
   toolScope: ToolScope;
   systemFile: string;
   allowedTools: readonly string[];
+  /** A project snapshot's `read/` folder, from the registry; null when the request may read none.
+   *  The run starts there (`runClaude`); here it only decides the tools. */
+  readDir?: string | null;
 }): string[] {
   const base = [
     "-p",
@@ -230,6 +243,16 @@ export function argsFor(args: {
     "--system-prompt-file", args.systemFile,
     "--model", args.model,
   ];
+  if (args.readDir) {
+    const research = args.toolScope === "research";
+    return [
+      ...base,
+      "--tools", [...PROJECT_TOOLS, ...(research ? RESEARCH_TOOLS : [])].join(","),
+      ...(research ? ["--allowedTools", ...args.allowedTools] : ["--strict-mcp-config"]),
+      "--permission-mode", "dontAsk",
+      "--max-turns", "12",
+    ];
+  }
   if (args.toolScope === "research") {
     return [
       ...base,
@@ -246,10 +269,24 @@ export function argsFor(args: {
 /* ------------------------------------------------------------------ */
 
 /** What a tool call looked up, flattened to one short line. */
-export function summarizeToolInput(name: string, input: unknown): string {
+export function summarizeToolInput(name: string, input: unknown, relativeTo?: string | null): string {
   const record = input && typeof input === "object" ? (input as Record<string, unknown>) : {};
+  // A file the model opened is named as it sits in the snapshot, not by the
+  // snapshot's own path on this machine.
+  const local = (value: unknown) =>
+    typeof value === "string" && relativeTo && value.startsWith(`${relativeTo}/`)
+      ? value.slice(relativeTo.length + 1)
+      : value;
   const preferred =
-    name === "WebFetch" ? record.url : name === "WebSearch" || name === "ToolSearch" ? record.query : undefined;
+    name === "WebFetch"
+      ? record.url
+      : name === "WebSearch" || name === "ToolSearch"
+        ? record.query
+        : name === "Read"
+          ? local(record.file_path)
+          : name === "Grep" || name === "Glob"
+            ? record.pattern
+            : undefined;
   const value =
     typeof preferred === "string"
       ? preferred
@@ -304,7 +341,7 @@ export interface RunSummary {
  * several assistant messages, a paragraph break is put between them, so the
  * sentence before a search and the answer after it do not run together.
  */
-export function createSseMapper() {
+export function createSseMapper(opts: { relativeTo?: string | null } = {}) {
   let textSent = false;
   let breakPending = false;
   const seenTools = new Set<string>();
@@ -361,7 +398,7 @@ export function createSseMapper() {
         // reader is not told about it.
         if (name === "ToolSearch") continue;
         summary.toolCalls += 1;
-        frames.push(sseEvent(BRIDGE_EVENT.tool, { name, query: summarizeToolInput(name, block.input) }));
+        frames.push(sseEvent(BRIDGE_EVENT.tool, { name, query: summarizeToolInput(name, block.input, opts.relativeTo) }));
       }
       return frames;
     }
@@ -444,7 +481,9 @@ export function runEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
 }
 
 /**
- * One run of `claude -p`, as a stream of its stream-json events, in `RUN_DIR`.
+ * One run of `claude -p`, as a stream of its stream-json events, in `RUN_DIR` —
+ * or, when it may read a project, in that snapshot's `read/` folder, which is
+ * the same for every turn of the conversation, so the cache holds there too.
  * Aborting sends SIGINT, which lets Claude Code end the turn cleanly, and
  * SIGKILL a few seconds later if it has not.
  */
@@ -455,6 +494,7 @@ export async function* runClaude(args: {
   system: string;
   line: string;
   allowedTools: readonly string[];
+  readDir?: string | null;
   signal: AbortSignal;
 }): AsyncGenerator<Record<string, unknown>> {
   await mkdir(RUN_DIR, { recursive: true });
@@ -464,8 +504,14 @@ export async function* runClaude(args: {
 
   const child = spawn(
     args.bin,
-    argsFor({ model: args.model, toolScope: args.toolScope, systemFile, allowedTools: args.allowedTools }),
-    { cwd: RUN_DIR, stdio: ["pipe", "pipe", "pipe"], env: runEnv(process.env) },
+    argsFor({
+      model: args.model,
+      toolScope: args.toolScope,
+      systemFile,
+      allowedTools: args.allowedTools,
+      readDir: args.readDir ?? null,
+    }),
+    { cwd: args.readDir ?? RUN_DIR, stdio: ["pipe", "pipe", "pipe"], env: runEnv(process.env) },
   );
 
   let stderr = "";
@@ -720,6 +766,25 @@ async function chat(
   if (problem) return json(res, 400, { error: { message: problem } }, cors);
   const extension = (body.toondao ?? {}) as Record<string, unknown>;
   const toolScope: ToolScope = extension.toolScope === "research" ? "research" : "none";
+  // A project snapshot to read, named by slug and snapshot id; the folder comes
+  // from the registry. A request that names one the registry does not hold is
+  // refused rather than answered without it.
+  let readDir: string | null = null;
+  if (extension.project && typeof extension.project === "object") {
+    const ref = extension.project as Record<string, unknown>;
+    readDir =
+      typeof ref.slug === "string" && typeof ref.snapshot === "string"
+        ? await snapshotReadDir(ref.slug, ref.snapshot, opts.projectsHome ?? TOONDAO_HOME)
+        : null;
+    if (!readDir) {
+      return json(
+        res,
+        400,
+        { error: { message: "That project snapshot is not available. Take a new snapshot in Settings → Projects." } },
+        cors,
+      );
+    }
+  }
 
   res.writeHead(200, {
     ...cors,
@@ -735,7 +800,7 @@ async function chat(
   const timer = setTimeout(() => controller.abort(), MAX_RUN_MS);
   const started = Date.now();
   const { system, line } = toStreamInput(messages);
-  const mapper = createSseMapper();
+  const mapper = createSseMapper({ relativeTo: readDir });
 
   try {
     for await (const event of runClaude({
@@ -745,6 +810,7 @@ async function chat(
       system,
       line,
       allowedTools: opts.allowedTools,
+      readDir,
       signal: controller.signal,
     })) {
       for (const frame of mapper.map(event)) res.write(frame);
@@ -762,12 +828,18 @@ async function chat(
   } finally {
     clearTimeout(timer);
     res.end();
-    logRun({ model, toolScope, ms: Date.now() - started, aborted: controller.signal.aborted, ...mapper.summary });
+    logRun({
+      model,
+      toolScope: readDir ? `${toolScope}+project` : toolScope,
+      ms: Date.now() - started,
+      aborted: controller.signal.aborted,
+      ...mapper.summary,
+    });
   }
 }
 
 /** One line per request: numbers only, never content. */
-function logRun(run: RunSummary & { model: string; toolScope: ToolScope; ms: number; aborted: boolean }) {
+function logRun(run: RunSummary & { model: string; toolScope: string; ms: number; aborted: boolean }) {
   const u = run.usage;
   const window = run.rateLimit?.utilization;
   const parts = [

@@ -28,7 +28,7 @@ export function createClaudeCodeProvider(config: ProviderConfig): Provider {
         model: opts.model,
         messages,
         stream: true,
-        toondao: { toolScope: opts.toolScope ?? "none" },
+        toondao: { toolScope: opts.toolScope ?? "none", ...(opts.project ? { project: opts.project } : {}) },
       };
 
       const res = await fetch(url, {

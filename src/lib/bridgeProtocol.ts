@@ -60,12 +60,21 @@ export interface ModelInfo {
   model: string;
 }
 
+/**
+ * A project snapshot a request may read (P-31). Names only: the bridge finds
+ * the folder in its own registry, so a request never carries a path.
+ */
+export interface ProjectRef {
+  slug: string;
+  snapshot: string;
+}
+
 /** The body the adapter posts. Standard fields, plus one namespaced extension. */
 export interface BridgeRequest {
   model: string;
   messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
   stream: true;
-  toondao?: { toolScope?: ToolScope };
+  toondao?: { toolScope?: ToolScope; project?: ProjectRef };
 }
 
 export const BRIDGE_EVENT = {
@@ -97,6 +106,12 @@ export interface SnapshotSummary {
   sessions: Array<{ id: string; title: string | null }>;
   /** Rough size of `harvest.md`, the page the model reads first. */
   harvestTokens: number;
+  /**
+   * How many of the project's own files the snapshot copied for the model to
+   * read. Absent from snapshots taken before the model could read one, which
+   * cannot start a learning conversation.
+   */
+  files?: number;
 }
 
 /** A project registered with the bridge. Its folder never travels in a request. */
@@ -141,6 +156,7 @@ export function decodeProject(value: unknown): ProjectSummary | null {
         title: typeof x.title === "string" ? x.title : null,
       })),
       harvestTokens: num(s.harvestTokens),
+      ...(typeof s.files === "number" && Number.isFinite(s.files) ? { files: s.files } : {}),
     })),
   };
 }

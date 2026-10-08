@@ -14,7 +14,7 @@ import type {
   TextAnchor,
 } from "@/types";
 import { DEFAULT_SETTINGS, db, ensureSeeded, loadTemplateSet } from "@/db/db";
-import { DEFAULT_TEMPLATES } from "@/lib/templates";
+import { DEFAULT_TEMPLATES, renderTemplate } from "@/lib/templates";
 import { assembleContext, formatPayload } from "@/lib/assembleContext";
 import { createProvider } from "@/providers";
 import { newId } from "@/lib/id";
@@ -22,9 +22,10 @@ import { buildBundle, parseBundle } from "@/lib/transfer";
 import { rootsOf, subtreeIds, type NodeMap } from "@/lib/tree";
 import { buildOutline, spineLeaf, threadOf } from "@/lib/outline";
 import { parkPassage, pruneParked } from "@/lib/later";
-import { toolScopeFor } from "@/lib/toolScope";
+import { toolScopeFor, type ToolGrant } from "@/lib/toolScope";
+import { planSubmission } from "@/lib/draft";
 import { branchModel } from "@/lib/model";
-import type { RateLimit, ToolUse, Usage } from "@/lib/bridgeProtocol";
+import type { ProjectSummary, RateLimit, ToolUse, Usage } from "@/lib/bridgeProtocol";
 
 export interface SubmitRequest {
   /** The human-readable ask. Becomes node.content. */
@@ -110,6 +111,11 @@ interface AppState {
   exportAll: () => Promise<string>;
   exportConversation: (id: string) => Promise<string>;
   importBundle: (raw: string) => Promise<{ conversations: number; nodes: number; remapped: boolean }>;
+  /**
+   * Start a conversation that learns from a registered project (P-32): pinned
+   * to its latest snapshot, opened with the learning-map template.
+   */
+  startLearning: (project: ProjectSummary) => Promise<void>;
 
   /** Model for the next send, inherited down the branch (§8 P3). */
   modelForBranch: (nodeId: NodeId | null) => string | undefined;
@@ -445,6 +451,29 @@ export const useStore = create<AppState>((set, get) => ({
     );
   },
 
+  startLearning: async (project) => {
+    const snapshot = project.snapshots.at(-1);
+    if (!snapshot || typeof snapshot.files !== "number") {
+      throw new Error(
+        `Take a new snapshot of "${project.name}" first: this one was taken before the model could read snapshots.`,
+      );
+    }
+    const conversationId = await get().newConversation();
+    const patch: Partial<Conversation> = {
+      title: `Learning: ${project.name}`,
+      project: { slug: project.slug, snapshot: snapshot.id, name: project.name },
+    };
+    await db.conversations.update(conversationId, patch);
+    set((s) => ({
+      conversations: s.conversations.map((c) => (c.id === conversationId ? { ...c, ...patch } : c)),
+    }));
+    // The first message is an ordinary one, planned like any other: the
+    // template is its text, and what the model reads comes from the pin.
+    const text = renderTemplate(get().templates.learning_map, { project: project.name });
+    const plan = planSubmission({ text, pending: null, activeLeafId: null });
+    await get().submit({ text: plan.content, parentId: plan.parentId, policy: plan.policy, origin: plan.origin });
+  },
+
   importBundle: async (raw) => {
     const [existingConversations, existingNodes] = await Promise.all([
       db.conversations.toCollection().primaryKeys(),
@@ -547,8 +576,18 @@ async function runStream(set: Setter, get: Getter, req: StreamRequest): Promise<
   const controller = new AbortController();
   set({ abort: controller, streamingNodeId: assistantNode.id });
   // The question being answered decides the tools, through the aside it was
-  // asked in, if any.
+  // asked in, if any; a conversation that learns from a project may read the
+  // snapshot it is pinned to.
   const asked = get().nodes[req.parentId];
+  const project = get().conversations.find((c) => c.id === req.conversationId)?.project;
+  const grant: ToolGrant = asked
+    ? toolScopeFor(
+        asked,
+        get().nodeStore(),
+        settings.chatTools,
+        project ? { slug: project.slug, snapshot: project.snapshot } : null,
+      )
+    : { scope: "none", project: null };
 
   let text = "";
   let lastPersist = Date.now();
@@ -575,7 +614,8 @@ async function runStream(set: Setter, get: Getter, req: StreamRequest): Promise<
       temperature: settings.temperature,
       maxTokens: settings.maxTokens,
       signal: controller.signal,
-      toolScope: asked ? toolScopeFor(asked, get().nodeStore(), settings.chatTools) : "none",
+      toolScope: grant.scope,
+      project: grant.project,
     })) {
       if (delta.rateLimit) set({ rateLimit: delta.rateLimit });
       if (delta.usage) usage = delta.usage;

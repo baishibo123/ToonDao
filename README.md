@@ -94,22 +94,24 @@ use their Claude subscriptions, and distributing this needs Anthropic's approval
 
 ### Learn from a project (in progress)
 
-ToonDao is learning to start a study conversation from a project you built with
-Claude Code. So far it gathers what the model will read first:
+ToonDao can start a study conversation from a project you built with Claude Code:
 
-- **Settings → Projects → Add a project…** opens your system's folder dialog
-  (macOS, with the bridge running). ToonDao then gathers the project's Claude
-  Code sessions (your prompts, the errors you hit, compaction summaries), Claude
-  Code's own memory for it, its git history, notes and file list into a page of
-  about 20k tokens, with a table of which of those the project has, and keeps a
-  dated snapshot under `~/.toondao/projects/`: that page, every session in full,
-  and the transcripts copied with credentials redacted. **Snapshot again** adds a
-  new one; earlier snapshots are kept.
-- Off macOS, or from a terminal: `npm run harvest -- "<project folder>" --snapshot`.
-  Without `--snapshot` it prints the page; `--out <dir>` writes the page and
-  every session to a folder of your choice instead.
+1. **Settings → Projects → Add a project…** opens your system's folder dialog
+   (macOS, with the bridge running). ToonDao gathers what the project holds about
+   how it was built — your Claude Code sessions (your prompts, the errors you
+   hit), Claude Code's memory for it, its git history and notes — and keeps a
+   dated snapshot under `~/.toondao/projects/`, with a copy of the project's own
+   files. **Snapshot again** adds a new one; earlier ones are kept.
+2. **Start learning** opens a conversation that reads that snapshot (with the
+   Claude Code provider) and begins with a study map: five to ten modules, each
+   anchored in something that actually happened in the project, with questions to
+   work through one at a time. The conversation stays on the snapshot it started
+   from.
 
-It only reads, and skips whatever git ignores.
+The model reads only the snapshot — never the live folder, whatever git ignores,
+or credential files — and every file it opens is listed above the reply, like a
+lookup. Off macOS, add a project from a terminal with
+`npm run harvest -- "<project folder>" --snapshot`.
 
 ## Tests
 
@@ -152,7 +154,9 @@ rotate. Exports never contain keys.
 
 ## Non-goals
 
-No backend, accounts, sync or multiplayer. No RAG or document ingestion. No
-agentic tool use. No mobile-first layout. No automatic concept extraction by a
-second model call — the click is the interface, and a background pass would make
-it slow, costly and non-deterministic.
+No backend, accounts, sync or multiplayer. No RAG: nothing is retrieved behind
+your back — the only outside reading is a web lookup or a file from a project you
+added, read-only, and each one is listed with the reply it went into. No tool
+that runs commands or writes files. No mobile-first layout. No automatic concept
+extraction by a second model call — the click is the interface, and a background
+pass would make it slow, costly and non-deterministic.

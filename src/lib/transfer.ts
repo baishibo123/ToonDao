@@ -1,6 +1,7 @@
 import type {
   Conversation,
   ConversationNode,
+  ConversationProject,
   LaterItem,
   NodeId,
   Settings,
@@ -81,6 +82,7 @@ const TEMPLATE_IDS: TemplateId[] = [
   "isolated_selection",
   "quote_reply",
   "pacing",
+  "learning_map",
 ];
 
 /**
@@ -211,6 +213,7 @@ export function parseBundle(
       const activeRaw =
         typeof value.activeNodeId === "string" ? mapNode(value.activeNodeId) : null;
       const later = parseLater(value.later, mapNode, nodesById);
+      const project = parseProject(value.project);
       return {
         id,
         title: typeof value.title === "string" && value.title ? value.title : "Imported",
@@ -219,6 +222,7 @@ export function parseBundle(
         rootId,
         activeNodeId: activeRaw && nodesById.has(activeRaw) ? activeRaw : rootId,
         ...(later.length > 0 ? { later } : {}),
+        ...(project ? { project } : {}),
       };
     });
 
@@ -287,6 +291,15 @@ function parseBridgeRecord(value: Record<string, unknown>): Partial<Conversation
  * message would be unaskable — and one whose message did not make it into the
  * bundle is dropped rather than kept as a dangling promise.
  */
+/** A conversation's project: three names, kept only when all three are there. */
+function parseProject(value: unknown): ConversationProject | null {
+  if (!isRecord(value)) return null;
+  const { slug, snapshot, name } = value;
+  return typeof slug === "string" && typeof snapshot === "string" && typeof name === "string"
+    ? { slug, snapshot, name }
+    : null;
+}
+
 function parseLater(
   value: unknown,
   mapNode: (id: string) => string,

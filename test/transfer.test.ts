@@ -6,7 +6,7 @@ import {
   parseBundle,
 } from "@/lib/transfer";
 import { assembleContext } from "@/lib/assembleContext";
-import { DEFAULT_TEMPLATES } from "@/lib/templates";
+import { DEFAULT_TEMPLATES, renderTemplate } from "@/lib/templates";
 import { DEFAULT_SETTINGS } from "@/db/db";
 import { TreeFixture } from "./helpers";
 import type { Conversation, ConversationNode, NodeStore } from "@/types";
@@ -311,6 +311,34 @@ describe("the Later list", () => {
       buildBundle({ conversations: [conversation], nodes, templates: T, settings: DEFAULT_SETTINGS }),
     );
     expect(parseBundle(raw).conversations[0]).not.toHaveProperty("later");
+  });
+});
+
+describe("a conversation that learns from a project", () => {
+  it("keeps the project and snapshot it is pinned to through a round trip", () => {
+    const { conversation, nodes } = richFixture();
+    const pinned: Conversation = {
+      ...conversation,
+      project: { slug: "osmo-dock", snapshot: "2026-10-07T22-44-00Z", name: "osmo dock" },
+    };
+    const raw = JSON.stringify(buildBundle({ conversations: [pinned], nodes, templates: T, settings: DEFAULT_SETTINGS }));
+    expect(parseBundle(raw).conversations[0]?.project).toEqual(pinned.project);
+  });
+
+  it("drops a damaged pin rather than keep half of it", () => {
+    const { conversation, nodes } = richFixture();
+    const bundle = buildBundle({ conversations: [conversation], nodes, templates: T, settings: DEFAULT_SETTINGS });
+    const raw = JSON.stringify({
+      ...bundle,
+      conversations: [{ ...bundle.conversations[0], project: { slug: "osmo-dock" } }],
+    });
+    expect(parseBundle(raw).conversations[0]).not.toHaveProperty("project");
+  });
+
+  it("carries the learning-map template, which names the project it is asked about", () => {
+    expect(renderTemplate(T.learning_map, { project: "osmo dock" })).toMatch(/^I built osmo dock with Claude Code/);
+    const raw = JSON.stringify(buildBundle({ conversations: [], nodes: [], templates: T, settings: DEFAULT_SETTINGS }));
+    expect(JSON.parse(raw).templates.map((t: { id: string }) => t.id)).toContain("learning_map");
   });
 });
 

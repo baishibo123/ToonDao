@@ -72,10 +72,11 @@ Rules that hold for the life of the project. Why each one exists is in
   `isSafeModel()`; the system prompt goes through a file and the conversation
   through stdin, never through argv.
 - **`toolScopeFor()` in `src/lib/toolScope.ts` is the only place a tool scope is
-  decided**, from the question's node, never from a policy alone: inside an aside
-  the move that opened it decides every turn (`contextStart()`). The bridge may
-  narrow the scope, never widen it, and never adds a tool that runs commands or
-  writes files.
+  decided** — the web, and which project snapshot may be read — from the
+  question's node, never from a policy alone: inside an aside the move that
+  opened it decides every turn (`contextStart()`). The bridge may narrow the
+  scope, never widen it, and never adds a tool that runs commands or writes
+  files.
 - **`src/lib/bridgeProtocol.ts` has no imports.** Node runs it directly from the
   bridge, where the app's `@/` alias does not exist; both ends encode and decode
   through it.
@@ -85,9 +86,15 @@ Rules that hold for the life of the project. Why each one exists is in
   looked up by its slug. The project routes answer with summaries, never with
   what a snapshot holds.
 - **Nothing per-run reaches the prompt Claude Code builds.** Every run starts in
-  the same empty `RUN_DIR`, with a host session's variables dropped (`runEnv()`).
-  A path, id or time that differs between runs turns the prompt cache off for
-  every turn of every thread.
+  the same empty `RUN_DIR` — or, when it may read a project, in that snapshot's
+  `read/` folder, the same for every turn of its conversation — with a host
+  session's variables dropped (`runEnv()`). A path, id or time that differs
+  between runs turns the prompt cache off for every turn of every thread.
+- **A model reads a project only through a snapshot's `read/` folder.** Such a
+  run starts there with Read, Grep and Glob and `--permission-mode dontAsk`
+  (`argsFor()` with `readDir`), so nothing outside it can be read. The folder
+  comes from `snapshotReadDir()`, which looks the request's slug and snapshot id
+  up in the registry. Transcripts never go in `read/`.
 
 ## Learning from a project
 
@@ -98,8 +105,11 @@ Rules that hold for the life of the project. Why each one exists is in
 - **Nothing assumes a project has decision records, notes or history.** Every
   source is optional, and the harvest's Sources table says which are missing.
 - **A snapshot is private, redacted and never overwritten.** Its files are
-  owner-only, transcripts are copied through `redactTranscript()`, and each
-  snapshot gets its own dated folder.
+  owner-only, transcripts are copied through `redactTranscript()`, credential
+  files are never copied (`isSecretFile()`), and each snapshot gets its own
+  dated folder.
+- **A learning conversation stays on its snapshot.** `Conversation.project` pins
+  the snapshot it was started on, and every turn reads that one.
 
 ## Conventions
 

@@ -38,19 +38,19 @@ describe("tool scope follows the policy", () => {
   it("never lets Just this reach outside — its promise is nothing but the passage", () => {
     const { t, open } = thread();
     const { root } = open(JUST_THIS, "isolated-selection");
-    expect(toolScopeFor(root, t, true)).toBe("none");
+    expect(toolScopeFor(root, t, true).scope).toBe("none");
   });
 
   it("never lets Lost me here reach outside — it explains the conversation's own reasoning", () => {
     const { t, answer, open } = thread();
     const { root } = open(CROP(answer), "structural-crop");
-    expect(toolScopeFor(root, t, true)).toBe("none");
+    expect(toolScopeFor(root, t, true).scope).toBe("none");
   });
 
   it("always lets Explain look things up", () => {
     const { t, answer, open } = thread();
     const { root } = open(EXPLAIN(answer), "concept-lens");
-    expect(toolScopeFor(root, t, false)).toBe("research");
+    expect(toolScopeFor(root, t, false).scope).toBe("research");
   });
 
   it("leaves the thread's replies and quotes to the reader's setting", () => {
@@ -62,8 +62,8 @@ describe("tool scope follows the policy", () => {
       base: "full-ancestry",
     });
     for (const node of [reply, quote]) {
-      expect(toolScopeFor(node, t, false)).toBe("none");
-      expect(toolScopeFor(node, t, true)).toBe("research");
+      expect(toolScopeFor(node, t, false).scope).toBe("none");
+      expect(toolScopeFor(node, t, true).scope).toBe("research");
     }
   });
 });
@@ -72,19 +72,51 @@ describe("inside an aside, the opening move decides (P-27)", () => {
   it("lets a follow-up in an Explain aside keep looking things up with the setting off", () => {
     const { t, answer, open } = thread();
     const { followUp } = open(EXPLAIN(answer), "concept-lens");
-    expect(toolScopeFor(followUp, t, false)).toBe("research");
+    expect(toolScopeFor(followUp, t, false).scope).toBe("research");
   });
 
   it("keeps a follow-up in a Just this or Lost me here aside offline with the setting on", () => {
     const { t, answer, open } = thread();
-    expect(toolScopeFor(open(JUST_THIS, "isolated-selection").followUp, t, true)).toBe("none");
-    expect(toolScopeFor(open(CROP(answer), "structural-crop").followUp, t, true)).toBe("none");
+    expect(toolScopeFor(open(JUST_THIS, "isolated-selection").followUp, t, true).scope).toBe("none");
+    expect(toolScopeFor(open(CROP(answer), "structural-crop").followUp, t, true).scope).toBe("none");
   });
 
   it("gives an aside inside an aside its own opening move's scope", () => {
     const { t, open } = thread();
     const { followUp } = open(JUST_THIS, "isolated-selection");
     const nested = t.add("user", "term", followUp.id, EXPLAIN(followUp), "concept-lens");
-    expect(toolScopeFor(nested, t, false)).toBe("research");
+    expect(toolScopeFor(nested, t, false).scope).toBe("research");
+  });
+});
+
+describe("a conversation that learns from a project (P-31)", () => {
+  const PROJECT = { slug: "osmo-dock", snapshot: "2026-10-07T22-44-00Z" };
+
+  it("lets the thread read the snapshot, with the web still the reader's choice", () => {
+    const { t, answer } = thread();
+    const reply = t.add("user", "next", answer.id);
+    expect(toolScopeFor(reply, t, false, PROJECT)).toEqual({ scope: "none", project: PROJECT });
+    expect(toolScopeFor(reply, t, true, PROJECT)).toEqual({ scope: "research", project: PROJECT });
+  });
+
+  it("lets Explain use the web and the snapshot, and decide which it needs", () => {
+    const { t, answer, open } = thread();
+    const { root, followUp } = open(EXPLAIN(answer), "concept-lens");
+    for (const node of [root, followUp]) {
+      expect(toolScopeFor(node, t, false, PROJECT)).toEqual({ scope: "research", project: PROJECT });
+    }
+  });
+
+  it("keeps Just this and Lost me here away from the snapshot too", () => {
+    const { t, answer, open } = thread();
+    for (const { root, followUp } of [open(JUST_THIS, "isolated-selection"), open(CROP(answer), "structural-crop")]) {
+      expect(toolScopeFor(root, t, true, PROJECT)).toEqual({ scope: "none", project: null });
+      expect(toolScopeFor(followUp, t, true, PROJECT)).toEqual({ scope: "none", project: null });
+    }
+  });
+
+  it("grants no snapshot when the conversation has none", () => {
+    const { t, answer } = thread();
+    expect(toolScopeFor(t.add("user", "next", answer.id), t, true).project).toBeNull();
   });
 });

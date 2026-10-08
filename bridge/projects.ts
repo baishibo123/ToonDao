@@ -5,8 +5,10 @@
  *   ~/.toondao/projects/<slug>/
  *     project.json              name, folder, and every snapshot, oldest first
  *     <snapshot id>/
- *       harvest.md              the page the model reads first
- *       sessions/<id>.md        each session in full
+ *       read/                   the only folder a model may read (P-31)
+ *         harvest.md            the page it reads first
+ *         sessions/<id>.md      each session in full
+ *         files/…               the project's own files, as they were
  *       transcripts/<id>.jsonl  the session transcripts, copied through redact()
  *       manifest.json           what was gathered, from where, at which commit
  *
@@ -16,9 +18,9 @@
  * summaries in project.json.
  */
 import { execFile } from "node:child_process";
-import { chmod, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { chmod, copyFile, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import type { ProjectSummary, SnapshotSummary } from "../src/lib/bridgeProtocol.ts";
 import { estimateTokens, harvestProject, redact, renderHarvest, renderSession } from "./harvest.ts";
@@ -40,6 +42,10 @@ export function slugFor(name: string): string {
 
 export function isSafeSlug(slug: string): boolean {
   return /^[a-z0-9][a-z0-9-]{0,63}$/.test(slug);
+}
+
+export function isSafeSnapshotId(id: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z(-\d{1,3})?$/.test(id);
 }
 
 /** A folder name for a snapshot: when it was taken, sortable, without colons. */
@@ -119,6 +125,71 @@ async function writePrivate(path: string, text: string): Promise<void> {
 }
 
 /**
+ * Files that hold credentials by convention. Git-ignored files are never listed
+ * in the first place; these are kept out even when a project forgot to ignore
+ * them, since the copy is what a model will read.
+ */
+const SECRET_FILE =
+  /(^|\/)(\.env(\.[^/]*)?|\.npmrc|\.netrc|\.pypirc|id_(rsa|dsa|ecdsa|ed25519)(\.pub)?|credentials(\.[^/]*)?|secrets?(\.[^/]*)?|[^/]*\.(pem|key|p12|pfx|keystore|jks|kdbx|mobileprovision))$/i;
+
+export function isSecretFile(path: string): boolean {
+  return SECRET_FILE.test(path);
+}
+
+const MAX_FILE_BYTES = 1024 * 1024;
+const MAX_FILES = 5000;
+const MAX_TOTAL_BYTES = 64 * 1024 * 1024;
+
+/**
+ * Copy the project's own files into a snapshot for the model to read: what git
+ * tracks or would track, minus credential files, files over 1 MB, and anything
+ * past the totals. Returns how many were copied.
+ */
+export async function copyProjectFiles(root: string, files: readonly string[], dest: string): Promise<number> {
+  let copied = 0;
+  let total = 0;
+  for (const path of files) {
+    if (copied >= MAX_FILES || isSecretFile(path) || path.split("/").includes("..")) continue;
+    const from = join(root, path);
+    let size: number;
+    try {
+      const info = await stat(from);
+      if (!info.isFile()) continue;
+      size = info.size;
+    } catch {
+      continue;
+    }
+    if (size > MAX_FILE_BYTES || total + size > MAX_TOTAL_BYTES) continue;
+    const to = join(dest, path);
+    await mkdir(dirname(to), { recursive: true, mode: 0o700 });
+    await copyFile(from, to);
+    await chmod(to, 0o600);
+    copied++;
+    total += size;
+  }
+  return copied;
+}
+
+/**
+ * The folder a request for a project snapshot may read, or null. Both names
+ * must look right and match the registry, and the snapshot must be one taken
+ * after models could read snapshots; the path is built from the registry's own
+ * entries, never from the request.
+ */
+export async function snapshotReadDir(slug: string, snapshot: string, home = TOONDAO_HOME): Promise<string | null> {
+  if (!isSafeSlug(slug) || !isSafeSnapshotId(snapshot)) return null;
+  const project = await projectBySlug(slug, home);
+  const found = project?.snapshots.find((s) => s.id === snapshot);
+  if (!project || !found || typeof found.files !== "number") return null;
+  const dir = join(home, "projects", project.slug, found.id, "read");
+  try {
+    return (await stat(dir)).isDirectory() ? dir : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Harvest the folder and freeze the result as a new snapshot, registering the
  * project the first time. A snapshot is never overwritten, so a clean "just
  * imported" start can always be returned to. Two different folders with the
@@ -146,17 +217,20 @@ export async function snapshotProject(
   let id = snapshotId(now);
   for (let n = 2; (existing?.snapshots ?? []).some((s) => s.id === id); n++) id = `${snapshotId(now)}-${n}`;
   const dir = join(projectDir, id);
-  await mkdir(join(dir, "sessions"), { recursive: true, mode: 0o700 });
+  const read = join(dir, "read");
+  await mkdir(join(read, "sessions"), { recursive: true, mode: 0o700 });
+  await mkdir(join(read, "files"), { recursive: true, mode: 0o700 });
   await mkdir(join(dir, "transcripts"), { recursive: true, mode: 0o700 });
-  for (const d of [home, join(home, "projects"), projectDir, dir]) await chmod(d, 0o700);
+  for (const d of [home, join(home, "projects"), projectDir, dir, read]) await chmod(d, 0o700);
 
   const page = renderHarvest(harvest);
-  await writePrivate(join(dir, "harvest.md"), page);
+  await writePrivate(join(read, "harvest.md"), page);
   for (const session of harvest.sessions) {
-    await writePrivate(join(dir, "sessions", `${session.id}.md`), renderSession(session));
+    await writePrivate(join(read, "sessions", `${session.id}.md`), renderSession(session));
     const raw = await readFile(session.file, "utf8");
     await writePrivate(join(dir, "transcripts", `${session.id}.jsonl`), redactTranscript(raw));
   }
+  const files = await copyProjectFiles(harvest.root, harvest.files, join(read, "files"));
 
   const summary: SnapshotSummary = {
     id,
@@ -165,6 +239,7 @@ export async function snapshotProject(
     sources: harvest.sources,
     sessions: harvest.sessions.map((s) => ({ id: s.id, title: s.title })),
     harvestTokens: estimateTokens(page),
+    files,
   };
   await writePrivate(
     join(dir, "manifest.json"),

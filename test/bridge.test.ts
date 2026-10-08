@@ -195,6 +195,28 @@ describe("the command line", () => {
     }
     expect(Number(args[args.indexOf("--max-turns") + 1])).toBeGreaterThan(1);
   });
+
+  it("gives a project read only the read-only file tools, and refuses whatever would ask (P-31)", () => {
+    const readDir = "/Users/someone/.toondao/projects/osmo-dock/2026-10-07T22-44-00Z/read";
+    const args = argsFor({ ...common, toolScope: "none", readDir });
+    expect(args[args.indexOf("--tools") + 1].split(",").sort()).toEqual(["Glob", "Grep", "Read"]);
+    expect(args[args.indexOf("--permission-mode") + 1]).toBe("dontAsk");
+    expect(args).toContain("--strict-mcp-config");
+    expect(args).not.toContain("--allowedTools");
+    // The run starts in the snapshot (runClaude's cwd); no folder is passed as a flag.
+    expect(args).not.toContain("--add-dir");
+    expect(args.join(" ")).not.toContain(readDir);
+    for (const dangerous of ["Bash", "Write", "Edit", "NotebookEdit"]) expect(args.join(" ")).not.toContain(dangerous);
+  });
+
+  it("adds the lookup tools to a project read when the web is allowed too", () => {
+    const args = argsFor({ ...common, toolScope: "research", readDir: "/snapshot/read" });
+    expect(args[args.indexOf("--tools") + 1].split(",").sort()).toEqual(
+      ["Glob", "Grep", "Read", "ToolSearch", "WebFetch", "WebSearch"],
+    );
+    expect(args[args.indexOf("--permission-mode") + 1]).toBe("dontAsk");
+    expect(args).toContain("--allowedTools");
+  });
 });
 
 describe("Claude Code events → SSE", () => {
@@ -214,6 +236,23 @@ describe("Claude Code events → SSE", () => {
       .map((f) => (f.kind === "text" ? f.text : ""))
       .join("");
     expect(text).toBe("Let me look that up.\n\nIt is…");
+  });
+
+  it("names a file the model opened as it sits in the snapshot", () => {
+    const { map } = createSseMapper({ relativeTo: "/home/x/.toondao/projects/p/s/read" });
+    const call = {
+      type: "assistant",
+      message: {
+        content: [
+          { type: "tool_use", id: "r1", name: "Read", input: { file_path: "/home/x/.toondao/projects/p/s/read/files/Sources/BleLink.swift" } },
+          { type: "tool_use", id: "g1", name: "Grep", input: { pattern: "handshake", path: "/home/x/.toondao/projects/p/s/read" } },
+        ],
+      },
+    };
+    expect(decode(map(call))).toEqual([
+      { kind: "tool", tool: { name: "Read", query: "files/Sources/BleLink.swift" } },
+      { kind: "tool", tool: { name: "Grep", query: "handshake" } },
+    ]);
   });
 
   it("reports each tool call once, with what it looked up", () => {

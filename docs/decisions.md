@@ -363,3 +363,38 @@ and split the turn it arrived in. On this machine they were 3 of 73 queued
 commands, beside 63 task notifications the noise prefixes already drop and 7
 prompts the person typed. The test is the harness's own `isMeta` mark, as for
 user records, rather than the report's wording.
+
+**P-31 · A model reads a project only through a snapshot.** A run that may read
+a project starts in the snapshot's `read/` folder — the harvest, every session
+in full, and a copy of the project's own files: what git tracks or would track,
+minus credential files by name, files over 1 MB, and anything past 5,000 files
+or 64 MB — with only Read, Grep and Glob, and `--permission-mode dontAsk`.
+Claude Code reads inside its working directory without asking and asks before
+reading anywhere else; dontAsk refuses every such ask, so nothing else on the
+machine can be read. The transcripts stay beside `read/`, never in it. A request
+names the snapshot by slug and id; the bridge finds the folder in its registry
+and refuses one it does not hold. Considered: letting the model read the live
+project folder — always current, but it holds what git ignores (osmo dock's
+`traces/` carries Wi-Fi passphrases), and it changes under a conversation that
+has already drawn its map; and adding the snapshot with `--add-dir` to an empty
+working directory — as confined, but the model would have to be told where the
+folder is, while its working directory is already in the context Claude Code
+gives it. Built while Claude Code was signed out, so the refusal outside the
+snapshot is documented behaviour, not yet observed.
+
+**P-32 · A learning conversation is an ordinary conversation, pinned to a
+snapshot.** "Start learning" on a project opens a conversation pinned to the
+project's latest snapshot, whose first message is the `learning_map` template:
+the learn-project skill's method — five to ten modules, each anchored in an
+incident, a decision or a place in the code, with a recall, a mechanism and a
+transfer question — kept general, so nothing assumes decision records and the
+language follows the reader. The map is the first reply, so every turn of the
+thread carries it, and every later turn reads the snapshot it was drawn from,
+even after a new one is taken. Tools follow the moves: the thread may read the
+snapshot (and the web if the reader allows it), Explain may use both, Just this
+and Lost me here neither. Considered: a brief kept beside the conversation,
+written in the original Claude Code session — more steps for the person, and out
+of reach of the reading moves; and reading the newest snapshot on every turn,
+which would let a turn read files the map never saw. It needs the Claude Code
+provider, and the button says so when another is chosen.
+
