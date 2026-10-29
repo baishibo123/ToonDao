@@ -5,6 +5,7 @@ import { draftNode, planIsSendable, planSubmission } from "@/lib/draft";
 import { contextStart } from "@/lib/assembleContext";
 import { nodeStoreFromMap } from "@/types";
 import { ContextChip, Inspector } from "@/components/ContextChip";
+import { Picker } from "@/components/Picker";
 import { BRANCH_META } from "@/lib/policyMeta";
 import { useSurface } from "@/components/Surface";
 import { findParked } from "@/lib/later";
@@ -318,16 +319,18 @@ export function Composer() {
 
           {provider?.kind === "claude-code" && rateLimit ? <UsageWindow rateLimit={rateLimit} /> : null}
 
-          {modelOptions.length > 0 ? (
-            <label className="modelpick" title="Model for this branch onwards">
-              <span className="modelpick__label">model</span>
-              <select
-                className="modelpick__select"
+          <div className="composer__pickers">
+            {modelOptions.length > 0 ? (
+              <Picker
+                label="model"
+                shown={modelOverride ?? inheritedModel ?? "default"}
+                set={modelOverride !== null}
+                title="Model for this branch onwards"
                 value={modelOverride ?? ""}
-                onChange={(e) => setModelOverride(e.target.value || null)}
+                onChange={(v) => setModelOverride(v || null)}
               >
                 <option value="">
-                  {inheritedModel ? `${inheritedModel} (inherited)` : "provider default"}
+                  {inheritedModel ? `${inheritedModel} · inherited` : "provider default"}
                 </option>
                 {modelOptions
                   .filter((name) => name !== inheritedModel)
@@ -336,44 +339,43 @@ export function Composer() {
                       {name}
                     </option>
                   ))}
-              </select>
-            </label>
-          ) : null}
+              </Picker>
+            ) : null}
 
-          {/* P-37: switched here, it holds for this branch onwards, asides included. */}
-          <label className="modelpick" title="Pace answers for this branch onwards: one idea at a time, ending at a checkpoint">
-            <span className="modelpick__label">pace</span>
-            <select
-              className="modelpick__select"
+            {/* P-37: switched here, it holds for this branch onwards, asides included. */}
+            <Picker
+              label="pace"
+              shown={(pacingOverride ?? inheritedPacing) ? "on" : "off"}
+              set={pacingOverride !== null}
+              title="Pace answers for this branch onwards: one idea at a time, ending at a checkpoint"
               value={pacingOverride === null ? "" : pacingOverride ? "on" : "off"}
-              onChange={(e) => setPacingOverride(e.target.value === "" ? null : e.target.value === "on")}
+              onChange={(v) => setPacingOverride(v === "" ? null : v === "on")}
             >
-              <option value="">{inheritedPacing ? "on" : "off"} (inherited)</option>
+              <option value="">{inheritedPacing ? "on" : "off"} · inherited</option>
               <option value={inheritedPacing ? "off" : "on"}>{inheritedPacing ? "off" : "on"}</option>
-            </select>
-          </label>
+            </Picker>
 
-          {/* P-36: Claude Code only; chosen here, it holds for this branch onwards, like the model. */}
-          {provider?.kind === "claude-code" ? (
-            <label className="modelpick" title="Thinking effort for this branch onwards">
-              <span className="modelpick__label">effort</span>
-              <select
-                className="modelpick__select"
+            {/* P-36: Claude Code only; chosen here, it holds for this branch onwards, like the model. */}
+            {provider?.kind === "claude-code" ? (
+              <Picker
+                label="effort"
+                shown={effortOverride ?? inheritedEffort ?? "default"}
+                set={effortOverride !== null}
+                title="Thinking effort for this branch onwards (Claude Code's default when unset)"
                 value={effortOverride ?? ""}
-                onChange={(e) => setEffortOverride((e.target.value || null) as Effort | null)}
+                onChange={(v) => setEffortOverride((v || null) as Effort | null)}
               >
                 <option value="">
-                  {inheritedEffort ? `${inheritedEffort} (inherited)` : "Claude Code default"}
+                  {inheritedEffort ? `${inheritedEffort} · inherited` : "Claude Code default"}
                 </option>
                 {EFFORTS.filter((level) => level !== inheritedEffort).map((level) => (
                   <option key={level} value={level}>
                     {level}
                   </option>
                 ))}
-              </select>
-            </label>
-          ) : null}
-
+              </Picker>
+            ) : null}
+          </div>
         </div>
 
         {showDraftInspector ? (
