@@ -1,4 +1,5 @@
 import type { NodeId, ProviderConfig } from "@/types";
+import type { Effort } from "@/lib/bridgeProtocol";
 import type { NodeMap } from "@/lib/tree";
 
 /**
@@ -30,4 +31,24 @@ export function branchModel(
     cursor = node.parentId;
   }
   return provider?.model;
+}
+
+/**
+ * The thinking effort a new message in this branch should use (P-36): the
+ * nearest choice recorded on a user node up the lineage, exactly as a model
+ * override is found. Undefined means none was chosen, and Claude Code uses its
+ * own default.
+ */
+export function branchEffort(nodes: NodeMap, nodeId: NodeId | null): Effort | undefined {
+  let cursor = nodeId;
+  const seen = new Set<NodeId>();
+  while (cursor) {
+    if (seen.has(cursor)) break;
+    seen.add(cursor);
+    const node = nodes[cursor];
+    if (!node) break;
+    if (node.role === "user" && node.effort) return node.effort;
+    cursor = node.parentId;
+  }
+  return undefined;
 }

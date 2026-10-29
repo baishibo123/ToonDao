@@ -13,7 +13,7 @@
  * Nothing in this file may conflate the two.
  */
 
-import type { ToolUse, Usage } from "@/lib/bridgeProtocol";
+import type { Effort, ToolUse, Usage } from "@/lib/bridgeProtocol";
 
 export type NodeId = string;
 
@@ -44,6 +44,12 @@ export interface ConversationNode {
    * needs to know which replies it is describing.
    */
   harness?: "claude-code";
+  /**
+   * On a user node: the thinking effort chosen from here down this branch,
+   * found by walking up like `model` (P-36). On a reply: the effort it was
+   * written with. Claude Code bridge only; absent means Claude Code's default.
+   */
+  effort?: Effort;
   /** Outside sources the model used while writing this reply (bridge only). */
   toolUse?: ToolUse[];
   /** Tokens the request cost, as the bridge measured them. */

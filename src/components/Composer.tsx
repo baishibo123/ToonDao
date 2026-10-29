@@ -8,7 +8,7 @@ import { ContextChip, Inspector } from "@/components/ContextChip";
 import { BRANCH_META } from "@/lib/policyMeta";
 import { useSurface } from "@/components/Surface";
 import { findParked } from "@/lib/later";
-import type { RateLimit } from "@/lib/bridgeProtocol";
+import { EFFORTS, type Effort, type RateLimit } from "@/lib/bridgeProtocol";
 
 /**
  * The one gesture that docks into a composer rather than opening an aside: a
@@ -36,6 +36,7 @@ export function Composer() {
   const [text, setText] = useState("");
   /** null means "whatever this branch inherits" (§8 P3). */
   const [modelOverride, setModelOverride] = useState<string | null>(null);
+  const [effortOverride, setEffortOverride] = useState<Effort | null>(null);
 
   const conversationId = useStore((s) => s.conversationId);
   const appActiveNodeId = useStore((s) => s.activeNodeId);
@@ -48,6 +49,7 @@ export function Composer() {
   const systemPrompt = useStore((s) => s.settings.systemPrompt);
   const pacing = useStore((s) => s.settings.pacing);
   const modelForBranch = useStore((s) => s.modelForBranch);
+  const effortForBranch = useStore((s) => s.effortForBranch);
   const providers = useStore((s) => s.settings.providers);
   const activeProviderId = useStore((s) => s.settings.activeProviderId);
   const later = useStore((s) => s.conversations.find((c) => c.id === s.conversationId)?.later);
@@ -133,6 +135,7 @@ export function Composer() {
   }, [text]);
 
   const inheritedModel = modelForBranch(plan.parentId);
+  const inheritedEffort = effortForBranch(plan.parentId);
   const provider = providers.find((p) => p.id === activeProviderId);
   const modelOptions = useMemo(() => {
     const seen = new Set<string>();
@@ -165,6 +168,7 @@ export function Composer() {
       policy: plan.policy,
       origin: plan.origin,
       ...(modelOverride ? { model: modelOverride } : {}),
+      ...(effortOverride && provider?.kind === "claude-code" ? { effort: effortOverride } : {}),
       ...(asideId
         ? {
             detached: true,
@@ -179,6 +183,7 @@ export function Composer() {
     setText("");
     setPending(null);
     setModelOverride(null);
+    setEffortOverride(null);
   };
 
   /**
@@ -324,6 +329,27 @@ export function Composer() {
                       {name}
                     </option>
                   ))}
+              </select>
+            </label>
+          ) : null}
+
+          {/* P-36: Claude Code only; chosen here, it holds for this branch onwards, like the model. */}
+          {provider?.kind === "claude-code" ? (
+            <label className="modelpick" title="Thinking effort for this branch onwards">
+              <span className="modelpick__label">effort</span>
+              <select
+                className="modelpick__select"
+                value={effortOverride ?? ""}
+                onChange={(e) => setEffortOverride((e.target.value || null) as Effort | null)}
+              >
+                <option value="">
+                  {inheritedEffort ? `${inheritedEffort} (inherited)` : "Claude Code default"}
+                </option>
+                {EFFORTS.filter((level) => level !== inheritedEffort).map((level) => (
+                  <option key={level} value={level}>
+                    {level}
+                  </option>
+                ))}
               </select>
             </label>
           ) : null}

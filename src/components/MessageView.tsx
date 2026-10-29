@@ -241,6 +241,7 @@ export const MessageView = memo(function MessageView({ node }: MessageViewProps)
             {...(node.toolUse ? { toolUse: node.toolUse } : {})}
             {...(node.usage ? { usage: node.usage } : {})}
             {...(node.role === "assistant" && node.model ? { model: node.model } : {})}
+            {...(node.role === "assistant" && node.effort ? { effort: node.effort } : {})}
           />
         ) : null}
       </div>

@@ -33,6 +33,8 @@ import {
   sseError,
   sseEvent,
   sseText,
+  isEffort,
+  type Effort,
   type RateLimit,
   type ToolScope,
   type Usage,
@@ -232,6 +234,8 @@ export function argsFor(args: {
   /** A project snapshot's `read/` folder, from the registry; null when the request may read none.
    *  The run starts there (`runClaude`); here it only decides the tools. */
   readDir?: string | null;
+  /** Thinking effort; one of `EFFORTS` only, checked again here because it becomes a flag (P-36). */
+  effort?: Effort | null;
 }): string[] {
   const base = [
     "-p",
@@ -242,6 +246,7 @@ export function argsFor(args: {
     "--no-session-persistence",
     "--system-prompt-file", args.systemFile,
     "--model", args.model,
+    ...(isEffort(args.effort) ? ["--effort", args.effort] : []),
   ];
   if (args.readDir) {
     const research = args.toolScope === "research";
@@ -495,6 +500,7 @@ export async function* runClaude(args: {
   line: string;
   allowedTools: readonly string[];
   readDir?: string | null;
+  effort?: Effort | null;
   signal: AbortSignal;
 }): AsyncGenerator<Record<string, unknown>> {
   await mkdir(RUN_DIR, { recursive: true });
@@ -510,6 +516,7 @@ export async function* runClaude(args: {
       systemFile,
       allowedTools: args.allowedTools,
       readDir: args.readDir ?? null,
+      effort: args.effort ?? null,
     }),
     { cwd: args.readDir ?? RUN_DIR, stdio: ["pipe", "pipe", "pipe"], env: runEnv(process.env) },
   );
@@ -766,6 +773,8 @@ async function chat(
   if (problem) return json(res, 400, { error: { message: problem } }, cors);
   const extension = (body.toondao ?? {}) as Record<string, unknown>;
   const toolScope: ToolScope = extension.toolScope === "research" ? "research" : "none";
+  // Only a known level becomes `--effort`; anything else is dropped, not passed on.
+  const effort: Effort | null = isEffort(extension.effort) ? extension.effort : null;
   // A project snapshot to read, named by slug and snapshot id; the folder comes
   // from the registry. A request that names one the registry does not hold is
   // refused rather than answered without it.
@@ -811,6 +820,7 @@ async function chat(
       line,
       allowedTools: opts.allowedTools,
       readDir,
+      effort,
       signal: controller.signal,
     })) {
       for (const frame of mapper.map(event)) res.write(frame);
@@ -830,7 +840,7 @@ async function chat(
     res.end();
     logRun({
       model,
-      toolScope: readDir ? `${toolScope}+project` : toolScope,
+      toolScope: `${readDir ? `${toolScope}+project` : toolScope}${effort ? ` effort=${effort}` : ""}`,
       ms: Date.now() - started,
       aborted: controller.signal.aborted,
       ...mapper.summary,

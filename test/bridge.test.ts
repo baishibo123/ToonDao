@@ -169,6 +169,14 @@ describe("payload → one Claude Code message", () => {
 describe("the command line", () => {
   const common = { model: "opus", systemFile: "/tmp/x/system-prompt.txt", allowedTools: DEFAULT_ALLOWED_TOOLS };
 
+  it("passes a known thinking effort as --effort, and nothing else (P-36)", () => {
+    const args = argsFor({ ...common, toolScope: "none", effort: "xhigh" });
+    expect(args[args.indexOf("--effort") + 1]).toBe("xhigh");
+    expect(argsFor({ ...common, toolScope: "none" })).not.toContain("--effort");
+    // A value from a request that is not a level never reaches the command line.
+    expect(argsFor({ ...common, toolScope: "none", effort: "--dangerously" as never })).not.toContain("--effort");
+  });
+
   it("always replaces the system prompt from a file and writes no session", () => {
     const args = argsFor({ ...common, toolScope: "none" });
     expect(args).toContain("-p");

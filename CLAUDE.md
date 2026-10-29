@@ -73,7 +73,7 @@ Rules that hold for the life of the project. Why each one exists is in
   `claude` and relays its output; it never reads, stores or forwards an OAuth
   token or key.
 - **Nothing a request carries becomes a command-line flag.** Model names must pass
-  `isSafeModel()`; the system prompt goes through a file and the conversation
+  `isSafeModel()`, a thinking effort `isEffort()`; the system prompt goes through a file and the conversation
   through stdin, never through argv.
 - **`toolScopeFor()` in `src/lib/toolScope.ts` is the only place a tool scope is
   decided** — the web, and which project snapshot may be read — from the

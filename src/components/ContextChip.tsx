@@ -73,11 +73,13 @@ interface InspectorProps {
   usage?: Usage;
   /** The model that answered, for a reply. */
   model?: string;
+  /** The thinking effort the reply was written with, when one was chosen. */
+  effort?: string;
   /** The policy of the aside this turn is under, when it is a later turn in one. */
   start?: ContextPolicy;
 }
 
-export function Inspector({ policy, messages, historical, harness, toolUse, usage, model, start }: InspectorProps) {
+export function Inspector({ policy, messages, historical, harness, toolUse, usage, model, effort, start }: InspectorProps) {
   const shown = useMemo(
     () => (historical ? parsePayload(historical) : messages),
     [historical, messages],
@@ -101,7 +103,7 @@ export function Inspector({ policy, messages, historical, harness, toolUse, usag
       <p className="inspector__note">{policyExplanation(policy, start)}</p>
       {harness === "claude-code" ? (
         <p className="inspector__note inspector__note--bridge">
-          {model ? `Answered by ${model}, sent` : "Sent"} through Claude Code, which adds context of
+          {model ? `Answered by ${model}${effort ? ` at ${effort} effort` : ""}, sent` : "Sent"} through Claude Code, which adds context of
           its own that this record cannot show: a line naming itself, its working folder,
           platform and shell, the model, today's date, your account email, and your own Claude
           Code instructions (<code>~/.claude/CLAUDE.md</code>) if you have them.

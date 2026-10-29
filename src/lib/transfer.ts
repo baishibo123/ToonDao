@@ -1,3 +1,4 @@
+import { isEffort } from "@/lib/bridgeProtocol";
 import type {
   Conversation,
   ConversationNode,
@@ -268,6 +269,7 @@ export function parseBundle(
 function parseBridgeRecord(value: Record<string, unknown>): Partial<ConversationNode> {
   const out: Partial<ConversationNode> = {};
   if (value.harness === "claude-code") out.harness = "claude-code";
+  if (isEffort(value.effort)) out.effort = value.effort;
   if (Array.isArray(value.toolUse)) {
     const toolUse = value.toolUse
       .filter(isRecord)

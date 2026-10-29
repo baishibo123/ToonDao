@@ -74,7 +74,19 @@ export interface BridgeRequest {
   model: string;
   messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
   stream: true;
-  toondao?: { toolScope?: ToolScope; project?: ProjectRef };
+  toondao?: { toolScope?: ToolScope; project?: ProjectRef; effort?: Effort };
+}
+
+/**
+ * How hard the model thinks before answering: Claude Code's `--effort` levels,
+ * the same ones its desktop app offers. A request may carry only one of these;
+ * the bridge passes nothing else to the flag (P-36).
+ */
+export const EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
+export type Effort = (typeof EFFORTS)[number];
+
+export function isEffort(value: unknown): value is Effort {
+  return typeof value === "string" && (EFFORTS as readonly string[]).includes(value);
 }
 
 export const BRIDGE_EVENT = {

@@ -25,8 +25,8 @@ import { buildOutline, spineLeaf, threadOf } from "@/lib/outline";
 import { parkPassage, pruneParked } from "@/lib/later";
 import { toolScopeFor, type ToolGrant } from "@/lib/toolScope";
 import { planSubmission } from "@/lib/draft";
-import { branchModel } from "@/lib/model";
-import type { ProjectSummary, RateLimit, ToolUse, Usage } from "@/lib/bridgeProtocol";
+import { branchEffort, branchModel } from "@/lib/model";
+import type { Effort, ProjectSummary, RateLimit, ToolUse, Usage } from "@/lib/bridgeProtocol";
 
 export interface SubmitRequest {
   /** The human-readable ask. Becomes node.content. */
@@ -36,6 +36,8 @@ export interface SubmitRequest {
   origin: BranchOrigin | null;
   /** Per-branch model override. Absent means inherit from the branch. */
   model?: string;
+  /** Per-branch thinking effort (P-36). Absent means inherit from the branch. */
+  effort?: Effort;
   /**
    * Send without moving the app's cursor.
    *
@@ -125,6 +127,8 @@ interface AppState {
 
   /** Model for the next send, inherited down the branch (§8 P3). */
   modelForBranch: (nodeId: NodeId | null) => string | undefined;
+  /** The thinking effort inherited at this point of a branch, if one was chosen. */
+  effortForBranch: (nodeId: NodeId | null) => Effort | undefined;
 
   nodeStore: () => NodeStore;
   assemble: (node: ConversationNode) => ChatMessage[];
@@ -346,6 +350,7 @@ export const useStore = create<AppState>((set, get) => ({
       // The override is recorded on the user node, which is what makes it
       // per-*branch* rather than global: descendants inherit it by walking up.
       ...(request.model ? { model: request.model } : {}),
+      ...(request.effort ? { effort: request.effort } : {}),
     };
 
     const detached = request.detached === true;
@@ -366,6 +371,7 @@ export const useStore = create<AppState>((set, get) => ({
       origin: { kind: "continuation", sourceNodeId: userNode.id },
       policy: request.policy,
       model: request.model ?? get().modelForBranch(request.parentId),
+      effort: request.effort ?? get().effortForBranch(request.parentId),
       detached,
       ...(request.onCommitted
         ? {
@@ -401,8 +407,9 @@ export const useStore = create<AppState>((set, get) => ({
       preview: parent.assembledPreview ?? formatPayload(messages),
       origin: { kind: "regenerate", sourceNodeId: assistantNodeId },
       policy: parent.contextPolicy,
-      // A retry re-asks the same question, so it re-uses the same model.
+      // A retry re-asks the same question, so it re-uses the same model and effort.
       model: target.model ?? get().modelForBranch(parent.id),
+      effort: target.effort ?? get().effortForBranch(parent.id),
     });
   },
 
@@ -477,6 +484,8 @@ export const useStore = create<AppState>((set, get) => ({
       settings.providers.find((p) => p.id === settings.activeProviderId),
     );
   },
+
+  effortForBranch: (nodeId) => branchEffort(get().nodes, nodeId),
 
   exportAll: async () => {
     const [conversations, nodes, templates] = await Promise.all([
@@ -583,6 +592,8 @@ interface StreamRequest {
   policy: ContextPolicy;
   /** Resolved per-branch model; falls back to the provider default. */
   model?: string;
+  /** Resolved per-branch thinking effort; absent means Claude Code's default. */
+  effort?: Effort | undefined;
   /** Stream into the node without moving the app's cursor to it. */
   detached?: boolean;
   /** Fired once the reply node exists, before the first delta arrives. */
@@ -663,6 +674,7 @@ async function runStream(set: Setter, get: Getter, req: StreamRequest): Promise<
           ...(usage ? { usage } : {}),
           // The id that answered, not the alias that was asked for.
           ...(resolvedModel ? { model: resolvedModel } : {}),
+          ...(req.effort ? { effort: req.effort } : {}),
         }
       : {};
 
@@ -675,6 +687,7 @@ async function runStream(set: Setter, get: Getter, req: StreamRequest): Promise<
       signal: controller.signal,
       toolScope: grant.scope,
       project: grant.project,
+      ...(req.effort ? { effort: req.effort } : {}),
     })) {
       if (delta.rateLimit) set({ rateLimit: delta.rateLimit });
       if (delta.usage) usage = delta.usage;

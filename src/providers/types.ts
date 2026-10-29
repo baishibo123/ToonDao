@@ -1,5 +1,5 @@
 import type { ChatMessage, ProviderConfig } from "@/types";
-import type { ProjectRef, RateLimit, ToolScope, ToolUse, Usage } from "@/lib/bridgeProtocol";
+import type { Effort, ProjectRef, RateLimit, ToolScope, ToolUse, Usage } from "@/lib/bridgeProtocol";
 
 export interface ChatOpts {
   model: string;
@@ -11,6 +11,8 @@ export interface ChatOpts {
   toolScope?: ToolScope;
   /** A project snapshot the request may read (Claude Code bridge only, P-31). */
   project?: ProjectRef | null;
+  /** Thinking effort (Claude Code bridge only, P-36); absent means its default. */
+  effort?: Effort;
 }
 
 export interface Delta {

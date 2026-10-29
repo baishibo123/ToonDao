@@ -435,3 +435,18 @@ no undo. A dialog names the conversation and says so; Cancel has the focus, so
 Enter, Esc and a click outside all keep it. Considered: an undo toast, which
 needs deletes to be deferred or reversible in the database — more than a
 question that costs one click.
+
+**P-36 · Thinking effort is chosen per branch, like the model.** Claude Code's
+`--effort` levels (low, medium, high, xhigh, max — what its desktop app offers)
+are picked beside the model in the composer when the provider is the bridge.
+The choice is recorded on the question and found by walking up the lineage
+(`branchEffort()`), so it holds from there down the branch, asides included,
+until a later question chooses another; each reply records the level it was
+written with. A request may carry only one of the five names: the bridge drops
+anything else, and `argsFor()` checks again before it becomes a flag.
+Considered: one level per conversation, and one for the whole app — a branch is
+where a person decides a question deserves more thought. Measured through the
+bridge on a 14k-token thread: switching the level between turns keeps the
+prompt cache (Opus and Haiku read 14,223 and 14,222 tokens back after a switch,
+as after a turn at the same level). Separately, Sonnet 5 read nothing back at
+all, at any level or none — every turn written in full; not yet explained.
