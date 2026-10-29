@@ -1220,6 +1220,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .project__actions { margin: 8px 0 8px; }
 .project__blocked { margin: -4px 0 10px; }
 .pane > .bridgestatus { margin-bottom: 10px; }
+.confirm__actions { justify-content: flex-end; margin: 14px 0 0; }
 .pane__note code { font-family: var(--font-mono); font-size: 0.9em; }
 
 .msg__lookups {

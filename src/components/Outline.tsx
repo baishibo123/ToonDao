@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ConfirmDelete } from "@/components/ConfirmDelete";
 import { useStore } from "@/store/useStore";
 import { useUI } from "@/store/useUI";
 import { BRANCH_META } from "@/lib/policyMeta";
@@ -32,6 +33,9 @@ export function Outline() {
   const activeNodeId = useStore((s) => s.activeNodeId);
   const selectConversation = useStore((s) => s.selectConversation);
   const deleteConversation = useStore((s) => s.deleteConversation);
+  /** The conversation whose ✕ was clicked, waiting for the person to confirm. */
+  const [doomed, setDoomed] = useState<{ id: string; title: string } | null>(null);
+  const cancelDelete = useCallback(() => setDoomed(null), []);
 
   const collapsedRows = useUI((s) => s.collapsedRows);
   const toggleRow = useUI((s) => s.toggleRow);
@@ -174,7 +178,7 @@ export function Outline() {
                 className="row__kill"
                 aria-label={`Delete ${conversation.title}`}
                 title="Delete this conversation"
-                onClick={() => void deleteConversation(conversation.id)}
+                onClick={() => setDoomed({ id: conversation.id, title: conversation.title })}
               >
                 ✕
               </button>
@@ -197,6 +201,16 @@ export function Outline() {
           </div>
         );
       })}
+      {doomed ? (
+        <ConfirmDelete
+          title={doomed.title}
+          onCancel={cancelDelete}
+          onConfirm={() => {
+            setDoomed(null);
+            void deleteConversation(doomed.id);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

@@ -428,3 +428,10 @@ renaming as the conversation drifts (a request the person did not ask for, on
 every few turns). This is the one model call the app makes on its own, and it
 is not concept extraction: it reads what the thread already says and never
 enters a payload.
+
+**P-35 · Deleting a conversation asks first.** The ✕ sits beside the row that
+opens a conversation, and a delete takes every message and aside with it, with
+no undo. A dialog names the conversation and says so; Cancel has the focus, so
+Enter, Esc and a click outside all keep it. Considered: an undo toast, which
+needs deletes to be deferred or reversible in the database — more than a
+question that costs one click.
