@@ -226,6 +226,7 @@ export function parseBundle(
         ...(later.length > 0 ? { later } : {}),
         ...(project ? { project } : {}),
         ...(value.titleSource === "auto" || value.titleSource === "set" ? { titleSource: value.titleSource } : {}),
+        ...(typeof value.pacing === "boolean" ? { pacing: value.pacing } : {}),
       };
     });
 
@@ -270,6 +271,7 @@ function parseBridgeRecord(value: Record<string, unknown>): Partial<Conversation
   const out: Partial<ConversationNode> = {};
   if (value.harness === "claude-code") out.harness = "claude-code";
   if (isEffort(value.effort)) out.effort = value.effort;
+  if (typeof value.pacing === "boolean") out.pacing = value.pacing;
   if (Array.isArray(value.toolUse)) {
     const toolUse = value.toolUse
       .filter(isRecord)

@@ -189,11 +189,13 @@ export function Settings() {
                 onChange={(e) => void updateSettings({ pacing: e.target.checked })}
               />
               <span>
-                <span className="toggle__label">Pace answers</span>
+                <span className="toggle__label">Pace answers in new conversations</span>
                 <span className="toggle__hint">
                   Ask for one idea at a time, ending at a checkpoint, instead of
-                  everything at once. The wording is the Pacing template below, and
-                  it appears in every payload's system message.
+                  everything at once. This is the default a new conversation starts
+                  with; switch it for one branch with "pace" under the message box,
+                  and every question below it, asides included, follows. The wording
+                  is the Pacing template below, in the system message.
                 </span>
               </span>
             </label>

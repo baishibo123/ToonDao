@@ -4,7 +4,7 @@
  * active provider does not offer must not be inherited.
  */
 import { describe, expect, it } from "vitest";
-import { branchEffort, branchModel } from "@/lib/model";
+import { branchEffort, branchModel, branchPacing } from "@/lib/model";
 import type { NodeMap } from "@/lib/tree";
 import { TreeFixture } from "./helpers";
 
@@ -79,5 +79,30 @@ describe("the thinking effort for a branch (P-36)", () => {
     aside.effort = "max";
     const reply = t.add("assistant", "explained", aside.id);
     expect(branchEffort(mapOf(t), reply.id)).toBe("max");
+  });
+});
+
+describe("Pace answers for a branch (P-37)", () => {
+  it("follows the conversation, then the app default, until a question switches it", () => {
+    const t = new TreeFixture();
+    const made = t.linear(2);
+    const leaf = made.at(-1)!.id;
+    expect(branchPacing(mapOf(t), leaf, undefined, true)).toBe(true); // a conversation from before P-37
+    expect(branchPacing(mapOf(t), leaf, false, true)).toBe(false); // the conversation's own value wins
+    made[2].pacing = true;
+    expect(branchPacing(mapOf(t), leaf, false, false)).toBe(true);
+    expect(branchPacing(mapOf(t), made[1]!.id, false, true)).toBe(false); // above the switch
+  });
+
+  it("lets an aside switch it off for itself while the thread keeps it", () => {
+    const t = new TreeFixture();
+    const made = t.linear(2);
+    const answer = made.at(-1)!;
+    const aside = t.add("user", "", answer.id, { kind: "isolated", payload: "x" }, "isolated-selection");
+    aside.pacing = false; // a simple side question
+    const asideReply = t.add("assistant", "short", aside.id);
+    const next = t.add("user", "and the thread goes on", answer.id);
+    expect(branchPacing(mapOf(t), asideReply.id, true, true)).toBe(false);
+    expect(branchPacing(mapOf(t), next.id, true, true)).toBe(true);
   });
 });

@@ -50,6 +50,11 @@ export interface ConversationNode {
    * written with. Claude Code bridge only; absent means Claude Code's default.
    */
   effort?: Effort;
+  /**
+   * On a user node: Pace answers switched on or off from here down this
+   * branch, asides included, found by walking up like `effort` (P-37).
+   */
+  pacing?: boolean;
   /** Outside sources the model used while writing this reply (bridge only). */
   toolUse?: ToolUse[];
   /** Tokens the request cost, as the bridge measured them. */
@@ -136,6 +141,13 @@ export interface Conversation {
    * the first finished reply replaces with a model-written title. Optional.
    */
   titleSource?: "auto" | "set";
+  /**
+   * Pace answers for this conversation, until a question in a branch switches
+   * it (P-37). Taken from Settings when the conversation is created, so changing
+   * that default later leaves existing conversations as they were. Optional:
+   * a conversation from before P-37 follows Settings.
+   */
+  pacing?: boolean;
 }
 
 /** A registered project and the snapshot a conversation reads (names only; the bridge holds the folder). */

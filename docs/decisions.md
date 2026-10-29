@@ -450,3 +450,14 @@ bridge on a 14k-token thread: switching the level between turns keeps the
 prompt cache (Opus and Haiku read 14,223 and 14,222 tokens back after a switch,
 as after a turn at the same level). Separately, Sonnet 5 read nothing back at
 all, at any level or none — every turn written in full; not yet explained.
+
+**P-37 · Pace answers belongs to a conversation, and a branch can switch it.**
+A new conversation takes Pace answers from Settings when it is created, and
+keeps that value if Settings changes later. "pace" under the message box
+switches it for one question and everything below it, asides included, found by
+walking the lineage (`branchPacing()`) the way a model or an effort is. Asides
+inherit the thread's value and can switch it for themselves, because a simple
+side question does not need a paced lesson. Considered: one switch per
+conversation with asides always following it — simpler, but the person asked to
+switch it in a branch. Pacing sits in the system message, so a turn that
+switches it starts a new prompt-cache prefix; turns after it reuse that one.

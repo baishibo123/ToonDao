@@ -52,3 +52,29 @@ export function branchEffort(nodes: NodeMap, nodeId: NodeId | null): Effort | un
   }
   return undefined;
 }
+
+/**
+ * Whether Pace answers applies at this point of a branch (P-37): the nearest
+ * question up the lineage that switched it, else the conversation's own value,
+ * else the app's default. Walking lineage, not context, so an aside inherits
+ * the switch of the thread it left — and can switch it for itself, because a
+ * simple side question does not need a lesson.
+ */
+export function branchPacing(
+  nodes: NodeMap,
+  nodeId: NodeId | null,
+  conversationPacing: boolean | undefined,
+  appDefault: boolean,
+): boolean {
+  let cursor = nodeId;
+  const seen = new Set<NodeId>();
+  while (cursor) {
+    if (seen.has(cursor)) break;
+    seen.add(cursor);
+    const node = nodes[cursor];
+    if (!node) break;
+    if (node.role === "user" && typeof node.pacing === "boolean") return node.pacing;
+    cursor = node.parentId;
+  }
+  return conversationPacing ?? appDefault;
+}

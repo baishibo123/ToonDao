@@ -64,6 +64,9 @@ Rules that hold for the life of the project. Why each one exists is in
   (`nameConversation()`) runs on a conversation's first finished reply only
   while `titleSource` is unset, and otherwise only when the person presses ↻.
   Its request is built by `assembleTitle()`, which stays a few hundred tokens.
+- **Pace answers is decided at the question.** `assemble()` takes it from the
+  question's own switch, else the branch above it (`branchPacing()`), else the
+  conversation, else Settings — never from Settings alone.
 - **The Later list drains.** Sending anything about a parked passage removes it;
   deleting its message prunes it.
 

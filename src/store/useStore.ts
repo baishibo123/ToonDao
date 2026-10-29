@@ -25,7 +25,7 @@ import { buildOutline, spineLeaf, threadOf } from "@/lib/outline";
 import { parkPassage, pruneParked } from "@/lib/later";
 import { toolScopeFor, type ToolGrant } from "@/lib/toolScope";
 import { planSubmission } from "@/lib/draft";
-import { branchEffort, branchModel } from "@/lib/model";
+import { branchEffort, branchModel, branchPacing } from "@/lib/model";
 import type { Effort, ProjectSummary, RateLimit, ToolUse, Usage } from "@/lib/bridgeProtocol";
 
 export interface SubmitRequest {
@@ -38,6 +38,8 @@ export interface SubmitRequest {
   model?: string;
   /** Per-branch thinking effort (P-36). Absent means inherit from the branch. */
   effort?: Effort;
+  /** Per-branch Pace answers (P-37). Absent means inherit from the branch. */
+  pacing?: boolean;
   /**
    * Send without moving the app's cursor.
    *
@@ -129,6 +131,8 @@ interface AppState {
   modelForBranch: (nodeId: NodeId | null) => string | undefined;
   /** The thinking effort inherited at this point of a branch, if one was chosen. */
   effortForBranch: (nodeId: NodeId | null) => Effort | undefined;
+  /** Whether Pace answers applies at this point of a branch (P-37). */
+  pacingForBranch: (nodeId: NodeId | null) => boolean;
 
   nodeStore: () => NodeStore;
   assemble: (node: ConversationNode) => ChatMessage[];
@@ -157,11 +161,19 @@ export const useStore = create<AppState>((set, get) => ({
 
   /** Every prompt in the app comes through here, and this is the only caller
    *  of assembleContext(). No component builds a message array. */
-  assemble: (node) =>
-    assembleContext(node, get().nodeStore(), get().templates, {
+  assemble: (node) => {
+    // Pace answers as it stands at the question: its own switch, or the branch's
+    // (P-37). A reply's payload is its question's; a draft carries its own switch.
+    const asked = node.role === "assistant" ? node.parentId : null;
+    const pacing =
+      node.role === "user" && typeof node.pacing === "boolean"
+        ? node.pacing
+        : get().pacingForBranch(asked ?? node.parentId);
+    return assembleContext(node, get().nodeStore(), get().templates, {
       systemPrompt: get().settings.systemPrompt,
-      pacing: get().settings.pacing,
-    }),
+      pacing,
+    });
+  },
 
   init: async () => {
     // StrictMode invokes mount effects twice in development. Without this
@@ -204,6 +216,8 @@ export const useStore = create<AppState>((set, get) => ({
       updatedAt: Date.now(),
       rootId: null,
       activeNodeId: null,
+      // The default as it is now: changing Settings later leaves this one be (P-37).
+      pacing: get().settings.pacing,
     };
     await db.conversations.put(conversation);
     set((s) => ({
@@ -351,6 +365,7 @@ export const useStore = create<AppState>((set, get) => ({
       // per-*branch* rather than global: descendants inherit it by walking up.
       ...(request.model ? { model: request.model } : {}),
       ...(request.effort ? { effort: request.effort } : {}),
+      ...(typeof request.pacing === "boolean" ? { pacing: request.pacing } : {}),
     };
 
     const detached = request.detached === true;
@@ -486,6 +501,12 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   effortForBranch: (nodeId) => branchEffort(get().nodes, nodeId),
+
+  pacingForBranch: (nodeId) => {
+    const { nodes, conversations, conversationId, settings } = get();
+    const conversation = conversations.find((c) => c.id === conversationId);
+    return branchPacing(nodes, nodeId, conversation?.pacing, settings.pacing);
+  },
 
   exportAll: async () => {
     const [conversations, nodes, templates] = await Promise.all([

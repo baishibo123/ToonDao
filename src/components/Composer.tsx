@@ -37,6 +37,7 @@ export function Composer() {
   /** null means "whatever this branch inherits" (§8 P3). */
   const [modelOverride, setModelOverride] = useState<string | null>(null);
   const [effortOverride, setEffortOverride] = useState<Effort | null>(null);
+  const [pacingOverride, setPacingOverride] = useState<boolean | null>(null);
 
   const conversationId = useStore((s) => s.conversationId);
   const appActiveNodeId = useStore((s) => s.activeNodeId);
@@ -50,6 +51,8 @@ export function Composer() {
   const pacing = useStore((s) => s.settings.pacing);
   const modelForBranch = useStore((s) => s.modelForBranch);
   const effortForBranch = useStore((s) => s.effortForBranch);
+  const pacingForBranch = useStore((s) => s.pacingForBranch);
+  const conversations = useStore((s) => s.conversations);
   const providers = useStore((s) => s.settings.providers);
   const activeProviderId = useStore((s) => s.settings.activeProviderId);
   const later = useStore((s) => s.conversations.find((c) => c.id === s.conversationId)?.later);
@@ -85,9 +88,10 @@ export function Composer() {
   // — the user can see exactly what the model will see, before committing.
   const draftMessages = useMemo(() => {
     if (!conversationId) return [];
-    return assemble(draftNode(plan, conversationId));
+    const draft = draftNode(plan, conversationId);
+    return assemble(pacingOverride === null ? draft : { ...draft, pacing: pacingOverride });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plan, conversationId, nodes, templates, systemPrompt, pacing, assemble]);
+  }, [plan, conversationId, nodes, templates, systemPrompt, pacing, pacingOverride, conversations, assemble]);
 
   // A later turn in an aside carries the aside, not the thread, and the chip
   // names it by the move that opened the aside.
@@ -136,6 +140,7 @@ export function Composer() {
 
   const inheritedModel = modelForBranch(plan.parentId);
   const inheritedEffort = effortForBranch(plan.parentId);
+  const inheritedPacing = pacingForBranch(plan.parentId);
   const provider = providers.find((p) => p.id === activeProviderId);
   const modelOptions = useMemo(() => {
     const seen = new Set<string>();
@@ -169,6 +174,7 @@ export function Composer() {
       origin: plan.origin,
       ...(modelOverride ? { model: modelOverride } : {}),
       ...(effortOverride && provider?.kind === "claude-code" ? { effort: effortOverride } : {}),
+      ...(pacingOverride !== null ? { pacing: pacingOverride } : {}),
       ...(asideId
         ? {
             detached: true,
@@ -184,6 +190,7 @@ export function Composer() {
     setPending(null);
     setModelOverride(null);
     setEffortOverride(null);
+    setPacingOverride(null);
   };
 
   /**
@@ -332,6 +339,19 @@ export function Composer() {
               </select>
             </label>
           ) : null}
+
+          {/* P-37: switched here, it holds for this branch onwards, asides included. */}
+          <label className="modelpick" title="Pace answers for this branch onwards: one idea at a time, ending at a checkpoint">
+            <span className="modelpick__label">pace</span>
+            <select
+              className="modelpick__select"
+              value={pacingOverride === null ? "" : pacingOverride ? "on" : "off"}
+              onChange={(e) => setPacingOverride(e.target.value === "" ? null : e.target.value === "on")}
+            >
+              <option value="">{inheritedPacing ? "on" : "off"} (inherited)</option>
+              <option value={inheritedPacing ? "off" : "on"}>{inheritedPacing ? "off" : "on"}</option>
+            </select>
+          </label>
 
           {/* P-36: Claude Code only; chosen here, it holds for this branch onwards, like the model. */}
           {provider?.kind === "claude-code" ? (
