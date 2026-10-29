@@ -57,7 +57,9 @@ then pick **Mock server (dev, no key)** in Settings. The mock speaks the real
 wire format and appends every request body to `dev/requests.jsonl`, so you can
 confirm that what the context action shows is what actually went out.
 
-Press `?` in the app for keyboard shortcuts.
+Press `?` in the app for keyboard shortcuts. A conversation is named by the model
+after its first reply; ↻ beside the title names it again from where it has gone,
+and a title you type yourself stays.
 
 ### Use a Claude subscription instead of an API key
 
@@ -159,4 +161,6 @@ your back — the only outside reading is a web lookup or a file from a project 
 added, read-only, and each one is listed with the reply it went into. No tool
 that runs commands or writes files. No mobile-first layout. No automatic concept
 extraction by a second model call — the click is the interface, and a background
-pass would make it slow, costly and non-deterministic.
+pass would make it slow, costly and non-deterministic. The one call the app makes
+on its own is a conversation's title: a few hundred tokens after the first reply,
+and never over a title you typed (P-34).

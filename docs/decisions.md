@@ -410,3 +410,21 @@ second copy to keep in sync. The inspector now names them among what Claude Code
 adds, and the learning-map template defers to them on language instead of
 overriding them.
 
+**P-34 · A conversation is named by the model, in one small request, and a
+title the person typed is never replaced.** After a conversation's first reply
+finishes, and whenever the person presses ↻ beside its title, one request goes
+to the same provider and model: the `title` template filled by
+`assembleTitle()` with the person's messages on the thread (the first and the
+latest four, 240 characters each) and the first 400 characters of the latest
+reply, with no system prompt, no pacing and a 40-token cap — about 250 tokens
+in, plus what Claude Code adds when it goes through the bridge. A title the
+person typed is marked `titleSource: "set"` and is never replaced
+automatically; ↻ acts on the open conversation only, and only when pressed.
+Considered: the first words of the first message (what it was, and what the
+person asked to replace), asking the answer itself to carry a title line
+(it would cost nothing extra, but the reply on screen would carry a line meant
+for the app, and pacing asks for an answer that ends in a question), and
+renaming as the conversation drifts (a request the person did not ask for, on
+every few turns). This is the one model call the app makes on its own, and it
+is not concept extraction: it reads what the thread already says and never
+enters a payload.

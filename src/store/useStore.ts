@@ -15,7 +15,8 @@ import type {
 } from "@/types";
 import { DEFAULT_SETTINGS, db, ensureSeeded, loadTemplateSet } from "@/db/db";
 import { DEFAULT_TEMPLATES, renderTemplate } from "@/lib/templates";
-import { assembleContext, formatPayload } from "@/lib/assembleContext";
+import { assembleContext, assembleTitle, formatPayload } from "@/lib/assembleContext";
+import { cleanTitle } from "@/lib/title";
 import { createProvider } from "@/providers";
 import { newId } from "@/lib/id";
 import { buildBundle, parseBundle } from "@/lib/transfer";
@@ -88,6 +89,11 @@ interface AppState {
   selectConversation: (id: string) => Promise<void>;
   deleteConversation: (id: string) => Promise<void>;
   renameConversation: (id: string, title: string) => Promise<void>;
+  /**
+   * Have the model name the current conversation from what it is about (P-34),
+   * in one small request. Resolves true when the title changed.
+   */
+  nameConversation: (id: string) => Promise<boolean>;
 
   /** Park a passage on the open conversation's Later list. */
   park: (sourceNodeId: NodeId, anchor: TextAnchor) => Promise<void>;
@@ -235,12 +241,59 @@ export const useStore = create<AppState>((set, get) => ({
 
   renameConversation: async (id, title) => {
     const trimmed = title.trim() || "Untitled";
-    await db.conversations.update(id, { title: trimmed, updatedAt: Date.now() });
+    // A title the person typed is theirs: no automatic naming replaces it.
+    await db.conversations.update(id, { title: trimmed, titleSource: "set", updatedAt: Date.now() });
     set((s) => ({
       conversations: s.conversations.map((c) =>
-        c.id === id ? { ...c, title: trimmed } : c,
+        c.id === id ? { ...c, title: trimmed, titleSource: "set" } : c,
       ),
     }));
+  },
+
+  nameConversation: async (id) => {
+    const { conversationId, nodes, activeNodeId, settings, templates } = get();
+    // Only the open conversation has its nodes loaded.
+    if (id !== conversationId || naming.has(id)) return false;
+    const config = settings.providers.find((p) => p.id === settings.activeProviderId);
+    if (!config || (config.kind === "anthropic" && !config.apiKey)) return false;
+
+    // The thread, root first: the cursor always sits on the root spine.
+    const spine: ConversationNode[] = [];
+    const seen = new Set<NodeId>();
+    for (let cursor = activeNodeId; cursor && !seen.has(cursor); cursor = nodes[cursor]?.parentId ?? null) {
+      seen.add(cursor);
+      const node = nodes[cursor];
+      if (node) spine.unshift(node);
+    }
+    if (!spine.some((n) => n.role === "assistant" && n.status === "complete" && n.content.trim())) return false;
+
+    naming.add(id);
+    const controller = new AbortController();
+    try {
+      let reply = "";
+      for await (const delta of createProvider(config).streamChat(assembleTitle(spine, templates), {
+        model: get().modelForBranch(activeNodeId) ?? config.model,
+        temperature: 0.2,
+        maxTokens: 40,
+        signal: controller.signal,
+        toolScope: "none",
+        project: null,
+      })) {
+        reply += delta.text;
+        if (reply.length > 400) break; // a title, not an essay: stop paying for it
+      }
+      const title = cleanTitle(reply);
+      if (!title) return false;
+      const patch: Partial<Conversation> = { title, titleSource: "auto" };
+      await db.conversations.update(id, patch);
+      set((s) => ({ conversations: s.conversations.map((c) => (c.id === id ? { ...c, ...patch } : c)) }));
+      return true;
+    } catch {
+      return false; // the first words stay; the person can ask again
+    } finally {
+      controller.abort();
+      naming.delete(id);
+    }
   },
 
   park: async (sourceNodeId, anchor) => {
@@ -323,6 +376,11 @@ export const useStore = create<AppState>((set, get) => ({
     });
 
     await touchConversation(set, get, conversationId, request.text);
+    // The first finished reply in a conversation nobody has named yet: name it.
+    const named = get().conversations.find((c) => c.id === conversationId)?.titleSource;
+    if (!detached && request.parentId === null && !named && get().nodes[assistantNodeId]?.status === "complete") {
+      void get().nameConversation(conversationId);
+    }
     return { userNodeId: userNode.id, assistantNodeId };
   },
 
@@ -461,6 +519,7 @@ export const useStore = create<AppState>((set, get) => ({
     const conversationId = await get().newConversation();
     const patch: Partial<Conversation> = {
       title: `Learning: ${project.name}`,
+      titleSource: "set",
       project: { slug: project.slug, snapshot: snapshot.id, name: project.name },
     };
     await db.conversations.update(conversationId, patch);
@@ -734,6 +793,9 @@ async function persistActive(conversationId: string | null, nodeId: NodeId): Pro
   if (!conversationId) return;
   await db.conversations.update(conversationId, { activeNodeId: nodeId });
 }
+
+/** Conversations being named right now, so a second click does not send a second request. */
+const naming = new Set<string>();
 
 async function touchConversation(
   set: Setter,

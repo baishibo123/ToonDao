@@ -83,6 +83,7 @@ const TEMPLATE_IDS: TemplateId[] = [
   "quote_reply",
   "pacing",
   "learning_map",
+  "title",
 ];
 
 /**
@@ -223,6 +224,7 @@ export function parseBundle(
         activeNodeId: activeRaw && nodesById.has(activeRaw) ? activeRaw : rootId,
         ...(later.length > 0 ? { later } : {}),
         ...(project ? { project } : {}),
+        ...(value.titleSource === "auto" || value.titleSource === "set" ? { titleSource: value.titleSource } : {}),
       };
     });
 

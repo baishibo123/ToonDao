@@ -311,6 +311,42 @@ function withSystem(
 }
 
 /* ------------------------------------------------------------------ */
+/* Naming a conversation (P-34)                                        */
+/* ------------------------------------------------------------------ */
+
+/** How much of a conversation a title request carries, in characters. */
+export const TITLE_BUDGET = { askChars: 240, asks: 5, answerChars: 400 } as const;
+
+/**
+ * The request that names a conversation: the `title` template filled with the
+ * person's messages on the thread and the opening of the latest reply, each
+ * clipped. Nothing else — no system prompt, no pacing, no earlier answers — so
+ * it stays a few hundred tokens however long the conversation grows.
+ *
+ * `spine` is the thread, root first. With more asks than fit, the first and the
+ * latest are kept: where the conversation began, and where it has gone.
+ */
+export function assembleTitle(spine: readonly ConversationNode[], templates: TemplateSet): ChatMessage[] {
+  const clip = (text: string, max: number) => {
+    const flat = text.replace(/\s+/g, " ").trim();
+    return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
+  };
+  const asks = spine.filter((n) => n.role === "user" && n.content.trim());
+  const kept =
+    asks.length <= TITLE_BUDGET.asks
+      ? asks
+      : [asks[0], ...asks.slice(asks.length - (TITLE_BUDGET.asks - 1))].filter(
+          (n): n is ConversationNode => Boolean(n),
+        );
+  const answer = [...spine].reverse().find((n) => n.role === "assistant" && n.content.trim());
+  const body = renderTemplate(templates.title, {
+    asks: kept.map((n) => `- ${clip(n.content, TITLE_BUDGET.askChars)}`).join("\n"),
+    answer: answer ? clip(answer.content, TITLE_BUDGET.answerChars) : "(no answer yet)",
+  });
+  return [{ role: "user", content: body }];
+}
+
+/* ------------------------------------------------------------------ */
 /* Inspector support                                                   */
 /* ------------------------------------------------------------------ */
 

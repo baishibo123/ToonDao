@@ -123,6 +123,13 @@ export interface Conversation {
    * like `later`.
    */
   project?: ConversationProject;
+  /**
+   * Who named the conversation. `auto`: a model, from what it is about (P-34).
+   * `set`: the person typed it, or the app chose it on purpose (a learning
+   * conversation's). Absent: still the first words of the first message, which
+   * the first finished reply replaces with a model-written title. Optional.
+   */
+  titleSource?: "auto" | "set";
 }
 
 /** A registered project and the snapshot a conversation reads (names only; the bridge holds the folder). */
@@ -147,7 +154,8 @@ export type TemplateId =
   | "isolated_selection"
   | "quote_reply"
   | "pacing"
-  | "learning_map";
+  | "learning_map"
+  | "title";
 
 export interface PromptTemplate {
   id: TemplateId;

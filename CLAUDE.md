@@ -60,6 +60,10 @@ Rules that hold for the life of the project. Why each one exists is in
   the same database still works.
 - **An export never contains an API key.** An id collision on import remaps every
   id in the bundle together, never some of them.
+- **A title the person typed is never replaced automatically.** Naming
+  (`nameConversation()`) runs on a conversation's first finished reply only
+  while `titleSource` is unset, and otherwise only when the person presses ↻.
+  Its request is built by `assembleTitle()`, which stays a few hundred tokens.
 - **The Later list drains.** Sending anything about a parked passage removes it;
   deleting its message prunes it.
 

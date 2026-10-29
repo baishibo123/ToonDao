@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useStore } from "@/store/useStore";
 import { useUI } from "@/store/useUI";
 import { Sidebar } from "@/components/Sidebar";
@@ -20,6 +20,11 @@ export default function App() {
   const conversationId = useStore((s) => s.conversationId);
   const conversations = useStore((s) => s.conversations);
   const renameConversation = useStore((s) => s.renameConversation);
+  const nameConversation = useStore((s) => s.nameConversation);
+  const hasReply = useStore((s) =>
+    Object.values(s.nodes).some((n) => n.role === "assistant" && n.status === "complete"),
+  );
+  const [naming, setNaming] = useState(false);
   const setShortcutsOpen = useUI((s) => s.setShortcutsOpen);
 
   useSelectionWatcher();
@@ -55,6 +60,25 @@ export default function App() {
                   conversationId && void renameConversation(conversationId, e.target.value)
                 }
               />
+              {/* This conversation only: names it again from what it is about now (P-34). */}
+              <button
+                type="button"
+                className="btn btn--ghost btn--sm"
+                disabled={!conversationId || !hasReply || naming}
+                onClick={async () => {
+                  if (!conversationId) return;
+                  setNaming(true);
+                  try {
+                    await nameConversation(conversationId);
+                  } finally {
+                    setNaming(false);
+                  }
+                }}
+                title="Name this conversation again from what it is about"
+                aria-label="Name this conversation again"
+              >
+                {naming ? "…" : "↻"}
+              </button>
               <button
                 type="button"
                 className="btn btn--ghost btn--sm"

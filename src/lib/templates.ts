@@ -40,6 +40,17 @@ Treat the text above as the entire context. Answer only about it.`,
   // method is the learn-project skill's, kept general: no project is assumed to
   // have decision records, and the language is the reader's — their standing
   // instructions first (P-33), since this message itself is in English.
+  // P-34: a conversation's title, written by the model in one short request
+  // after the first reply, or when the person asks for it again. Kept small on
+  // purpose: the asks and an answer's opening, clipped, and nothing else.
+  title: `Write a title for this conversation: at most eight words, in the language the person writes in, naming what it is about rather than repeating the question. Reply with the title alone, without quotes or a full stop.
+
+What they asked:
+{{asks}}
+
+How the latest answer begins:
+{{answer}}`,
+
   learning_map: `I built {{project}} with Claude Code, and I want to learn from it. Your working directory is a snapshot of the project. Read harvest.md first: it gathers what the project holds about how it was built — my prompts and the errors I hit in its Claude Code sessions, Claude Code's own notes, its git history, its notes and its files, with a table of which of those it has. sessions/ holds each session in full, and files/ the project as it was.
 
 Then draw me a study map:
@@ -86,6 +97,11 @@ export const TEMPLATE_META: Record<
     label: "Pacing",
     vars: [],
     note: "Appended to the system message of every request while Settings → Pace answers is on. No variables.",
+  },
+  title: {
+    label: "Title",
+    vars: ["asks", "answer"],
+    note: "P-34 — one short request after a conversation's first reply, and on ↻ beside its title. {{asks}} is the person's messages on the thread, clipped; {{answer}} the opening of the latest reply. Sent without the system prompt or pacing.",
   },
   learning_map: {
     label: "Learning map",

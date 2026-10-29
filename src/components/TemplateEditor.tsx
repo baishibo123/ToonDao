@@ -9,6 +9,8 @@ const IDS: TemplateId[] = [
   "isolated_selection",
   "quote_reply",
   "pacing",
+  "learning_map",
+  "title",
 ];
 
 /**
