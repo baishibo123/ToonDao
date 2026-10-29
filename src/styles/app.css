@@ -549,7 +549,7 @@
   align-items: center;
   gap: 10px;
   margin-top: 10px;
-  min-height: 28px;
+  min-height: 32px;
   flex-wrap: wrap;
 }
 .composer__hint {
@@ -1140,57 +1140,59 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .composer__pickers {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 .picker {
   position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  height: 28px;
-  padding: 0 10px 0 12px;
-  border: 1px solid var(--border);
+  gap: 8px;
+  height: 32px;
+  padding: 0 12px 0 14px;
+  border: 1.5px solid var(--border-strong);
   border-radius: 999px;
-  background: var(--surface);
+  background: var(--bg-raised);
   color: var(--text-dim);
-  box-shadow: 0 1px 1.5px rgb(0 0 0 / 0.04);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.08), 0 2px 6px -2px rgb(0 0 0 / 0.08);
   cursor: pointer;
-  transition: background var(--transition), border-color var(--transition), box-shadow var(--transition);
+  transition: background var(--transition), border-color var(--transition), box-shadow var(--transition), transform var(--transition);
 }
 .picker:hover {
   background: var(--surface-hover);
-  border-color: var(--border-strong);
+  border-color: var(--text-faint);
+  box-shadow: 0 2px 4px rgb(0 0 0 / 0.1), 0 4px 10px -4px rgb(0 0 0 / 0.12);
 }
+.picker:active { transform: translateY(1px); }
 .picker:focus-within {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
 .picker__label {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
   text-transform: uppercase;
-  color: var(--text-faint);
+  color: var(--text-dim);
 }
 .picker__value {
   font-family: var(--font-mono);
-  font-size: 12px;
-  font-weight: 500;
+  font-size: 13px;
+  font-weight: 600;
   color: var(--text);
-  max-width: 160px;
+  max-width: 170px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .picker__caret {
-  width: 9px;
-  height: 6px;
+  width: 10px;
+  height: 7px;
   flex: none;
-  color: var(--text-faint);
+  color: var(--text-dim);
   transition: color var(--transition), transform var(--transition);
 }
-.picker:hover .picker__caret { color: var(--text-dim); transform: translateY(1px); }
+.picker:hover .picker__caret { color: var(--text); transform: translateY(1px); }
 .picker__select {
   position: absolute;
   inset: 0;
@@ -1200,20 +1202,26 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   cursor: pointer;
   font: inherit;
 }
+/* Set on this message: filled with the accent, so what this send changes is unmissable. */
 .picker--set {
-  border-color: color-mix(in oklab, var(--accent) 55%, var(--border));
-  background: color-mix(in oklab, var(--accent) 9%, var(--surface));
+  border-color: var(--accent);
+  background: color-mix(in oklab, var(--accent) 20%, var(--bg-raised));
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.08), 0 0 0 3px color-mix(in oklab, var(--accent) 14%, transparent);
 }
-.picker--set:hover { border-color: var(--accent); }
+.picker--set:hover {
+  background: color-mix(in oklab, var(--accent) 28%, var(--bg-raised));
+  border-color: var(--accent);
+}
 .picker--set::before {
   content: "";
-  width: 6px;
-  height: 6px;
+  width: 7px;
+  height: 7px;
   margin-right: -2px;
   border-radius: 50%;
   background: var(--accent);
 }
-.picker--set .picker__label { color: color-mix(in oklab, var(--accent) 75%, var(--text-dim)); }
+.picker--set .picker__label,
+.picker--set .picker__caret { color: color-mix(in oklab, var(--accent) 80%, var(--text)); }
 
 /* ------------------------------------------------------------------
    Claude Code bridge
