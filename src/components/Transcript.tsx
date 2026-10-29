@@ -39,23 +39,55 @@ export function Transcript({ leafId, fromNodeId, empty }: TranscriptProps = {}) 
     return start === -1 ? full : full.slice(start);
   }, [nodes, activeNodeId, fromNodeId]);
 
-  // Follow the stream, but only while the user is already near the bottom.
+  // Follow the stream, but only while the reader is at the bottom. Scrolling up
+  // is the reader leaving on purpose: the follow stops until they scroll back
+  // down to the end, or send something, which starts a new stream to watch.
+  // The follow jumps rather than glides: `.transcript` scrolls smoothly, and a
+  // glide restarted on every delta never settles, so it dragged the reader back
+  // down and read to the old check as still being at the bottom.
   const pinnedRef = useRef(true);
+  const autoTopRef = useRef(0);
   useEffect(() => {
     const el = scrollerRef.current;
     if (!el) return;
-    const onScroll = () => {
-      pinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+    // The reader's own input says they are leaving, before any scroll event
+    // does: a glide they start can be cut short by the next delta's jump.
+    const leave = () => {
+      pinnedRef.current = false;
     };
+    const onWheel = (e: WheelEvent) => {
+      if (e.deltaY < 0) leave();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (["ArrowUp", "PageUp", "Home"].includes(e.key) || (e.key === " " && e.shiftKey)) leave();
+    };
+    const onScroll = () => {
+      const gap = el.scrollHeight - el.scrollTop - el.clientHeight;
+      if (gap < 8) pinnedRef.current = true;
+      else if (el.scrollTop < autoTopRef.current - 2) leave();
+    };
+    el.addEventListener("wheel", onWheel, { passive: true });
+    el.addEventListener("touchmove", leave, { passive: true });
+    el.addEventListener("keydown", onKey);
     el.addEventListener("scroll", onScroll, { passive: true });
-    return () => el.removeEventListener("scroll", onScroll);
+    return () => {
+      el.removeEventListener("wheel", onWheel);
+      el.removeEventListener("touchmove", leave);
+      el.removeEventListener("keydown", onKey);
+      el.removeEventListener("scroll", onScroll);
+    };
   }, []);
+
+  useEffect(() => {
+    if (streamingNodeId) pinnedRef.current = true;
+  }, [streamingNodeId]);
 
   const lastContent = path.at(-1)?.content.length ?? 0;
   useEffect(() => {
     const el = scrollerRef.current;
     if (!el || !pinnedRef.current) return;
-    el.scrollTop = el.scrollHeight;
+    el.scrollTo({ top: el.scrollHeight, behavior: "instant" });
+    autoTopRef.current = el.scrollTop;
   }, [lastContent, path.length, streamingNodeId]);
 
   // Scoped to this scroller rather than looked up by DOM id: the same node can
