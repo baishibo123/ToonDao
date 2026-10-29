@@ -456,6 +456,10 @@ caches ends in them, and the next turn, whose new turns come before them, never
 contains it. An identical request still hits (13,000 read). ToonDao cannot move
 those blocks — `--exclude-dynamic-system-prompt-sections` is ignored with a custom
 system prompt — so on Sonnet 5 every turn through the bridge is paid in full.
+This is the bridge's shape, not Sonnet's: in one ordinary Claude Code session,
+where each turn arrives as a message of its own, Sonnet 5 read back 12,785 and
+12,889 tokens on its second and third turns. Recovering that would mean keeping
+a Claude Code session per thread, the alternative P-23 turned down.
 
 **P-37 · Pace answers belongs to a conversation, and a branch can switch it.**
 A new conversation takes Pace answers from Settings when it is created, and
