@@ -449,7 +449,13 @@ where a person decides a question deserves more thought. Measured through the
 bridge on a 14k-token thread: switching the level between turns keeps the
 prompt cache (Opus and Haiku read 14,223 and 14,222 tokens back after a switch,
 as after a turn at the same level). Separately, Sonnet 5 read nothing back at
-all, at any level or none — every turn written in full; not yet explained.
+all, at any level or none — every turn written in full. Explained since: for
+Sonnet 5, Claude Code puts its environment, model, token-budget and date blocks
+after the request's text instead of in the system prompt, so the prefix a turn
+caches ends in them, and the next turn, whose new turns come before them, never
+contains it. An identical request still hits (13,000 read). ToonDao cannot move
+those blocks — `--exclude-dynamic-system-prompt-sections` is ignored with a custom
+system prompt — so on Sonnet 5 every turn through the bridge is paid in full.
 
 **P-37 · Pace answers belongs to a conversation, and a branch can switch it.**
 A new conversation takes Pace answers from Settings when it is created, and
@@ -461,3 +467,11 @@ side question does not need a paced lesson. Considered: one switch per
 conversation with asides always following it — simpler, but the person asked to
 switch it in a branch. Pacing sits in the system message, so a turn that
 switches it starts a new prompt-cache prefix; turns after it reuse that one.
+
+**P-38 · Text size is a setting with a few steps.** Settings → Display offers
+Small, Default, Large and Larger (0.92×, 1×, 1.12×, 1.25×). Every pixel font size
+in the stylesheets is multiplied by one variable, `--text-scale`; spacing and
+layout stay as they are. Considered: CSS `zoom` on the page, which scales
+everything at once but moves the coordinates the selection toolbar and
+popovers are placed by; and a slider, which the person did not ask for —
+a few steps are quicker to pick and to tell apart.

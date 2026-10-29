@@ -216,7 +216,11 @@ export interface Settings {
   conceptLensTurns: number;
   temperature: number;
   maxTokens: number | null;
+  /** How large the interface's text is (P-38). Optional: older settings read as "default". */
+  textSize?: TextSize;
 }
+
+export type TextSize = "small" | "default" | "large" | "larger";
 
 /* ------------------------------------------------------------------ */
 /* Node store — the read interface assembleContext() is given          */

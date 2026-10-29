@@ -120,6 +120,8 @@ Rules that hold for the life of the project. Why each one exists is in
 
 ## Conventions
 
+- **A font size in the stylesheets is `calc(<n>px * var(--text-scale, 1))` or
+  relative (`em`).** A bare pixel size would ignore Settings → Text size (P-38).
 - **Display vocabulary lives in `src/lib/policyMeta.ts`.** Glyphs, labels and hue
   variables for every kind come from there; never restate one.
 - **Keyboard shortcuts use ⌘⇧ / Ctrl-Shift**, never a bare ⌘ combination the

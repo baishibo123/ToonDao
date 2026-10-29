@@ -12,6 +12,7 @@ import { useTermHover } from "@/hooks/useTermHover";
 import { useParkedMarks } from "@/hooks/useParkedMarks";
 import { useShortcuts } from "@/hooks/useShortcuts";
 import { Shortcuts } from "@/components/Shortcuts";
+import { textScale } from "@/lib/textSize";
 
 export default function App() {
   const ready = useStore((s) => s.ready);
@@ -26,6 +27,7 @@ export default function App() {
   );
   const [naming, setNaming] = useState(false);
   const setShortcutsOpen = useUI((s) => s.setShortcutsOpen);
+  const textSize = useStore((s) => s.settings.textSize);
 
   useSelectionWatcher();
   useTermHover();
@@ -35,6 +37,11 @@ export default function App() {
   useEffect(() => {
     void init();
   }, [init]);
+
+  // P-38: one variable every font size in the stylesheets is multiplied by.
+  useEffect(() => {
+    document.documentElement.style.setProperty("--text-scale", String(textScale(textSize)));
+  }, [textSize]);
 
   if (!ready) return <div className="boot">opening…</div>;
 

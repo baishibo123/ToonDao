@@ -146,6 +146,7 @@ export const DEFAULT_SETTINGS: Settings = {
   conceptLensTurns: 2,
   temperature: 0.7,
   maxTokens: null,
+  textSize: "default",
 };
 
 /** Seed templates and settings on first run. Idempotent. */

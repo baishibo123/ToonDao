@@ -6,6 +6,7 @@ import { TemplateEditor } from "@/components/TemplateEditor";
 import { DataPane } from "@/components/DataPane";
 import { ProjectsPane } from "@/components/ProjectsPane";
 import { BridgeStatus } from "@/components/BridgeStatus";
+import { TEXT_SIZES } from "@/lib/textSize";
 
 /**
  * A key field that says "blank for local" on a hosted provider is telling the
@@ -177,6 +178,32 @@ export function Settings() {
                 </div>
               </fieldset>
             ))}
+          </section>
+
+          <section className="pane">
+            <h3 className="pane__title">Display</h3>
+            <div className="field">
+              <span className="field__label" id="text-size-label">Text size</span>
+              <div className="segmented" role="radiogroup" aria-labelledby="text-size-label">
+                {TEXT_SIZES.map((size) => {
+                  const on = (settings.textSize ?? "default") === size.id;
+                  return (
+                    <button
+                      key={size.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={on}
+                      className={`segmented__option${on ? " segmented__option--on" : ""}`}
+                      style={{ fontSize: `${13 * size.scale}px` }}
+                      onClick={() => void updateSettings({ textSize: size.id })}
+                    >
+                      {size.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="field__hint">Changes the size of all text in ToonDao; the layout stays as it is.</p>
+            </div>
           </section>
 
           <section className="pane">
