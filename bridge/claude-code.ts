@@ -48,8 +48,12 @@ import {
   snapshotReadDir,
   TOONDAO_HOME,
 } from "./projects.ts";
+import { API_KEY_FILE, loadApiKey } from "./api-key.ts";
 
 export const DEFAULT_PORT = 8788;
+
+/** Messages API runs allowed in flight at once (TOONDAO_API_CONCURRENCY). Each is a whole Claude Code process. */
+export const DEFAULT_API_CONCURRENCY = 4;
 
 /** The app's dev and preview servers. Override with TOONDAO_ORIGINS. */
 export const DEFAULT_ORIGINS = [
@@ -83,7 +87,7 @@ export const DEFAULT_ALLOWED_TOOLS = ["WebSearch", "WebFetch", "mcp__claude_ai_*
 
 const NEUTRAL_SYSTEM_PROMPT = "You are Claude, a helpful AI assistant.";
 const MAX_BODY_BYTES = 25 * 1024 * 1024;
-const MAX_RUN_MS = 15 * 60 * 1000;
+export const MAX_RUN_MS = 15 * 60 * 1000;
 
 export interface BridgeOptions {
   port: number;
@@ -96,12 +100,27 @@ export interface BridgeOptions {
   sessionsRoot?: string;
   /** The folder dialog; macOS's own unless a test stands in for the person. */
   chooseFolder?: () => Promise<string | null>;
+  /** The key the Messages API route checks (bridge/api-key.ts); without one that route refuses everything. */
+  apiKey?: string;
+  /** How many Messages API runs may be in flight at once; more get a 429 the SDKs back off on. */
+  apiConcurrency?: number;
 }
 
 export interface ChatMessage {
   role: "system" | "user" | "assistant";
-  content: string;
+  /** ToonDao always sends a string; the Messages API route may send blocks (text, image, document). */
+  content: string | InputBlock[];
 }
+
+/**
+ * A content block Claude Code takes on stdin as it is. Images and documents go
+ * through untouched (stream-json input is the one way to send them, P-23);
+ * the Messages API route has already checked their shape.
+ */
+export type InputBlock =
+  | { type: "text"; text: string }
+  | { type: "image"; source: Record<string, unknown> }
+  | { type: "document"; source: Record<string, unknown>; title?: string; context?: string };
 
 /* ------------------------------------------------------------------ */
 /* Request checks                                                      */
@@ -138,15 +157,25 @@ export function guardRequest(
   return { ok: true };
 }
 
+/**
+ * CORS for an allowed origin only. A preflight's requested headers are allowed
+ * back as asked: a browser shell using an Anthropic SDK sends `x-api-key`,
+ * `anthropic-version` and a handful of `x-stainless-*` headers, and naming them
+ * all here would break with the next SDK. Headers the Messages API answers with
+ * are exposed, so such a shell can read them.
+ */
 export function corsHeaders(
   origin: string | undefined,
   allowed: readonly string[],
+  requestedHeaders?: string,
 ): Record<string, string> {
+  const asked = requestedHeaders && /^[\w-]+(\s*,\s*[\w-]+)*$/.test(requestedHeaders.trim()) ? requestedHeaders.trim() : null;
   return origin && allowed.includes(origin)
     ? {
         "Access-Control-Allow-Origin": origin,
         "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-        "Access-Control-Allow-Headers": "content-type",
+        "Access-Control-Allow-Headers": asked ?? "content-type",
+        "Access-Control-Expose-Headers": "request-id, toondao-ignored-params, retry-after, x-should-retry",
         Vary: "Origin",
       }
     : {};
@@ -187,20 +216,17 @@ const TRANSCRIPT_PREAMBLE =
 export function toStreamInput(messages: readonly ChatMessage[]): { system: string; line: string } {
   const system = messages
     .filter((m) => m.role === "system")
-    .map((m) => m.content.trim())
+    .map((m) => textOf(m.content).trim())
     .filter(Boolean)
     .join("\n\n");
   const turns = messages.filter((m) => m.role !== "system");
 
-  const blocks =
+  const blocks: InputBlock[] =
     turns.length === 1 && turns[0].role === "user"
-      ? [{ type: "text", text: turns[0].content }]
+      ? turnBlocks(turns[0], null)
       : [
           { type: "text", text: TRANSCRIPT_PREAMBLE },
-          ...turns.map((m) => ({
-            type: "text",
-            text: `${m.role === "user" ? "User" : "Assistant"}:\n${m.content}`,
-          })),
+          ...turns.flatMap((m) => turnBlocks(m, m.role === "user" ? "User" : "Assistant")),
         ];
 
   const line = JSON.stringify({
@@ -209,6 +235,45 @@ export function toStreamInput(messages: readonly ChatMessage[]): { system: strin
     message: { role: "user", content: blocks },
   });
   return { system: system || NEUTRAL_SYSTEM_PROMPT, line };
+}
+
+/**
+ * One turn as blocks. Its text is joined into one block — opening with the
+ * speaker when the turn is part of a transcript — and images and documents keep
+ * their place around it, so a text-only turn is exactly one block, as it always
+ * was, and the cache still matches on it.
+ */
+function turnBlocks(m: ChatMessage, speaker: "User" | "Assistant" | null): InputBlock[] {
+  const parts: InputBlock[] = typeof m.content === "string" ? [{ type: "text", text: m.content }] : m.content;
+  const out: InputBlock[] = [];
+  let labelled = speaker === null;
+  let texts: string[] = [];
+  const flush = () => {
+    if (!texts.length) return;
+    out.push({ type: "text", text: `${labelled ? "" : `${speaker}:\n`}${texts.join("\n\n")}` });
+    labelled = true;
+    texts = [];
+  };
+  for (const part of parts) {
+    if (part.type === "text") {
+      texts.push(part.text);
+      continue;
+    }
+    flush();
+    // An image that opens a turn still needs the turn's speaker before it.
+    if (!labelled) out.push({ type: "text", text: `${speaker}:` });
+    labelled = true;
+    out.push(part);
+  }
+  flush();
+  if (!labelled) out.push({ type: "text", text: `${speaker}:\n` });
+  return out;
+}
+
+function textOf(content: ChatMessage["content"]): string {
+  return typeof content === "string"
+    ? content
+    : content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("\n\n");
 }
 
 /* ------------------------------------------------------------------ */
@@ -236,7 +301,18 @@ export function argsFor(args: {
   readDir?: string | null;
   /** Thinking effort; one of `EFFORTS` only, checked again here because it becomes a flag (P-36). */
   effort?: Effort | null;
+  /** The lookup tools to offer when fewer than all of them — the Messages API offers only the ones
+   *  a request declared. Never more than `RESEARCH_TOOLS`: anything else is dropped here. */
+  researchTools?: readonly string[];
+  /** Keep the account's claude.ai connectors out of a research run as well. */
+  noConnectors?: boolean;
+  /** Leave out the person's own Claude Code settings, `~/.claude/CLAUDE.md` among them
+   *  (`--setting-sources project,local`). ToonDao keeps them (P-33); the Messages API does not by default. */
+  withoutUserSettings?: boolean;
+  /** A structured-output schema from `schemaArg()`, checked again here because it becomes an argument. */
+  jsonSchema?: string | null;
 }): string[] {
+  const schema = isSchemaArg(args.jsonSchema) ? args.jsonSchema : null;
   const base = [
     "-p",
     "--input-format", "stream-json",
@@ -247,26 +323,65 @@ export function argsFor(args: {
     "--system-prompt-file", args.systemFile,
     "--model", args.model,
     ...(isEffort(args.effort) ? ["--effort", args.effort] : []),
+    ...(args.withoutUserSettings ? ["--setting-sources", "project,local"] : []),
+    // One argument, `--json-schema={…}`: a JSON object can never be read as a flag.
+    ...(schema ? [`--json-schema=${schema}`] : []),
   ];
+  // A structured answer is a StructuredOutput tool call and its result: two more turns.
+  const maxTurns = (turns: number) => ["--max-turns", String(schema ? turns + 2 : turns)];
+  const lookups = (args.researchTools ?? RESEARCH_TOOLS).filter((t) => RESEARCH_TOOLS.includes(t));
   if (args.readDir) {
     const research = args.toolScope === "research";
     return [
       ...base,
-      "--tools", [...PROJECT_TOOLS, ...(research ? RESEARCH_TOOLS : [])].join(","),
-      ...(research ? ["--allowedTools", ...args.allowedTools] : ["--strict-mcp-config"]),
+      "--tools", [...PROJECT_TOOLS, ...(research ? lookups : [])].join(","),
+      ...(research ? ["--allowedTools", ...args.allowedTools] : []),
+      ...(!research || args.noConnectors ? ["--strict-mcp-config"] : []),
       "--permission-mode", "dontAsk",
-      "--max-turns", "12",
+      ...maxTurns(12),
     ];
   }
   if (args.toolScope === "research") {
     return [
       ...base,
-      "--tools", RESEARCH_TOOLS.join(","),
+      "--tools", lookups.join(","),
       "--allowedTools", ...args.allowedTools,
-      "--max-turns", "6",
+      ...(args.noConnectors ? ["--strict-mcp-config"] : []),
+      ...maxTurns(6),
     ];
   }
-  return [...base, "--tools", "", "--strict-mcp-config", "--max-turns", "1"];
+  return [...base, "--tools", "", "--strict-mcp-config", ...maxTurns(1)];
+}
+
+const MAX_SCHEMA_CHARS = 64 * 1024;
+
+/**
+ * A structured-output schema as the one argument `--json-schema` takes (Claude
+ * Code accepts it inline only, not as a file): the request's value parsed into
+ * an object and written out again, so what reaches the command line is JSON this
+ * code produced, and always opens with `{`. Null when it is not a JSON object,
+ * or is too large to pass as an argument.
+ */
+export function schemaArg(schema: unknown): string | null {
+  if (!schema || typeof schema !== "object" || Array.isArray(schema)) return null;
+  let text: string;
+  try {
+    text = JSON.stringify(schema);
+  } catch {
+    return null;
+  }
+  return isSchemaArg(text) ? text : null;
+}
+
+/** Is this what `schemaArg()` produces? `argsFor()` asks again before it becomes an argument. */
+export function isSchemaArg(value: unknown): value is string {
+  if (typeof value !== "string" || !value.startsWith("{") || value.length > MAX_SCHEMA_CHARS) return false;
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return !!parsed && typeof parsed === "object" && !Array.isArray(parsed) && JSON.stringify(parsed) === value;
+  } catch {
+    return false;
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -437,7 +552,7 @@ export function createSseMapper(opts: { relativeTo?: string | null } = {}) {
 }
 
 /** The reason a run ended badly, in words the reader can act on. */
-function resultError(event: Record<string, unknown>): string {
+export function resultError(event: Record<string, unknown>): string {
   if (event.subtype === "error_max_turns") {
     return "Claude Code stopped after the most tool steps a reply may take here. The answer so far is above.";
   }
@@ -478,11 +593,16 @@ export const RUN_DIR = join(tmpdir(), "toondao-bridge");
  * and token, its effort level. A run that inherited them would attach to the
  * host and put per-session details into the prompt, so they are dropped and
  * the run starts as it would from a terminal. Started from a terminal, the
- * environment passes through untouched.
+ * environment passes through untouched — except the bridge's own API key
+ * (`TOONDAO_API_KEY`), which is the bridge's to check and never Claude Code's.
  */
 export function runEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  if (!env.CLAUDECODE) return env;
-  return Object.fromEntries(Object.entries(env).filter(([name]) => !name.startsWith("CLAUDE")));
+  if (!env.CLAUDECODE && env.TOONDAO_API_KEY === undefined) return env;
+  return Object.fromEntries(
+    Object.entries(env).filter(
+      ([name]) => name !== "TOONDAO_API_KEY" && !(env.CLAUDECODE && name.startsWith("CLAUDE")),
+    ),
+  );
 }
 
 /**
@@ -501,6 +621,13 @@ export async function* runClaude(args: {
   allowedTools: readonly string[];
   readDir?: string | null;
   effort?: Effort | null;
+  /** The Messages API's options for the command line; see `argsFor()`. */
+  researchTools?: readonly string[];
+  noConnectors?: boolean;
+  withoutUserSettings?: boolean;
+  jsonSchema?: string | null;
+  /** A request's `max_tokens`, for this run only (`CLAUDE_CODE_MAX_OUTPUT_TOKENS`). */
+  maxOutputTokens?: number | null;
   signal: AbortSignal;
 }): AsyncGenerator<Record<string, unknown>> {
   await mkdir(RUN_DIR, { recursive: true });
@@ -508,6 +635,8 @@ export async function* runClaude(args: {
   const systemFile = join(dir, "system-prompt.txt");
   await writeFile(systemFile, args.system, "utf8");
 
+  const env = runEnv(process.env);
+  const maxOutput = args.maxOutputTokens;
   const child = spawn(
     args.bin,
     argsFor({
@@ -517,8 +646,19 @@ export async function* runClaude(args: {
       allowedTools: args.allowedTools,
       readDir: args.readDir ?? null,
       effort: args.effort ?? null,
+      ...(args.researchTools ? { researchTools: args.researchTools } : {}),
+      noConnectors: args.noConnectors === true,
+      withoutUserSettings: args.withoutUserSettings === true,
+      jsonSchema: args.jsonSchema ?? null,
     }),
-    { cwd: args.readDir ?? RUN_DIR, stdio: ["pipe", "pipe", "pipe"], env: runEnv(process.env) },
+    {
+      cwd: args.readDir ?? RUN_DIR,
+      stdio: ["pipe", "pipe", "pipe"],
+      env:
+        typeof maxOutput === "number" && Number.isInteger(maxOutput) && maxOutput > 0
+          ? { ...env, CLAUDE_CODE_MAX_OUTPUT_TOKENS: String(maxOutput) }
+          : env,
+    },
   );
 
   let stderr = "";
@@ -658,7 +798,7 @@ export function startBridge(opts: BridgeOptions): Server {
 
 async function route(req: IncomingMessage, res: ServerResponse, opts: BridgeOptions): Promise<void> {
   const origin = header(req, "origin");
-  const cors = corsHeaders(origin, opts.allowedOrigins);
+  const cors = corsHeaders(origin, opts.allowedOrigins, header(req, "access-control-request-headers"));
   const guard = guardRequest(
     {
       method: req.method ?? "GET",
@@ -669,9 +809,19 @@ async function route(req: IncomingMessage, res: ServerResponse, opts: BridgeOpti
     opts.allowedOrigins,
     opts.port,
   );
-  if (!guard.ok) return json(res, guard.status, { error: { message: guard.message } }, cors);
-
   const path = (req.url ?? "/").split("?")[0];
+  if (!guard.ok) {
+    // Each front door answers in its own protocol's shape: the Messages API's error envelope there.
+    return isMessagesApiPath(path)
+      ? json(
+          res,
+          guard.status,
+          { type: "error", error: { type: guard.status === 415 ? "invalid_request_error" : "permission_error", message: guard.message } },
+          cors,
+        )
+      : json(res, guard.status, { error: { message: guard.message } }, cors);
+  }
+
   if (req.method === "OPTIONS") {
     res.writeHead(204, cors);
     res.end();
@@ -686,7 +836,17 @@ async function route(req: IncomingMessage, res: ServerResponse, opts: BridgeOpti
   if (path === "/v1/projects" || path.startsWith("/v1/projects/")) {
     return projects(req, res, path, opts, cors);
   }
+  if (isMessagesApiPath(path)) {
+    // Loaded on first use: messages-api.ts builds on this file, so a static import would be a cycle.
+    const { messagesRoute } = await import("./messages-api.ts");
+    return messagesRoute(req, res, path, { opts, cors });
+  }
   return json(res, 404, { error: { message: `No route for ${req.method} ${path}.` } }, cors);
+}
+
+/** The paths that speak the Anthropic Messages API (bridge/messages-api.ts) rather than ToonDao's protocol. */
+export function isMessagesApiPath(path: string): boolean {
+  return path === "/v1/messages" || path.startsWith("/v1/messages/") || path === "/v1/models" || path.startsWith("/v1/models/");
 }
 
 /** Only one folder dialog at a time: a second click would stack another on top. */
@@ -849,7 +1009,7 @@ async function chat(
 }
 
 /** One line per request: numbers only, never content. */
-function logRun(run: RunSummary & { model: string; toolScope: string; ms: number; aborted: boolean }) {
+export function logRun(run: RunSummary & { model: string; toolScope: string; ms: number; aborted: boolean }) {
   const u = run.usage;
   const window = run.rateLimit?.utilization;
   const parts = [
@@ -878,23 +1038,31 @@ function parseMessages(value: unknown): ChatMessage[] | null {
   return out;
 }
 
-async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
+/** A request's body, refused past `MAX_BODY_BYTES` (thrown as `BodyTooLarge`). */
+export async function readBody(req: IncomingMessage): Promise<string> {
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const chunk of req) {
     size += (chunk as Buffer).length;
-    if (size > MAX_BODY_BYTES) throw new BridgeError("Request body is too large.");
+    if (size > MAX_BODY_BYTES) throw new BodyTooLarge("Request body is too large.");
     chunks.push(chunk as Buffer);
   }
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+export class BodyTooLarge extends BridgeError {}
+
+async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
+  const text = await readBody(req);
   try {
-    const parsed = JSON.parse(Buffer.concat(chunks).toString("utf8")) as unknown;
+    const parsed = JSON.parse(text) as unknown;
     return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
   } catch {
     return {};
   }
 }
 
-function header(req: IncomingMessage, name: string): string | undefined {
+export function header(req: IncomingMessage, name: string): string | undefined {
   const value = req.headers[name];
   return Array.isArray(value) ? value[0] : value;
 }
@@ -919,7 +1087,10 @@ export async function main(): Promise<void> {
       ? env.TOONDAO_ALLOWED_TOOLS.split(",").map((s) => s.trim()).filter(Boolean)
       : DEFAULT_ALLOWED_TOOLS,
     claudeBin: env.CLAUDE_BIN ?? "claude",
+    apiConcurrency: Math.max(1, Number(env.TOONDAO_API_CONCURRENCY) || DEFAULT_API_CONCURRENCY),
   };
+  const apiKey = await loadApiKey();
+  opts.apiKey = apiKey.key;
 
   const status = await claudeStatus(opts.claudeBin);
   const server = startBridge(opts);
@@ -943,5 +1114,8 @@ export async function main(): Promise<void> {
       );
     }
     console.log(`[bridge] In ToonDao: Settings → Provider → "Claude Code (local bridge)".`);
+    const where =
+      apiKey.source === "env" ? "TOONDAO_API_KEY" : `${API_KEY_FILE}${apiKey.source === "created" ? " (new)" : ""}`;
+    console.log(`[bridge] Other shells: Messages API at http://127.0.0.1:${opts.port}/v1/messages, key in ${where}. See docs/bridge-api.md.`);
   });
 }
