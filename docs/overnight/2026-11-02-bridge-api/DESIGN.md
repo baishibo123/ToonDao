@@ -123,4 +123,14 @@ a final assistant turn (prefill), `mcp_servers`.
 
 ## Changes during the night
 
-(none yet)
+- `schemaArg()` / `isSchemaArg()` moved to `claude-code.ts`, beside `argsFor()`:
+  every rule about what reaches the command line stays in one file.
+- `route()` loads `messages-api.ts` with a dynamic import: the module builds on
+  `claude-code.ts`, so a static import would be a cycle.
+- A guard failure (Host, Origin, content type) on an API path now answers in the
+  API's error envelope; ToonDao's paths keep theirs.
+- `finish()` emits all closing events — including the structured-output text
+  block — once the process has ended, so a run the bridge cut short still reports
+  the cut call's usage (Claude Code sends `message_delta` after SIGINT).
+- `readBody()` split out of `readJson()`, so the API route can answer bad JSON
+  with a 400 instead of reading it as an empty object.

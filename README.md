@@ -94,6 +94,25 @@ you have them — and the inspector says so on every reply that came through it.
 `docs/decisions.md`: Anthropic's terms restrict third-party apps that let people
 use their Claude subscriptions, and distributing this needs Anthropic's approval.
 
+### Use the bridge from other chat shells
+
+The bridge also speaks the Anthropic Messages API, so your other chat shells —
+anything built on an Anthropic SDK, curl, a script — can run on the same
+subscription. Point the client at `http://127.0.0.1:8788` with the key from
+`~/.toondao/api-key` (created on the bridge's first start):
+
+```bash
+curl http://127.0.0.1:8788/v1/messages \
+  -H "content-type: application/json" -H "x-api-key: $(cat ~/.toondao/api-key)" \
+  -d '{"model": "opus", "max_tokens": 4096, "messages": [{"role": "user", "content": "Hello"}]}'
+```
+
+`npm run chat` is such a shell, in the terminal. What the bridge honours —
+streaming, images and PDFs, effort, stop sequences, structured output, web
+lookups, reading a project snapshot — what it ignores, and what it refuses is in
+[`docs/bridge-api.md`](docs/bridge-api.md). It is for your own shells on your own
+machine; the same P-26 caution applies.
+
 ### Learn from a project (in progress)
 
 ToonDao can start a study conversation from a project you built with Claude Code:
@@ -140,6 +159,9 @@ against real DOM ranges in `test/anchor.dom.test.tsx`.
 | `src/lib/transfer.ts` | Export and import, with full fidelity. |
 | `src/providers/` | OpenAI-compatible, Anthropic and Claude Code adapters behind one interface. |
 | `bridge/claude-code.ts` | The local bridge that runs your own Claude Code as a provider. |
+| `bridge/messages-api.ts` | The bridge's Messages API, for chat shells other than ToonDao (`docs/bridge-api.md`). |
+| `bridge/api-key.ts` | The bridge's own key, which the Messages API asks for. |
+| `examples/terminal-chat.mjs` | A terminal chat shell over the Messages API, with no dependencies. |
 | `src/lib/bridgeProtocol.ts` | The wire contract between the app and the bridge, shared by both ends. |
 | `src/lib/toolScope.ts` | The only place that decides whether a message may use outside sources. |
 | `bridge/harvest.ts` | What a project already holds about how it was built, gathered for the model to read first. |

@@ -6,9 +6,10 @@ code does now lives in the code.
 
 **Accepted** decisions are on `main`. **Proposed** decisions arrive with
 `feature/reading-first` (which includes `feature/branch-windows`), from P-22
-on with `feature/claude-code-bridge`, P-27 with `feature/aside-promise`, and
-from P-28 on with `feature/learn-from-project`; they are claimed intent until
-checked against the code and merged.
+on with `feature/claude-code-bridge`, P-27 with `feature/aside-promise`,
+from P-28 on with `feature/learn-from-project`, and from P-39 on with
+`overnight/2026-11-02-bridge-api`; they are claimed intent until checked against
+the code and merged.
 
 ---
 
@@ -479,3 +480,55 @@ layout stay as they are. Considered: CSS `zoom` on the page, which scales
 everything at once but moves the coordinates the selection toolbar and
 popovers are placed by; and a slider, which the person did not ask for —
 a few steps are quicker to pick and to tell apart.
+
+### The bridge as an API
+
+**P-39 · The bridge also speaks the Anthropic Messages API, for the person's
+other chat shells.** `POST /v1/messages` takes the API's request and answers with
+its Message object, SSE event sequence and error envelope, so a shell built on an
+official SDK works by changing its base URL and key (`docs/bridge-api.md`); a
+zero-dependency terminal shell, `examples/terminal-chat.mjs`, is the reference
+client. Claude Code's raw stream events already are the API's events, so the
+bridge translates only the seam: the several model calls of Claude Code's tool
+loop are shown as one message. Considered: publishing ToonDao's own route as the
+protocol — it already serves OpenAI-shaped shells, but carries text only, one
+string per message, and ToonDao's own extension; and a protocol of our own, which
+every client would need an adapter for. The model is Claude, and the shape a
+shell for Claude already speaks is its API. ToonDao's route is unchanged. For the
+person's own shells on their own machine: P-26 applies unchanged, and more
+sharply, since an API-shaped endpoint makes a subscription usable by any app that
+takes a base URL.
+
+**P-40 · A Messages API field is honoured, ignored in the open, or refused —
+never faked.** Honoured: model, system, messages (text, images, documents),
+stream, max_tokens, stop_sequences, output_config's effort and json_schema, and
+the web_search and web_fetch server tools, which become Claude Code's own
+lookups with no connectors. Ignored, and named back in a
+`toondao-ignored-params` header: fields that cannot change what a correct answer
+looks like — sampling settings, metadata, cache_control, a tool's max_uses.
+Refused with a 400: what the run would silently fail to deliver — client tools (a
+stateless `claude -p` run is not a loop in which the client runs them), forced
+tool use and prefill (which current models refuse too). Two of the honoured
+fields are kept by ending the run: at a `max_tokens` stop Claude Code asks the
+model to resume, three times, and then fails (measured), so the bridge stops at
+the first one and answers as the API would; a stop sequence is watched in the
+streamed text. A schema becomes one `--json-schema=` argument, re-serialised by
+the bridge, because Claude Code takes it inline only (a file path was refused).
+Considered: ignoring everything unknown silently, as compatibility layers often
+do — a shell would get an answer that quietly skipped its stop sequence or its
+tool; and refusing everything not honoured, which would break SDK defaults like
+`temperature` that change nothing about a correct answer.
+
+**P-41 · The Messages API asks for the bridge's own key, and leaves the person's
+own Claude Code settings out unless asked.** 127.0.0.1 is reachable by every
+account on the machine, and a shell sends a key anyway, so `/v1/messages`
+answers only with the key in `~/.toondao/api-key` (created owner-only on the
+first start) or `TOONDAO_API_KEY`; it is not a Claude credential and never
+reaches Claude Code. ToonDao's own route has none yet; the pairing code planned
+for the bridge's security pass is where it gets one. API runs use
+`--setting-sources project,local`: a shell expects its system prompt and
+nothing else. Measured: asked which language its instructions name, a run
+answered "NONE" with 615 tokens of context, and "Chinese" with 1,323 when the
+person's `~/.claude/CLAUDE.md` came along. `toondao.user_instructions: true`
+brings P-33's behaviour back. Considered: P-33 for both doors — one behaviour,
+but every shell would carry instructions written for Claude Code.

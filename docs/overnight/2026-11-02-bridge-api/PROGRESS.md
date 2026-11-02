@@ -22,3 +22,5 @@ Main checkout was clean when the branch was made.
 - 00:13 · `toondao.user_instructions` · "which language do your instructions name?" → default "NONE" (615 tokens in), on → "Chinese" (1,323) · —
 - 00:14 · `toondao.project` on a synthetic one-file project snapshotted into a throwaway projects home, bridge started in-process · "secret word" → "PELICAN" via Glob + Read; unknown snapshot → 400 · —
 - 00:16 · `examples/terminal-chat.mjs` (`npm run chat`), a zero-dependency shell · scripted session → multi-turn memory ("teal"), `/web on` lookup shown and answered, `/effort low` reaches the CLI (bridge log `effort=low`), a flag-shaped model name → 400 shown, not sent · see next commit
+- 00:16 · prompt caching through the route, the doc's claim checked before writing it · 3-turn conversation, 4.5k-token system prompt → Haiku 5.5 turn 2 read 3,999, turn 3 read 4,258 / wrote 391; Sonnet 5.5 the same (P-36 said Sonnet 5 read nothing — Q13) · —
+- 00:18 · integration doc `docs/bridge-api.md`; README section; CLAUDE.md invariants for the API; decisions P-39–P-41 · `npx vitest run` → 339 passed; tsc clean · see next commit

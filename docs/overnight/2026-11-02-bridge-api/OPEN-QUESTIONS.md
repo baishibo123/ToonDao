@@ -93,6 +93,21 @@ cost, highest first.
   points Claude Code at the host's gateway. Tonight's live tests start the bridge
   with a clean environment instead.
 
+### Q13 (FUTURE): P-36's Sonnet note may be out of date
+- P-36 records that Sonnet 5 never read the prompt cache back through the bridge.
+  Tonight, through the Messages API route (Claude Code 2.1.312, user settings
+  off), Sonnet 5.5 read 3,999 and then 4,258 tokens back on turns 2 and 3 —
+  exactly as Haiku 5.5 did. Re-measure on ToonDao's own route (user settings on)
+  before amending P-36: the difference may be the model, the CLI version, or the
+  settings.
+
+### Q14 (FUTURE): a file read in a symlinked snapshot shows its full path
+- `summarizeToolInput()` strips the snapshot's `read/` prefix as the registry
+  spells it; Claude Code reports the resolved path. Under a symlinked folder
+  (macOS's `/var` → `/private/var`, met only by tests in a temp dir) the prefix
+  does not match and the full path is shown. `~/.toondao` is not symlinked, so
+  real snapshots are unaffected; comparing against `realpath()` would cover both doors.
+
 ### Q12 (FUTURE): finer web-tool options
 - `web_fetch.allowed_domains` could become `--allowedTools "WebFetch(domain:…)"`;
   `max_uses` has no CLI counterpart. Ignored and named back for now.

@@ -74,20 +74,26 @@ Rules that hold for the life of the project. Why each one exists is in
 
 - **The bridge never handles a credential.** It starts the user's own unmodified
   `claude` and relays its output; it never reads, stores or forwards an OAuth
-  token or key.
+  token or key. Its own API key (`bridge/api-key.ts`) is not a Claude credential:
+  only the Messages API route checks it, and `runEnv()` keeps it from Claude Code.
 - **Nothing a request carries becomes a command-line flag.** Model names must pass
-  `isSafeModel()`, a thinking effort `isEffort()`; the system prompt goes through a file and the conversation
-  through stdin, never through argv.
+  `isSafeModel()`, a thinking effort `isEffort()`, and a structured-output schema
+  is re-serialised by `schemaArg()` and passed as one `--json-schema=` argument
+  only if `isSchemaArg()` agrees (Claude Code takes no schema file); the system
+  prompt goes through a file and the conversation through stdin, never through argv.
 - **`toolScopeFor()` in `src/lib/toolScope.ts` is the only place a tool scope is
   decided** — the web, and which project snapshot may be read — from the
   question's node, never from a policy alone: inside an aside the move that
   opened it decides every turn (`contextStart()`). The bridge may narrow the
   scope, never widen it, and never adds a tool that runs commands or writes
-  files.
+  files. On the Messages API route a request's declared web server tools decide
+  it instead (`parseMessagesRequest()`): exactly those lookups, no connectors,
+  never more than ToonDao's research scope (`argsFor()` drops anything else).
 - **`src/lib/bridgeProtocol.ts` has no imports.** Node runs it directly from the
   bridge, where the app's `@/` alias does not exist; both ends encode and decode
   through it.
-- **The bridge listens on 127.0.0.1 and answers only the app's origins.**
+- **The bridge listens on 127.0.0.1 and answers only the app's origins** — and,
+  on the Messages API route, only a request carrying its key.
 - **A request never names a folder.** A new project's folder comes from the
   system dialog the person clicks through (`chooseFolder()`); a registered one is
   looked up by its slug. The project routes answer with summaries, never with
@@ -102,6 +108,26 @@ Rules that hold for the life of the project. Why each one exists is in
   (`argsFor()` with `readDir`), so nothing outside it can be read. The folder
   comes from `snapshotReadDir()`, which looks the request's slug and snapshot id
   up in the registry. Transcripts never go in `read/`.
+
+## The Messages API (other chat shells)
+
+- **`/v1/messages` speaks the Anthropic API's own shapes** — request fields,
+  Message object, SSE events, error envelope — so an SDK client works by changing
+  its base URL and key. Anything only the bridge can do travels in one
+  namespaced place: the `toondao` request field, the `toondao` response field,
+  `toondao.*` events. Never add an un-namespaced field or event.
+- **Every request field is honoured, ignored and named back, or refused — never
+  faked.** `parseMessagesRequest()` is the only place a field's class is decided;
+  an ignored field is listed in `toondao-ignored-params`, a refused one is a 400.
+  Faking a capability the run cannot deliver (a client tool, forced tool use,
+  prefill) is the one thing this route must not do.
+- **A reply is one message, however many model calls Claude Code made.**
+  `createMessagesTranslator()` renumbers blocks across the calls, hides tool
+  calls (reported as `toondao.tool`, counted in `usage.server_tool_use`) and sums
+  usage; `max_tokens` and `stop_sequences` end the run where the API would stop.
+- **An API run leaves out the person's own Claude Code settings** unless the
+  request sets `toondao.user_instructions` (`withoutUserSettings`), so a shell
+  gets its own system prompt and nothing else. ToonDao's route keeps P-33.
 
 ## Learning from a project
 
