@@ -5,12 +5,12 @@ Main checkout was clean when the branch was made.
 
 ## Requirements
 
-- [ ] A protocol that chat shells other than ToonDao can use to reach the Claude Code framework (brief: "给一份协议…别的形式的对话壳也能用到")
-- [ ] Parameters aligned with the API wherever the CLI can honour them (brief: "能和 API 对齐的参数对齐")
-- [ ] What cannot be controlled is skipped — ignored in the open or refused, never silently faked (brief: "没法控制的就直接跳过")
-- [ ] An integration doc (brief: "给一份对接文档")
-- [ ] A working product, proven with a client that is not ToonDao (brief: "做这么一个产品出来")
-- [ ] ToonDao's own route keeps working (`npm test`, type-check)
+- [x] A protocol that chat shells other than ToonDao can use to reach the Claude Code framework (brief: "给一份协议…别的形式的对话壳也能用到")
+- [x] Parameters aligned with the API wherever the CLI can honour them (brief: "能和 API 对齐的参数对齐")
+- [x] What cannot be controlled is skipped — ignored in the open or refused, never silently faked (brief: "没法控制的就直接跳过")
+- [x] An integration doc (brief: "给一份对接文档")
+- [x] A working product, proven with a client that is not ToonDao (brief: "做这么一个产品出来")
+- [x] ToonDao's own route keeps working (`npm test`, type-check)
 
 ## Log
 
