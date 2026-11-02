@@ -513,7 +513,8 @@ fields are kept by ending the run: at a `max_tokens` stop Claude Code asks the
 model to resume, three times, and then fails (measured), so the bridge stops at
 the first one and answers as the API would; a stop sequence is watched in the
 streamed text. A schema becomes one `--json-schema=` argument, re-serialised by
-the bridge, because Claude Code takes it inline only (a file path was refused).
+the bridge, because Claude Code takes it inline only (a file path was refused);
+the person kept this exception on 2026-11-02.
 Considered: ignoring everything unknown silently, as compatibility layers often
 do — a shell would get an answer that quietly skipped its stop sequence or its
 tool; and refusing everything not honoured, which would break SDK defaults like

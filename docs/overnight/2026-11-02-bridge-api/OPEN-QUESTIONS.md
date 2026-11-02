@@ -30,7 +30,8 @@ cost, highest first.
   instructions everywhere — visible on the first reply.
 - Revert cost: one default in `parseMessagesRequest()`.
 
-### Q3: A structured-output schema reaches the command line
+### Q3: A structured-output schema reaches the command line — decided
+- Decided by the user (2026-11-02): keep the exception.
 - Chose for now: `output_config.format` (`json_schema`) is honoured. Claude Code's
   `--json-schema` takes only inline JSON (a file path was refused: "not valid
   JSON"), so the schema is parsed, re-serialised by `schemaArg()`, capped at
