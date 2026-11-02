@@ -15,7 +15,8 @@ cost, highest first.
   use P-26 describes — surfaces in the usage window, or in an account notice.
 - Revert cost: policy, not code; the concurrency cap (Q7) limits the first risk.
 
-### Q2: Do API runs carry the person's own Claude Code customizations (`~/.claude/CLAUDE.md`)?
+### Q2: Do API runs carry the person's own Claude Code customizations (`~/.claude/CLAUDE.md`)? — decided
+- Decided by the user (2026-11-02): keep it off by default.
 - Chose for now: no by default — API runs use `--safe-mode` (CLAUDE.md, hooks,
   skills, plugins, MCP servers off; permission rules on), so a shell gets the
   API's behaviour; `toondao.user_instructions: true` turns them back on. ToonDao's

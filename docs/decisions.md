@@ -538,4 +538,5 @@ observed: this machine's settings have none. `toondao.user_instructions: true`
 brings P-33's behaviour back. Considered: P-33 for both doors — one behaviour,
 but every shell would carry instructions written for Claude Code; and
 `--setting-sources project,local` (the first version), which leaves the user's
-settings file out entirely, deny rules with it.
+settings file out entirely, deny rules with it. The person kept the default
+(off) on 2026-11-02.
