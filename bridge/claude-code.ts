@@ -23,7 +23,7 @@
  */
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { spawn } from "node:child_process";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
@@ -839,6 +839,9 @@ async function route(req: IncomingMessage, res: ServerResponse, opts: BridgeOpti
   if (req.method === "GET" && (path === "/health" || path === "/v1/health")) {
     return json(res, 200, await claudeStatus(opts.claudeBin), cors);
   }
+  if (req.method === "GET" && (path === "/docs" || path === "/v1/docs")) {
+    return docs(res, cors);
+  }
   if (req.method === "POST" && path === "/v1/chat/completions") {
     return chat(req, res, opts, cors);
   }
@@ -851,6 +854,24 @@ async function route(req: IncomingMessage, res: ServerResponse, opts: BridgeOpti
     return messagesRoute(req, res, path, { opts, cors });
   }
   return json(res, 404, { error: { message: `No route for ${req.method} ${path}.` } }, cors);
+}
+
+/**
+ * The Messages API's document (docs/bridge-api.md), read from disk on every
+ * request, so a service integrating with this bridge reads the version it is
+ * calling, from the one address it already knows.
+ */
+export const API_DOC = new URL("../docs/bridge-api.md", import.meta.url);
+
+async function docs(res: ServerResponse, cors: Record<string, string>): Promise<void> {
+  let text: string;
+  try {
+    text = await readFile(API_DOC, "utf8");
+  } catch {
+    return json(res, 404, { error: { message: "The API document is missing beside the bridge (docs/bridge-api.md)." } }, cors);
+  }
+  res.writeHead(200, { ...cors, "Content-Type": "text/markdown; charset=utf-8" });
+  res.end(text);
 }
 
 /** The paths that speak the Anthropic Messages API (bridge/messages-api.ts) rather than ToonDao's protocol. */
@@ -1125,6 +1146,7 @@ export async function main(): Promise<void> {
     console.log(`[bridge] In ToonDao: Settings → Provider → "Claude Code (local bridge)".`);
     const where =
       apiKey.source === "env" ? "TOONDAO_API_KEY" : `${API_KEY_FILE}${apiKey.source === "created" ? " (new)" : ""}`;
-    console.log(`[bridge] Other shells: Messages API at http://127.0.0.1:${opts.port}/v1/messages, key in ${where}. See docs/bridge-api.md.`);
+    console.log(`[bridge] Other services: Messages API at http://127.0.0.1:${opts.port}/v1/messages, key in ${where}.`);
+    console.log(`[bridge] How to call it: http://127.0.0.1:${opts.port}/docs`);
   });
 }

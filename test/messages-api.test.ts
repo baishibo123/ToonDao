@@ -8,6 +8,7 @@
 import { chmod, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { existsSync, readFileSync } from "node:fs";
 import { validateHeaderValue, type IncomingMessage, type ServerResponse } from "node:http";
+import { createServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -23,6 +24,7 @@ import {
   type ApiRequest,
 } from "../bridge/messages-api.ts";
 import {
+  API_DOC,
   DEFAULT_ALLOWED_TOOLS,
   DEFAULT_ORIGINS,
   argsFor,
@@ -32,6 +34,7 @@ import {
   runClaude,
   runEnv,
   schemaArg,
+  startBridge,
   toStreamInput,
   type BridgeOptions,
 } from "../bridge/claude-code.ts";
@@ -864,6 +867,27 @@ describe("the route", () => {
     release();
     await done;
     expect(claude.ran()).toBe(false);
+  });
+});
+
+describe("the document, from the bridge itself", () => {
+  it("serves docs/bridge-api.md at /docs, without a key, as the running code has it", async () => {
+    const port = await new Promise<number>((resolve) => {
+      const probe = createServer().listen(0, "127.0.0.1", () => {
+        const { port } = probe.address() as AddressInfo;
+        probe.close(() => resolve(port));
+      });
+    });
+    const server = startBridge({ port, allowedOrigins: DEFAULT_ORIGINS, allowedTools: [], claudeBin: "/nonexistent", apiKey: "tdk-test" });
+    await new Promise((resolve) => server.once("listening", resolve));
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/docs`);
+      expect(res.status).toBe(200);
+      expect(res.headers.get("content-type")).toMatch(/^text\/markdown/);
+      expect(await res.text()).toBe(readFileSync(API_DOC, "utf8"));
+    } finally {
+      server.close();
+    }
   });
 });
 

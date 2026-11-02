@@ -98,6 +98,9 @@ if (!health) {
 }
 check("Claude Code is installed and signed in", health.installed && health.loggedIn, `${health.version ?? "not found"}`);
 
+const doc = await fetch(`${BASE}/docs`);
+check("the bridge serves its document at /docs", doc.ok && (await doc.text()).startsWith("# ToonDao Bridge API"));
+
 const anonymous = await post(ask("hi"), "");
 check("a request without the key is refused", anonymous.status === 401, `${anonymous.status}`);
 
