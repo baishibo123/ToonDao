@@ -193,9 +193,10 @@ One namespaced field for what only the bridge can do:
   the snapshot and nowhere else). `GET /v1/projects` lists them; add one from
   ToonDao's Settings → Projects, or with `npm run harvest -- "<folder>" --snapshot`.
 - `user_instructions` — `false` by default: a run gets your `system` prompt and
-  nothing of yours besides. `true` brings your own Claude Code settings along,
-  including `~/.claude/CLAUDE.md` — your standing instructions, as ToonDao uses
-  them.
+  nothing of yours besides. It runs in Claude Code's safe mode — your
+  `~/.claude/CLAUDE.md`, hooks, skills, plugins and MCP servers off — while your
+  permission rules still apply. `true` runs it with all of them, the way ToonDao
+  does: your standing instructions come along.
 
 With the SDKs, pass it as an extra body field: in Python `extra_body={"toondao": {...}}`;
 in TypeScript add it to the params object (cast the object, since the SDK's
@@ -241,9 +242,11 @@ types do not know it).
   `server_tool_use` counts the lookups.
 - `toondao` is the extension: `tools` lists each lookup or file read
   (`{"name": "WebSearch", "query": "…"}`), `rate_limit` is your subscription's
-  usage window as Claude Code last reported it, `ignored` is the ignored fields,
-  and `notices` says when Claude Code ran out of tool steps and the answer may be
-  incomplete.
+  usage window as Claude Code last reported it, `ignored` is the ignored fields
+  (the first 100), and `notices` says when Claude Code ran out of tool steps and
+  the answer may be incomplete, or retried a model call that broke off midway (a
+  non-streaming reply then leaves the broken-off text out; a stream has already
+  sent it).
 
 ### Streaming
 
@@ -270,7 +273,7 @@ stream. A failure after that arrives as an `error` event, as with the API.
 | Header | |
 |---|---|
 | `request-id` | `req_bridge_…`, also in error bodies |
-| `toondao-ignored-params` | The ignored fields, comma-separated (absent when none) |
+| `toondao-ignored-params` | The ignored fields, comma-separated (absent when none): at most 32, a name that is not plain ASCII percent-encoded |
 | `retry-after`, `x-should-retry` | On a 429 or 529; the SDKs read both |
 
 ## Errors
@@ -350,3 +353,6 @@ page, so keep such a page to yourself.
   system prompt goes through a file, the conversation through stdin.
 - Each run starts in the same empty folder, so no project's files or settings
   are in reach, and no session is saved to your Claude Code history.
+- Unless a request sets `user_instructions`, a run has your Claude Code
+  customizations off (safe mode) and your permission rules on: a deny rule in
+  your `~/.claude/settings.json` holds for API runs too.

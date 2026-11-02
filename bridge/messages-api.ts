@@ -471,7 +471,12 @@ export interface TranslatorState {
   usage: ApiUsage;
   webSearches: number;
   webFetches: number;
+  /** Blocks of a model call that broke off and was retried; a non-streaming reply leaves them out. */
+  interrupted: number[];
 }
+
+const RETRY_NOTICE =
+  "A model call broke off and Claude Code retried it; in a stream, the text before this notice may repeat after it.";
 
 const MAX_TURNS_NOTICE =
   "Claude Code stopped after the most tool steps a reply may take here; the answer may be incomplete.";
@@ -508,6 +513,7 @@ export function createMessagesTranslator(opts: TranslatorOptions) {
     usage: emptyUsage(),
     webSearches: 0,
     webFetches: 0,
+    interrupted: [],
   };
 
   let firstUsage: ApiUsage | null = null;
@@ -522,6 +528,12 @@ export function createMessagesTranslator(opts: TranslatorOptions) {
   const held = new Map<number, string>();
   const seenTools = new Set<string>();
   let finished = false;
+  /** The model call in progress: started, not yet stopped, and the blocks it opened. */
+  let callOpen = false;
+  let callBlocks: number[] = [];
+  /** Messages that arrived as stream events; any other is one Claude Code got whole. */
+  const streamedIds = new Set<string>();
+  const wholeIds = new Set<string>();
 
   const start = (): ApiEvent[] => {
     if (state.started) return [];
@@ -577,10 +589,14 @@ export function createMessagesTranslator(opts: TranslatorOptions) {
     if (!text) return [];
     if (!stops.length) return [delta(index, { type: "text_delta", text })];
     const pending = (held.get(index) ?? "") + text;
-    let hit: { at: number; sequence: string } | null = null;
+    // Generation stops where a sequence is first complete, so the one that ends first wins;
+    // of two ending together, the longer, so nothing of either is sent.
+    let hit: { at: number; end: number; sequence: string } | null = null;
     for (const sequence of stops) {
       const at = pending.indexOf(sequence);
-      if (at !== -1 && (!hit || at < hit.at)) hit = { at, sequence };
+      if (at === -1) continue;
+      const end = at + sequence.length;
+      if (!hit || end < hit.end || (end === hit.end && at < hit.at)) hit = { at, end, sequence };
     }
     if (hit) {
       held.delete(index);
@@ -608,16 +624,21 @@ export function createMessagesTranslator(opts: TranslatorOptions) {
           counting = false;
           return [];
         }
+        // The previous call never stopped: its stream broke and Claude Code is retrying it.
+        const out = callOpen ? breakOff() : [];
+        callOpen = true;
+        callBlocks = [];
         const message = isRecord(inner.message) ? inner.message : {};
+        if (typeof message.id === "string") streamedIds.add(message.id);
         if (typeof message.model === "string" && message.model) state.model = message.model;
         const usage = toApiUsage(message.usage, emptyUsage());
         perCall.push(usage);
-        if (!state.started) {
-          firstUsage = usage;
-          return start();
-        }
-        return [];
+        if (!state.started) firstUsage = usage;
+        return [...start(), ...out];
       }
+      case "message_stop":
+        callOpen = false;
+        return [];
       case "content_block_start": {
         if (state.done || typeof inner.index !== "number") return [];
         const block = visibleBlock(inner.content_block, opts.structured === true);
@@ -628,6 +649,7 @@ export function createMessagesTranslator(opts: TranslatorOptions) {
         const index = nextIndex++;
         blockMap.set(inner.index, index);
         open.add(index);
+        callBlocks.push(index);
         return [...start(), { event: "content_block_start", data: { type: "content_block_start", index, content_block: block } }];
       }
       case "content_block_delta": {
@@ -664,6 +686,51 @@ export function createMessagesTranslator(opts: TranslatorOptions) {
       default:
         return [];
     }
+  };
+
+  /** Close a broken-off call's blocks now, so the retry's blocks follow them in order, and say so. */
+  const breakOff = (): ApiEvent[] => {
+    const blocks = callBlocks;
+    if (!blocks.length) return [];
+    state.interrupted.push(...blocks);
+    state.notices.push(RETRY_NOTICE);
+    return [...blocks.flatMap(closeBlock), extension("toondao.notice", { message: RETRY_NOTICE })];
+  };
+
+  /**
+   * A message Claude Code got whole instead of streamed — its fallback when a
+   * stream fails — arrives only as an `assistant` event; its text and thinking are
+   * the reply too. One Claude Code made up to report an error (`<synthetic>`) is not.
+   */
+  const wholeMessage = (event: Record<string, unknown>): ApiEvent[] => {
+    if (state.done) return [];
+    const message = isRecord(event.message) ? event.message : {};
+    const id = typeof message.id === "string" ? message.id : null;
+    if (!id || streamedIds.has(id) || message.model === "<synthetic>") return [];
+    if (!wholeIds.has(id)) {
+      // Claude Code may report one message as several events, one per block: count its usage once.
+      wholeIds.add(id);
+      const usage = toApiUsage(message.usage, emptyUsage());
+      if (counting) perCall.push(usage);
+      if (!state.started) firstUsage = usage;
+      if (typeof message.model === "string" && message.model) state.model = message.model;
+    }
+    const out: ApiEvent[] = [];
+    for (const block of Array.isArray(message.content) ? message.content : []) {
+      if (state.done) break; // a stop sequence in an earlier block ended the reply
+      const visible = visibleBlock(block, opts.structured === true);
+      if (!visible || !isRecord(block)) continue;
+      const index = nextIndex++;
+      open.add(index);
+      out.push(...start(), { event: "content_block_start", data: { type: "content_block_start", index, content_block: visible } });
+      if (block.type === "text") out.push(...textDelta(index, str(block.text)));
+      if (block.type === "thinking") {
+        out.push(delta(index, { type: "thinking_delta", thinking: str(block.thinking) }));
+        if (str(block.signature)) out.push(delta(index, { type: "signature_delta", signature: str(block.signature) }));
+      }
+      out.push(...closeBlock(index));
+    }
+    return out;
   };
 
   const toolEvents = (event: Record<string, unknown>): ApiEvent[] => {
@@ -705,7 +772,7 @@ export function createMessagesTranslator(opts: TranslatorOptions) {
         return [extension("toondao.rate", { ...rateLimit })];
       }
       case "assistant":
-        return toolEvents(event);
+        return [...wholeMessage(event), ...toolEvents(event)];
       case "stream_event":
         return isRecord(event.event) ? streamEvent(event.event) : [];
       case "result":
@@ -943,6 +1010,12 @@ export async function messagesRoute(
   const requestId = `req_bridge_${randomBytes(12).toString("hex")}`;
   const headers = { ...ctx.cors, "request-id": requestId };
   const fail = (error: ApiError, extra: Record<string, string> = {}) => sendError(res, error, { ...headers, ...extra }, requestId);
+  // Listened for before anything is awaited: a client that leaves while its body is
+  // read or its snapshot looked up must still stop the run, or keep it from starting.
+  const leaving = new AbortController();
+  res.on("close", () => {
+    if (!res.writableFinished) leaving.abort();
+  });
 
   const key = ctx.opts.apiKey;
   const xApiKey = header(req, "x-api-key");
@@ -964,8 +1037,13 @@ export async function messagesRoute(
       const data = MODEL_ALIASES.map((m) => modelObject(m.id, m.display_name));
       return sendJson(res, 200, { data, has_more: false, first_id: data[0]?.id ?? null, last_id: data.at(-1)?.id ?? null }, headers);
     }
-    const id = decodeURIComponent(path.slice("/v1/models/".length));
-    if (!isSafeModel(id)) return fail({ status: 404, type: "not_found_error", message: `model: ${id}` });
+    let id = "";
+    try {
+      id = decodeURIComponent(path.slice("/v1/models/".length));
+    } catch {
+      /* not a percent-encoding: not a model either */
+    }
+    if (!isSafeModel(id)) return fail({ status: 404, type: "not_found_error", message: "model: not a model id." });
     const alias = MODEL_ALIASES.find((m) => m.id === id);
     return sendJson(res, 200, modelObject(id, alias?.display_name ?? id), headers);
   }
@@ -1013,7 +1091,7 @@ export async function messagesRoute(
   }
   inFlight += 1;
   try {
-    await run(res, request, readDir, ctx.opts, headers, requestId);
+    await run(res, request, readDir, ctx.opts, headers, requestId, leaving.signal);
   } finally {
     inFlight -= 1;
   }
@@ -1026,9 +1104,10 @@ async function run(
   opts: BridgeOptions,
   headers: Record<string, string>,
   requestId: string,
+  leaving: AbortSignal,
 ): Promise<void> {
   const ignoredHeader: Record<string, string> = request.ignored.length
-    ? { "toondao-ignored-params": request.ignored.join(", ") }
+    ? { "toondao-ignored-params": ignoredHeaderValue(request.ignored) }
     : {};
   const translator = createMessagesTranslator({
     id: `msg_bridge_${randomBytes(12).toString("hex")}`,
@@ -1040,14 +1119,10 @@ async function run(
   });
 
   const controller = new AbortController();
-  let clientGone = false;
   let timedOut = false;
-  res.on("close", () => {
-    if (!res.writableFinished) {
-      clientGone = true;
-      controller.abort();
-    }
-  });
+  const clientLeft = () => controller.abort();
+  if (leaving.aborted) clientLeft();
+  else leaving.addEventListener("abort", clientLeft, { once: true });
   const timer = setTimeout(() => {
     timedOut = true;
     controller.abort();
@@ -1094,7 +1169,7 @@ async function run(
       effort: request.effort,
       researchTools: [...request.webTools, "ToolSearch"],
       noConnectors: true,
-      withoutUserSettings: !request.userInstructions,
+      safeMode: !request.userInstructions,
       jsonSchema: request.jsonSchema,
       maxOutputTokens: request.maxTokens,
       signal: controller.signal,
@@ -1112,7 +1187,7 @@ async function run(
   }
 
   const state = translator.state;
-  if (clientGone) {
+  if (leaving.aborted) {
     res.end();
   } else {
     const closing = translator.finish(failure);
@@ -1126,12 +1201,21 @@ async function run(
     } else {
       collected.push(...closing);
       const message = accumulateMessage(collected) ?? {};
+      // A call that broke off and was retried: its partial blocks are not part of the reply.
+      if (state.interrupted.length && Array.isArray(message.content)) {
+        message.content = message.content.filter((_, i) => !state.interrupted.includes(i));
+      }
       sendJson(
         res,
         200,
         {
           ...message,
-          toondao: { tools: state.tools, rate_limit: state.rateLimit, ignored: request.ignored, notices: state.notices },
+          toondao: {
+            tools: state.tools,
+            rate_limit: state.rateLimit,
+            ignored: request.ignored.slice(0, MAX_IGNORED_LISTED),
+            notices: state.notices,
+          },
         },
         { ...headers, ...ignoredHeader },
       );
@@ -1145,7 +1229,7 @@ async function run(
     model: state.model,
     toolScope: `api ${scope}${request.effort ? ` effort=${request.effort}` : ""}`,
     ms: Date.now() - started,
-    aborted: clientGone,
+    aborted: leaving.aborted,
     finished: state.done,
     ok: !state.failure,
     usage: {
@@ -1158,6 +1242,24 @@ async function run(
     toolCalls: state.tools.length,
     apiKeySource: state.apiKeySource,
   });
+}
+
+const MAX_IGNORED_LISTED = 100;
+const MAX_IGNORED_IN_HEADER = 32;
+
+/**
+ * The ignored fields as a header can carry them. A field name is the client's own
+ * text — any character, any length, any number of them — and a header takes
+ * printable ASCII only, so a name that is not that is percent-encoded, a long one
+ * shortened, and the list capped; the body's `toondao.ignored` keeps the first 100 as they are.
+ */
+export function ignoredHeaderValue(ignored: readonly string[]): string {
+  const shown = ignored.slice(0, MAX_IGNORED_IN_HEADER).map((name) => {
+    const safe = /^[\x21-\x7e]+$/.test(name) && !name.includes(",") ? name : encodeURIComponent(name);
+    return safe.length > 80 ? `${safe.slice(0, 77)}...` : safe;
+  });
+  const more = ignored.length - shown.length;
+  return [...shown, ...(more > 0 ? [`(+${more} more)`] : [])].join(", ");
 }
 
 function modelObject(id: string, displayName: string) {

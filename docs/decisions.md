@@ -525,10 +525,17 @@ account on the machine, and a shell sends a key anyway, so `/v1/messages`
 answers only with the key in `~/.toondao/api-key` (created owner-only on the
 first start) or `TOONDAO_API_KEY`; it is not a Claude credential and never
 reaches Claude Code. ToonDao's own route has none yet; the pairing code planned
-for the bridge's security pass is where it gets one. API runs use
-`--setting-sources project,local`: a shell expects its system prompt and
-nothing else. Measured: asked which language its instructions name, a run
-answered "NONE" with 615 tokens of context, and "Chinese" with 1,323 when the
-person's `~/.claude/CLAUDE.md` came along. `toondao.user_instructions: true`
+for the bridge's security pass is where it gets one. API runs use Claude Code's
+`--safe-mode`: CLAUDE.md, hooks, skills, plugins and MCP servers off,
+permission rules on, so a shell gets its system prompt and nothing else while
+the person's own deny rules still hold. Measured: asked which language its
+instructions name, a run answered "NONE" with 615 tokens of context, and
+"Chinese" with 1,323 when the person's `~/.claude/CLAUDE.md` came along; two
+identical safe-mode runs share the cache; a WebFetch deny rule (given with
+`--settings`) took the tool away in safe mode. That a user-file deny rule holds
+is Claude Code's documented behaviour ("permissions work normally"), not
+observed: this machine's settings have none. `toondao.user_instructions: true`
 brings P-33's behaviour back. Considered: P-33 for both doors — one behaviour,
-but every shell would carry instructions written for Claude Code.
+but every shell would carry instructions written for Claude Code; and
+`--setting-sources project,local` (the first version), which leaves the user's
+settings file out entirely, deny rules with it.

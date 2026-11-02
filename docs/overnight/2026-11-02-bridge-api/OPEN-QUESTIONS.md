@@ -15,12 +15,15 @@ cost, highest first.
   use P-26 describes — surfaces in the usage window, or in an account notice.
 - Revert cost: policy, not code; the concurrency cap (Q7) limits the first risk.
 
-### Q2: Do API runs carry the person's own Claude Code settings (`~/.claude/CLAUDE.md`)?
-- Chose for now: no by default — API runs use `--setting-sources project,local`,
-  so a shell gets the API's behaviour (its own system prompt and nothing else);
-  `toondao.user_instructions: true` turns them back on. ToonDao's route keeps P-33.
-  Measured: with them, "Say hi in three words" came back in Chinese and the run
-  carried 1,256 tokens of context; without them, English and 548.
+### Q2: Do API runs carry the person's own Claude Code customizations (`~/.claude/CLAUDE.md`)?
+- Chose for now: no by default — API runs use `--safe-mode` (CLAUDE.md, hooks,
+  skills, plugins, MCP servers off; permission rules on), so a shell gets the
+  API's behaviour; `toondao.user_instructions: true` turns them back on. ToonDao's
+  route keeps P-33. Measured: with them, the language question came back
+  "Chinese" with 1,323 tokens of context; without, "NONE" with 615. The first
+  version used `--setting-sources project,local`, which the review showed also
+  drops the user's deny rules; safe mode keeps them (documented; a deny rule via
+  `--settings` was observed to hold).
 - Alternatives: follow P-33 everywhere (one behaviour for both doors).
 - If wrong: other shells answer in English when you wanted your standing
   instructions everywhere — visible on the first reply.
@@ -38,6 +41,12 @@ cost, highest first.
 - If wrong: a request could shape argv — but only as one JSON value of one flag.
 - Revert cost: delete the mapping, refuse instead (a few lines + a test).
 
+### Q6: Base branch
+- Chose for now: `overnight/2026-11-02-bridge-api` from `feature/learn-from-project`
+  (4454aa6), the newest line and the only one with the bridge's latest state; `main` has no bridge.
+- If wrong: this work can only land after that line does.
+- Revert cost: the commits touch the bridge and docs only; cherry-pick onto another base.
+
 ### Q4: `max_tokens` is honoured by stopping the run
 - Chose for now: the run gets `CLAUDE_CODE_MAX_OUTPUT_TOKENS`, and at the first
   `max_tokens` stop the bridge ends the run and answers `stop_reason: "max_tokens"`
@@ -49,6 +58,13 @@ cost, highest first.
   from thinking-heavy models — exactly what the real API would do to them.
 - Revert cost: one condition in the translator.
 
+### Q7: A cap on runs in flight
+- Chose for now: at most 4 `/v1/messages` runs at once (`TOONDAO_API_CONCURRENCY`);
+  the fifth gets `429 rate_limit_error` with `retry-after: 2` and `x-should-retry: true`,
+  which the SDKs back off on by themselves. ToonDao's route is not capped.
+- If wrong: a shell that fans out more than four requests waits.
+- Revert cost: one number.
+
 ### Q5: Thinking blocks are passed through
 - Chose for now: yes, as Claude Code receives them — empty `thinking` text plus a
   `signature`, which is what the API returns by default on current models.
@@ -57,19 +73,6 @@ cost, highest first.
 - If wrong: a naive shell that reads `content[0].text` shows nothing — but it
   would break the same way against the real API.
 - Revert cost: one line.
-
-### Q6: Base branch
-- Chose for now: `overnight/2026-11-02-bridge-api` from `feature/learn-from-project`
-  (4454aa6), the newest line and the only one with the bridge's latest state; `main` has no bridge.
-- If wrong: this work can only land after that line does.
-- Revert cost: the commits touch the bridge and docs only; cherry-pick onto another base.
-
-### Q7: A cap on runs in flight
-- Chose for now: at most 4 `/v1/messages` runs at once (`TOONDAO_API_CONCURRENCY`);
-  the fifth gets `429 rate_limit_error` with `retry-after: 2` and `x-should-retry: true`,
-  which the SDKs back off on by themselves. ToonDao's route is not capped.
-- If wrong: a shell that fans out more than four requests waits.
-- Revert cost: one number.
 
 ### Q8: Claude Code runs out of tool steps
 - Chose for now: `stop_reason: "end_turn"` plus a notice (`toondao.notice` event,
@@ -88,11 +91,6 @@ cost, highest first.
   needs the app to send a key — the pairing-code work already planned
   (bridge security, next after learning-from-project).
 
-### Q11 (FUTURE): a bridge started inside a Claude Code session inherits `ANTHROPIC_BASE_URL`
-- `runEnv()` drops `CLAUDE*` but keeps `ANTHROPIC_*`; inside the desktop app that
-  points Claude Code at the host's gateway. Tonight's live tests start the bridge
-  with a clean environment instead.
-
 ### Q13 (FUTURE): P-36's Sonnet note may be out of date
 - P-36 records that Sonnet 5 never read the prompt cache back through the bridge.
   Tonight, through the Messages API route (Claude Code 2.1.312, user settings
@@ -100,6 +98,11 @@ cost, highest first.
   exactly as Haiku 5.5 did. Re-measure on ToonDao's own route (user settings on)
   before amending P-36: the difference may be the model, the CLI version, or the
   settings.
+
+### Q11 (FUTURE): a bridge started inside a Claude Code session inherits `ANTHROPIC_BASE_URL`
+- `runEnv()` drops `CLAUDE*` but keeps `ANTHROPIC_*`; inside the desktop app that
+  points Claude Code at the host's gateway. Tonight's live tests start the bridge
+  with a clean environment instead.
 
 ### Q14 (FUTURE): a file read in a symlinked snapshot shows its full path
 - `summarizeToolInput()` strips the snapshot's `read/` prefix as the registry

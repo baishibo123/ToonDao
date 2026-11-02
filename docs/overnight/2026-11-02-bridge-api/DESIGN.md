@@ -134,3 +134,11 @@ a final assistant turn (prefill), `mcp_servers`.
   the cut call's usage (Claude Code sends `message_delta` after SIGINT).
 - `readBody()` split out of `readJson()`, so the API route can answer bad JSON
   with a 400 instead of reading it as an empty object.
+- After an independent review: `--safe-mode` replaces `--setting-sources
+  project,local` (which dropped the user's deny rules); the translator closes a
+  broken-off call's blocks before its retry (`interrupted`, a notice) and takes a
+  message Claude Code got whole as the reply (never a `<synthetic>` one); the
+  route listens for the client leaving before its first await, and `runClaude()`
+  starts nothing for a signal already aborted; ignored field names are made
+  header-safe (`ignoredHeaderValue()`); a malformed `/v1/models/{id}` is a 404;
+  of two stop sequences the one that completes first wins.

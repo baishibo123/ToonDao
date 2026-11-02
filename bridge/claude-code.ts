@@ -306,9 +306,10 @@ export function argsFor(args: {
   researchTools?: readonly string[];
   /** Keep the account's claude.ai connectors out of a research run as well. */
   noConnectors?: boolean;
-  /** Leave out the person's own Claude Code settings, `~/.claude/CLAUDE.md` among them
-   *  (`--setting-sources project,local`). ToonDao keeps them (P-33); the Messages API does not by default. */
-  withoutUserSettings?: boolean;
+  /** Run with the person's own Claude Code customizations off — `~/.claude/CLAUDE.md`, hooks,
+   *  skills, plugins, MCP servers — while their permission rules still apply (`--safe-mode`).
+   *  ToonDao keeps them (P-33); the Messages API does by default (P-41). */
+  safeMode?: boolean;
   /** A structured-output schema from `schemaArg()`, checked again here because it becomes an argument. */
   jsonSchema?: string | null;
 }): string[] {
@@ -323,7 +324,7 @@ export function argsFor(args: {
     "--system-prompt-file", args.systemFile,
     "--model", args.model,
     ...(isEffort(args.effort) ? ["--effort", args.effort] : []),
-    ...(args.withoutUserSettings ? ["--setting-sources", "project,local"] : []),
+    ...(args.safeMode ? ["--safe-mode"] : []),
     // One argument, `--json-schema={…}`: a JSON object can never be read as a flag.
     ...(schema ? [`--json-schema=${schema}`] : []),
   ];
@@ -624,7 +625,7 @@ export async function* runClaude(args: {
   /** The Messages API's options for the command line; see `argsFor()`. */
   researchTools?: readonly string[];
   noConnectors?: boolean;
-  withoutUserSettings?: boolean;
+  safeMode?: boolean;
   jsonSchema?: string | null;
   /** A request's `max_tokens`, for this run only (`CLAUDE_CODE_MAX_OUTPUT_TOKENS`). */
   maxOutputTokens?: number | null;
@@ -634,6 +635,13 @@ export async function* runClaude(args: {
   const dir = await mkdtemp(join(tmpdir(), "toondao-prompt-"));
   const systemFile = join(dir, "system-prompt.txt");
   await writeFile(systemFile, args.system, "utf8");
+
+  // Aborted while the prompt file was being written (the client left at once):
+  // start nothing, rather than a run nobody will read and nothing will stop.
+  if (args.signal.aborted) {
+    await rm(dir, { recursive: true, force: true }).catch(() => {});
+    return;
+  }
 
   const env = runEnv(process.env);
   const maxOutput = args.maxOutputTokens;
@@ -648,7 +656,7 @@ export async function* runClaude(args: {
       effort: args.effort ?? null,
       ...(args.researchTools ? { researchTools: args.researchTools } : {}),
       noConnectors: args.noConnectors === true,
-      withoutUserSettings: args.withoutUserSettings === true,
+      safeMode: args.safeMode === true,
       jsonSchema: args.jsonSchema ?? null,
     }),
     {
@@ -692,6 +700,7 @@ export async function* runClaude(args: {
     setTimeout(() => child.exitCode === null && child.kill("SIGKILL"), 5000).unref();
   };
   args.signal.addEventListener("abort", stop, { once: true });
+  if (args.signal.aborted) stop();
 
   try {
     child.stdin.end(`${args.line}\n`);

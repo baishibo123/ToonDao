@@ -125,9 +125,15 @@ Rules that hold for the life of the project. Why each one exists is in
   `createMessagesTranslator()` renumbers blocks across the calls, hides tool
   calls (reported as `toondao.tool`, counted in `usage.server_tool_use`) and sums
   usage; `max_tokens` and `stop_sequences` end the run where the API would stop.
-- **An API run leaves out the person's own Claude Code settings** unless the
-  request sets `toondao.user_instructions` (`withoutUserSettings`), so a shell
-  gets its own system prompt and nothing else. ToonDao's route keeps P-33.
+  A call that breaks off and is retried is closed before the retry and noticed;
+  a message Claude Code got whole (not streamed) is the reply too, unless it is
+  Claude Code's own `<synthetic>` error text.
+- **An API run has the person's customizations off and their permission rules
+  on** (`--safe-mode`, argsFor's `safeMode`) unless the request sets
+  `toondao.user_instructions`, so a shell gets its own system prompt and nothing
+  else, while a deny rule in their settings still holds. Never
+  `--setting-sources` for this: it drops the deny rules too. ToonDao's route
+  keeps P-33.
 
 ## Learning from a project
 

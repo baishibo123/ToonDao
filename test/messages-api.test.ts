@@ -5,8 +5,9 @@
  * of fetched web pages and session ids). The process and HTTP plumbing is checked
  * against the real CLI and the official SDK by hand (docs/bridge-api.md).
  */
-import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
-import { readFileSync } from "node:fs";
+import { chmod, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
+import { existsSync, readFileSync } from "node:fs";
+import { validateHeaderValue, type IncomingMessage, type ServerResponse } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -14,6 +15,8 @@ import {
   accumulateMessage,
   apiErrorForResult,
   createMessagesTranslator,
+  ignoredHeaderValue,
+  messagesRoute,
   parseMessagesRequest,
   sseFrame,
   type ApiEvent,
@@ -21,13 +24,16 @@ import {
 } from "../bridge/messages-api.ts";
 import {
   DEFAULT_ALLOWED_TOOLS,
+  DEFAULT_ORIGINS,
   argsFor,
   corsHeaders,
   isMessagesApiPath,
   isSchemaArg,
+  runClaude,
   runEnv,
   schemaArg,
   toStreamInput,
+  type BridgeOptions,
 } from "../bridge/claude-code.ts";
 import { checkApiKey, loadApiKey } from "../bridge/api-key.ts";
 
@@ -296,12 +302,14 @@ describe("the command line for an API run", () => {
     const args = argsFor({ ...common, toolScope: "research", allowedTools: DEFAULT_ALLOWED_TOOLS });
     expect(args[args.indexOf("--tools") + 1]).toBe("WebSearch,WebFetch,ToolSearch");
     expect(args).not.toContain("--strict-mcp-config");
-    expect(args).not.toContain("--setting-sources");
+    expect(args).not.toContain("--safe-mode");
   });
 
-  it("leaves the person's own settings out when asked", () => {
-    const args = argsFor({ ...common, toolScope: "none", withoutUserSettings: true });
-    expect(args[args.indexOf("--setting-sources") + 1]).toBe("project,local");
+  it("turns the person's own customizations off when asked, which keeps their permission rules", () => {
+    const args = argsFor({ ...common, toolScope: "none", safeMode: true });
+    expect(args).toContain("--safe-mode");
+    // Not --setting-sources: leaving the user's settings out would drop their deny rules too.
+    expect(args).not.toContain("--setting-sources");
   });
 
   it("passes a schema as one --json-schema= argument, with two more turns for the structured reply", () => {
@@ -468,6 +476,16 @@ describe("stop sequences", () => {
     expect(both.message).toMatchObject({ stop_sequence: "END", content: [{ type: "text", text: "one " }] });
   });
 
+  it("names the sequence that completes first, as generation would have stopped there", () => {
+    // "END" is complete three characters before "ENDING" is, wherever they are listed.
+    for (const chunks of [["abc ENDING"], ["abc EN", "DING"]]) {
+      expect(run(chunks, ["ENDING", "END"]).message).toMatchObject({
+        stop_sequence: "END",
+        content: [{ type: "text", text: "abc " }],
+      });
+    }
+  });
+
   it("never splits a surrogate pair while holding text back", () => {
     const { message } = run(["ab😀", "cd"], ["xyz"]);
     expect(message?.content).toEqual([{ type: "text", text: "ab😀cd" }]);
@@ -569,3 +587,283 @@ describe("the bridge's own key", () => {
     expect(runEnv({ CLAUDECODE: "1", CLAUDE_CODE_SESSION_ID: "s", TOONDAO_API_KEY: "tdk-secret", HOME: "/h" })).toEqual({ HOME: "/h" });
   });
 });
+
+
+/* A model call's stream as Claude Code relays it, for the cases no recording has. */
+const call = (id: string, blocks: Array<{ type: "text" | "thinking"; text: string }>, opts: { stop?: boolean } = {}) => [
+  { type: "stream_event", event: { type: "message_start", message: { id, model: "claude-haiku-5-5", usage: { input_tokens: 10 } } } },
+  ...blocks.flatMap((block, i) => [
+    {
+      type: "stream_event",
+      event: {
+        type: "content_block_start",
+        index: i,
+        content_block: block.type === "text" ? { type: "text", text: "" } : { type: "thinking", thinking: "", signature: "" },
+      },
+    },
+    {
+      type: "stream_event",
+      event: {
+        type: "content_block_delta",
+        index: i,
+        delta: block.type === "text" ? { type: "text_delta", text: block.text } : { type: "thinking_delta", thinking: block.text },
+      },
+    },
+    ...(opts.stop === false && i === blocks.length - 1 ? [] : [{ type: "stream_event", event: { type: "content_block_stop", index: i } }]),
+  ]),
+  ...(opts.stop === false
+    ? []
+    : [
+        { type: "stream_event", event: { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { input_tokens: 10, output_tokens: 7 } } },
+        { type: "stream_event", event: { type: "message_stop" } },
+      ]),
+];
+const success = { type: "result", subtype: "success", is_error: false, stop_reason: "end_turn" };
+
+/** The rules the SDKs' stream readers rely on: one start, blocks opened in order, no delta to a closed block. */
+function orderProblems(events: ApiEvent[]): string[] {
+  const problems: string[] = [];
+  const api = events.filter((e) => !e.event.startsWith("toondao."));
+  if (api.filter((e) => e.event === "message_start").length !== 1 || api[0]?.event !== "message_start") problems.push("message_start");
+  const open = new Set<number>();
+  let next = 0;
+  for (const { event, data } of api) {
+    const index = data.index as number;
+    if (event === "content_block_start" && index !== next++) problems.push(`start ${index} out of order`);
+    if (event === "content_block_start") open.add(index);
+    if (event === "content_block_delta" && !open.has(index)) problems.push(`delta to closed ${index}`);
+    if (event === "content_block_stop" && !open.delete(index)) problems.push(`stop of closed ${index}`);
+  }
+  if (open.size) problems.push("blocks left open");
+  return problems;
+}
+
+describe("a stream that breaks", () => {
+  it("closes a broken-off call's blocks before the retry's, says so, and marks them", () => {
+    const { events, state } = translate([
+      ...call("msg_a", [{ type: "text", text: "The answer" }], { stop: false }),
+      ...call("msg_b", [{ type: "text", text: "The answer is 42." }]),
+      success,
+    ]);
+    expect(orderProblems(events)).toEqual([]);
+    expect(state.interrupted).toEqual([0]);
+    expect(events.filter((e) => e.event === "toondao.notice")).toHaveLength(1);
+    // A non-streaming reply leaves the broken-off block out (the route filters on `interrupted`).
+    const content = (accumulateMessage(events)?.content ?? []) as unknown[];
+    expect(content.filter((_, i) => !state.interrupted.includes(i))).toEqual([{ type: "text", text: "The answer is 42." }]);
+  });
+
+  it("takes a message Claude Code got whole, when it fell back from streaming, as the reply", () => {
+    const usage = { input_tokens: 12, cache_creation_input_tokens: 0, cache_read_input_tokens: 600, output_tokens: 9 };
+    const whole = (content: unknown[]) => ({
+      type: "assistant",
+      message: { id: "msg_whole", model: "claude-haiku-5-5", role: "assistant", content, usage },
+    });
+    // Reported as one event per block, as Claude Code does for streamed messages too.
+    const { events, message } = translate([
+      whole([{ type: "thinking", thinking: "", signature: "sig" }]),
+      whole([{ type: "text", text: "The full answer." }]),
+      success,
+    ]);
+    expect(orderProblems(events)).toEqual([]);
+    expect(message?.content).toEqual([
+      { type: "thinking", thinking: "", signature: "sig" },
+      { type: "text", text: "The full answer." },
+    ]);
+    expect(message?.usage).toMatchObject(usage); // counted once, not once per event
+  });
+
+  it("never takes Claude Code's own error text for the reply, nor repeats a streamed message", () => {
+    expect(translate(fixture("unknown-model")).events).toEqual([]);
+    expect(translate(fixture("text")).message?.content).toEqual([{ type: "text", text: "你好，很高兴见到你。" }]);
+  });
+});
+
+describe("the ignored-fields header", () => {
+  it("carries any field name a client can send, as a header can carry it", () => {
+    const names = ["temperature", "温度", "a,b", "x".repeat(200), ...Array.from({ length: 40 }, (_, i) => `f${i}`)];
+    const value = ignoredHeaderValue(names);
+    expect(() => validateHeaderValue("toondao-ignored-params", value)).not.toThrow();
+    expect(value).toMatch(/^temperature, %E6%B8%A9%E5%BA%A6, a%2Cb, x{77}\.\.\., f0, /);
+    expect(value).toMatch(/\(\+12 more\)$/);
+  });
+});
+
+describe("a run the client has already left", () => {
+  it("starts nothing", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "toondao-abort-"));
+    const marker = join(dir, "started");
+    const bin = join(dir, "fake-claude");
+    await writeFile(bin, `#!/bin/sh\ntouch '${marker}'\n`);
+    await chmod(bin, 0o755);
+    const signal = AbortSignal.abort();
+    const events = [];
+    for await (const event of runClaude({ bin, model: "haiku", toolScope: "none", system: "s", line: "{}", allowedTools: [], signal })) {
+      events.push(event);
+    }
+    expect(events).toEqual([]);
+    expect(existsSync(marker)).toBe(false);
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/* The route, in-process, with a stand-in for Claude Code              */
+/* ------------------------------------------------------------------ */
+
+/** A `claude` that prints recorded events whatever it is asked, and notes that it ran. */
+async function standIn(events: Array<Record<string, unknown>>) {
+  const dir = await mkdtemp(join(tmpdir(), "toondao-route-"));
+  const file = join(dir, "events.jsonl");
+  await writeFile(file, events.map((e) => JSON.stringify(e)).join("\n") + "\n");
+  const bin = join(dir, "fake-claude");
+  await writeFile(bin, `#!/bin/sh\ntouch '${join(dir, "ran")}'\ncat '${file}'\n`);
+  await chmod(bin, 0o755);
+  return { bin, ran: () => existsSync(join(dir, "ran")) };
+}
+
+function fakeRequest(method: string, headers: Record<string, string>, body?: unknown, hold?: Promise<void>) {
+  const chunks = body === undefined ? [] : [Buffer.from(typeof body === "string" ? body : JSON.stringify(body))];
+  const stream = (async function* () {
+    if (hold) await hold;
+    yield* chunks;
+  })();
+  return Object.assign(stream, { method, headers }) as unknown as IncomingMessage;
+}
+
+/** Records what the route sends, refusing header values the way Node's own response does. */
+function fakeResponse() {
+  const listeners: Array<() => void> = [];
+  const res = {
+    status: 0,
+    headers: {} as Record<string, string>,
+    body: "",
+    writableFinished: false,
+    headersSent: false,
+    writeHead(status: number, headers: Record<string, string>) {
+      for (const [name, value] of Object.entries(headers)) validateHeaderValue(name, value);
+      res.status = status;
+      res.headers = headers;
+      res.headersSent = true;
+      return res;
+    },
+    write(chunk: string) {
+      res.body += chunk;
+      return true;
+    },
+    end(chunk?: string) {
+      if (chunk) res.body += chunk;
+      res.writableFinished = true;
+      return res;
+    },
+    on(event: string, fn: () => void) {
+      if (event === "close") listeners.push(fn);
+      return res;
+    },
+    leave: () => listeners.forEach((fn) => fn()),
+  };
+  return res;
+}
+
+async function callRoute(
+  bin: string,
+  path: string,
+  init: { method?: string; key?: string | null; body?: unknown; hold?: Promise<void> } = {},
+) {
+  const opts: BridgeOptions = { port: 8788, allowedOrigins: DEFAULT_ORIGINS, allowedTools: [], claudeBin: bin, apiKey: "tdk-test" };
+  const headers: Record<string, string> = init.key === null ? {} : { "x-api-key": init.key ?? "tdk-test" };
+  const res = fakeResponse();
+  const done = messagesRoute(fakeRequest(init.method ?? "POST", headers, init.body, init.hold), res as unknown as ServerResponse, path, {
+    opts,
+    cors: {},
+  });
+  return { res, done };
+}
+
+const sseEvents = (body: string) =>
+  body
+    .split("\n\n")
+    .filter(Boolean)
+    .map((frame) => ({ event: /^event: (.*)$/m.exec(frame)?.[1] ?? "", data: JSON.parse(/^data: (.*)$/m.exec(frame)?.[1] ?? "null") }));
+
+describe("the route", () => {
+  it("asks for the key, in the API's error envelope", async () => {
+    const { res, done } = await callRoute("/nonexistent", "/v1/messages", { key: null, body: {} });
+    await done;
+    expect(res.status).toBe(401);
+    expect(JSON.parse(res.body)).toMatchObject({ type: "error", error: { type: "authentication_error" }, request_id: expect.stringMatching(/^req_bridge_/) });
+  });
+
+  it("lists the model aliases, and answers a malformed model id with a 404", async () => {
+    const list = await callRoute("/nonexistent", "/v1/models", { method: "GET" });
+    await list.done;
+    expect(JSON.parse(list.res.body).data.map((m: { id: string }) => m.id)).toEqual(["fable", "opus", "sonnet", "haiku"]);
+    const bad = await callRoute("/nonexistent", "/v1/models/%E0%A4%A", { method: "GET" });
+    await bad.done;
+    expect(bad.res.status).toBe(404);
+    expect(JSON.parse(bad.res.body).error.type).toBe("not_found_error");
+  });
+
+  it("answers a request as one Message, with ignored fields of any name named back", async () => {
+    const claude = await standIn(fixture("text"));
+    const { res, done } = await callRoute(claude.bin, "/v1/messages", {
+      body: { model: "haiku", messages: [{ role: "user", content: "hi" }], 温度: 0.5 },
+    });
+    await done;
+    expect(res.status).toBe(200);
+    expect(res.headers["toondao-ignored-params"]).toBe("%E6%B8%A9%E5%BA%A6");
+    expect(JSON.parse(res.body)).toMatchObject({
+      type: "message",
+      model: "claude-haiku-5-5",
+      content: [{ type: "text", text: "你好，很高兴见到你。" }],
+      toondao: { ignored: ["温度"] },
+    });
+  });
+
+  it("streams in the API's order, the status line held until there is a message", async () => {
+    const claude = await standIn(fixture("web-search"));
+    const { res, done } = await callRoute(claude.bin, "/v1/messages", {
+      body: { model: "haiku", stream: true, messages: [{ role: "user", content: "hi" }], tools: [{ type: "web_search_20260209", name: "web_search" }] },
+    });
+    await done;
+    expect(res.status).toBe(200);
+    expect(res.headers["Content-Type"]).toMatch(/text\/event-stream/);
+    const events = sseEvents(res.body);
+    expect(orderProblems(events)).toEqual([]);
+    expect(events.at(-1)?.event).toBe("message_stop");
+  });
+
+  it("answers a failure before any output with its HTTP status, even when streaming", async () => {
+    const claude = await standIn(fixture("unknown-model"));
+    const { res, done } = await callRoute(claude.bin, "/v1/messages", {
+      body: { model: "claude-nonexistent-9", stream: true, messages: [{ role: "user", content: "hi" }] },
+    });
+    await done;
+    expect(res.status).toBe(404);
+    expect(JSON.parse(res.body).error.type).toBe("not_found_error");
+  });
+
+  it("leaves a broken-off call's partial text out of a non-streaming reply", async () => {
+    const claude = await standIn([
+      ...call("msg_a", [{ type: "text", text: "The answer" }], { stop: false }),
+      ...call("msg_b", [{ type: "text", text: "The answer is 42." }]),
+      success,
+    ]);
+    const { res, done } = await callRoute(claude.bin, "/v1/messages", { body: { model: "haiku", messages: [{ role: "user", content: "q" }] } });
+    await done;
+    const body = JSON.parse(res.body);
+    expect(body.content).toEqual([{ type: "text", text: "The answer is 42." }]);
+    expect(body.toondao.notices).toHaveLength(1);
+  });
+
+  it("starts no run for a client that left while its request was being read", async () => {
+    const claude = await standIn(fixture("text"));
+    let release = () => {};
+    const hold = new Promise<void>((resolve) => (release = resolve));
+    const { res, done } = await callRoute(claude.bin, "/v1/messages", { body: { model: "haiku", messages: [{ role: "user", content: "hi" }] }, hold });
+    res.leave();
+    release();
+    await done;
+    expect(claude.ran()).toBe(false);
+  });
+});
+
