@@ -14,6 +14,7 @@
     "dev:mock": "node dev/mock-llm.mjs",
     "check:models": "node dev/check-models.mjs",
     "bridge": "node bridge/index.mjs",
+    "chat": "node examples/terminal-chat.mjs",
     "harvest": "node bridge/harvest.mjs"
   },
   "dependencies": {
