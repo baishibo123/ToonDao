@@ -13,6 +13,7 @@
     "typecheck": "tsc -b --noEmit false --emitDeclarationOnly false || tsc -p tsconfig.app.json --noEmit",
     "dev:mock": "node dev/mock-llm.mjs",
     "check:models": "node dev/check-models.mjs",
+    "check:api": "node dev/check-bridge-api.mjs",
     "bridge": "node bridge/index.mjs",
     "chat": "node examples/terminal-chat.mjs",
     "harvest": "node bridge/harvest.mjs"

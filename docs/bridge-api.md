@@ -45,6 +45,13 @@ Or try the bundled terminal shell, which is nothing but a client of this API
 npm run chat
 ```
 
+After a `claude update`, check that the bridge still translates what Claude Code
+sends (a few small Haiku requests; `--web` adds a lookup):
+
+```bash
+npm run check:api
+```
+
 ### From an Anthropic SDK
 
 Point the client at the bridge; everything else is the SDK as documented.
