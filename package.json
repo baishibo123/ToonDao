@@ -21,9 +21,11 @@
   "dependencies": {
     "dexie": "^4.0.11",
     "dexie-react-hooks": "^1.1.7",
+    "katex": "^0.16.47",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "remark-gfm": "^4.0.1",
+    "remark-math": "^6.0.0",
     "remark-parse": "^11.0.0",
     "unified": "^11.0.5",
     "zustand": "^5.0.3"

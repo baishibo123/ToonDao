@@ -111,6 +111,14 @@ export function rangeForAnchor(
   root: Element,
   anchor: { start: number; end: number },
 ): Range | null {
+  // A formula (P-48) has no text leaves to walk — KaTeX drew it — so an anchor
+  // that is exactly a formula is the formula's element.
+  const formula = root.querySelector(`.md-math[data-src-start="${anchor.start}"][data-src-end="${anchor.end}"]`);
+  if (formula) {
+    const whole = document.createRange();
+    whole.selectNode(formula);
+    return whole;
+  }
   const start = pointForSourceOffset(root, anchor.start, "start");
   const end = pointForSourceOffset(root, anchor.end, "end");
   if (!start || !end) return null;

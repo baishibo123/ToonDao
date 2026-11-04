@@ -645,3 +645,21 @@ the system message of every request, after Settings → System prompt and before
 Pacing, so switching pacing keeps the prefix before it. It is a template, so it
 can be edited, or emptied to leave it out. Adding it changes every system
 message once, so each conversation misses the cache on its next turn.
+
+**P-48 · Formulas are typeset with KaTeX, and quoted as their TeX.** The parse
+both the renderer and the anchor resolver read now includes `remark-math`, so
+`$…$` and `$$…$$` are math nodes on both sides and cannot disagree. KaTeX and
+its stylesheet are loaded the first time a formula is on screen (until then a
+formula reads as its source); a conversation without one never downloads them.
+KaTeX's output is the one HTML the renderer puts into the page, built by KaTeX
+from TeX with `trust: false`, so no formula can make a link, an id or a class;
+a formula KaTeX cannot read is shown as its source in the error colour. A
+formula is not a text leaf: a selection inside it, or a click on it, takes the
+whole formula, so quoting part of one quotes its TeX entire, and
+`rangeForAnchor()` maps a formula's range to its element for the click test
+and the underline. A display formula is a block a crop can stop at. A dollar
+sign that is not math must be written `\$`, which the `rendering` template
+(P-47) now tells the model. Installed with the person's approval
+(2026-11-03): remark-math 6.0.0 and KaTeX 0.16.47, the major version
+remark-math itself depends on. Considered: MathML output alone, with no
+stylesheet or fonts — lighter, but rougher in every browser.

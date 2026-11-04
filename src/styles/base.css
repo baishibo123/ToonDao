@@ -242,6 +242,15 @@ button {
 
 .md .md-image { max-width: 100%; border-radius: var(--radius); }
 
+/* A formula (P-48). KaTeX sizes itself in em, so Settings → Text size reaches it. */
+.md .md-math--display {
+  margin: 0.8em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  text-align: center;
+}
+.md .md-math--source { font-family: var(--font-mono); font-size: 0.9em; color: var(--text-dim); }
+
 /* A drawing a reply wrote (P-42). Models draw for a white page, so the picture
    sits on paper in both themes. */
 .md .md-svg { margin: 0.9em 0; }

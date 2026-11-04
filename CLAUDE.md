@@ -169,7 +169,9 @@ Rules that hold for the life of the project. Why each one exists is in
   relative (`em`).** A bare pixel size would ignore Settings → Text size (P-38).
 - **A reply's markup never enters the page.** Raw HTML renders as text; an SVG
   is drawn only as an `<img>` from the `data:` URL `svgPictureUrl()` builds,
-  where it runs no script and fetches nothing (P-42).
+  where it runs no script and fetches nothing (P-42). The one HTML injected is
+  KaTeX's typesetting of a formula, through `renderTex()` with `trust: false`
+  (P-48).
 - **Display vocabulary lives in `src/lib/policyMeta.ts`.** Glyphs, labels and hue
   variables for every kind come from there; never restate one.
 - **Keyboard shortcuts use ⌘⇧ / Ctrl-Shift**, never a bare ⌘ combination the

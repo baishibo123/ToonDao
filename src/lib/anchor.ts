@@ -28,6 +28,7 @@
 import { unified } from "unified";
 import remarkParse from "remark-parse";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
 import type { Root, RootContent } from "mdast";
 
 export interface SourceLeaf {
@@ -85,7 +86,9 @@ export type AnnotatedNode = RootContent & MdastAnnotations;
 /* Parsing                                                             */
 /* ------------------------------------------------------------------ */
 
-const processor = unified().use(remarkParse).use(remarkGfm);
+// remark-math (P-48): `$…$` and `$$…$$` become math nodes. The renderer and the
+// anchor resolver read this one parse, so they always agree on what is math.
+const processor = unified().use(remarkParse).use(remarkGfm).use(remarkMath);
 
 /** Small LRU so re-renders and repeated selections do not re-parse. */
 const CACHE_LIMIT = 64;
@@ -171,6 +174,8 @@ const BLOCK_TYPES = new Set([
   "html",
   "footnoteDefinition",
   "definition",
+  // A display formula is a block a crop can stop at, like a code block.
+  "math",
 ]);
 
 function isBlock(node: { type: string }): boolean {
@@ -521,6 +526,8 @@ function closestInlineWrapper(node: Node, root: Element): Element | null {
       const element = el as Element;
       // A fenced code block is a whole block, not a term.
       if (element.tagName === "PRE") return null;
+      // A formula (P-48) is one term, whatever KaTeX drew inside it.
+      if (element.classList.contains("md-math") && element.hasAttribute(SRC_START_ATTR)) return element;
       if (
         INLINE_WRAPPER_TAGS.has(element.tagName) &&
         element.hasAttribute(SRC_START_ATTR)

@@ -1,4 +1,4 @@
-import { memo, useState, type ReactNode } from "react";
+import { memo, useEffect, useState, type ReactNode } from "react";
 import type { RootContent } from "mdast";
 import {
   BLOCK_PATH_ATTR,
@@ -9,6 +9,7 @@ import {
   type AnnotatedNode,
 } from "@/lib/anchor";
 import { svgPictureUrl } from "@/lib/svg";
+import { katexReady, loadKatex, typeset } from "@/lib/math";
 
 /**
  * Block-anchored markdown renderer.
@@ -25,7 +26,9 @@ import { svgPictureUrl } from "@/lib/svg";
  * expand to the enclosing span (§5.1).
  *
  * Raw HTML in the source is rendered as literal text. Model output is untrusted
- * input; this renderer never injects HTML.
+ * input; this renderer never injects its HTML. The one HTML put into the page is
+ * KaTeX's typesetting of a formula, with every command that could make a link
+ * or an attribute turned off (P-48).
  */
 
 interface MarkdownProps {
@@ -79,6 +82,12 @@ function Node({ node }: { node: AnnotatedNode }): ReactNode {
         <CodeBlock node={node} attrs={attrs} />
       );
     }
+
+    // P-48. A formula is not a leaf: a selection inside it finds no leaf and
+    // falls back to its source range, so quoting any part of it quotes it all.
+    case "math":
+    case "inlineMath":
+      return <MathTex tex={(node as { value: string }).value} display={node.type === "math"} attrs={attrs} />;
 
     case "paragraph":
       return <p {...attrs}>{renderChildren(node)}</p>;
@@ -168,6 +177,25 @@ function Node({ node }: { node: AnnotatedNode }): ReactNode {
     default:
       return renderChildren(node as { children?: RootContent[] });
   }
+}
+
+function MathTex({ tex, display, attrs }: { tex: string; display: boolean; attrs: Record<string, string | number> }) {
+  const [, setLoaded] = useState(katexReady());
+  useEffect(() => {
+    if (!katexReady()) void loadKatex().then(() => setLoaded(true));
+  }, []);
+  const html = typeset(tex, display);
+  const className = `md-math${display ? " md-math--display" : ""}`;
+  const Tag = display ? "div" : "span";
+  // Until KaTeX arrives, the formula reads as its source.
+  if (html === null) {
+    return (
+      <Tag className={`${className} md-math--source`} {...attrs}>
+        {display ? `$$${tex}$$` : `$${tex}$`}
+      </Tag>
+    );
+  }
+  return <Tag className={className} {...attrs} dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
 type CodeNode = AnnotatedNode & { lang?: string | null; value: string };

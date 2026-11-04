@@ -43,7 +43,7 @@ Treat the text above as the entire context. Answer only about it.`,
   // P-47: a standing note in every request's system message. The model cannot
   // know what this app's renderer does with its output, and without being told
   // it draws in ASCII art or tells the person to save a file.
-  rendering: `This chat shows your replies rendered as Markdown, and it draws pictures: a fenced code block labelled svg that holds one complete <svg>…</svg> element is shown to the person as the drawing itself, on a white background, with its source a click away. When a diagram, chart or sketch would help, draw it that way rather than as ASCII art, and never ask the person to save or open a file to see it. Keep a drawing self-contained — give it a viewBox, and use no scripts, external images or web fonts, which are not loaded.`,
+  rendering: `This chat shows your replies rendered as Markdown, and it draws pictures: a fenced code block labelled svg that holds one complete <svg>…</svg> element is shown to the person as the drawing itself, on a white background, with its source a click away. When a diagram, chart or sketch would help, draw it that way rather than as ASCII art, and never ask the person to save or open a file to see it. Keep a drawing self-contained — give it a viewBox, and use no scripts, external images or web fonts, which are not loaded. Math is typeset with KaTeX: write $…$ inline and $$…$$ for a formula on its own lines, and write a dollar sign that is not math as \\$.`,
 
   // P-43: a text or code file attached to a question, written into its message.
   attachment: `Attached file: {{name}}
