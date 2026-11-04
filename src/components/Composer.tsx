@@ -170,13 +170,17 @@ export function Composer() {
 
   const addFiles = async (picked: readonly File[]) => {
     if (picked.length === 0) return;
-    const room = ATTACHMENT_LIMITS.perMessage - files.length;
-    const results = await Promise.all(picked.slice(0, Math.max(0, room)).map(prepareAttachment));
-    const added = results.filter((r): r is Attachment => !("refused" in r));
-    const refusals = results.flatMap((r) => ("refused" in r ? [r.refused] : []));
-    if (picked.length > room) refusals.push(`A message can carry at most ${ATTACHMENT_LIMITS.perMessage} files.`);
-    setFiles((current) => [...current, ...added].slice(0, ATTACHMENT_LIMITS.perMessage));
-    setFileNotice(refusals.length ? refusals.join(" ") : null);
+    const room = Math.max(0, ATTACHMENT_LIMITS.perMessage - files.length);
+    // One file can come back as several (an Office file and its pictures), so
+    // the limit is applied to what was made, in order, not to what was picked.
+    const results = (await Promise.all(picked.map(prepareAttachment))).flat();
+    const made = results.filter((r): r is Attachment => !("refused" in r) && !("note" in r));
+    const said = results.flatMap((r) => ("refused" in r ? [r.refused] : "note" in r ? [r.note] : []));
+    if (made.length > room) {
+      said.push(`A message can carry at most ${ATTACHMENT_LIMITS.perMessage} files; ${made.length - room} were left out.`);
+    }
+    setFiles((current) => [...current, ...made.slice(0, room)]);
+    setFileNotice(said.length ? said.join(" ") : null);
     textareaRef.current?.focus();
   };
 

@@ -32,7 +32,9 @@ Rules that hold for the life of the project. Why each one exists is in
   P-43). It is sent wherever that turn is sent whole and never inside a
   departure's carved-out text; `assembleContext()` decides which messages carry
   files, the adapters in `src/providers/content.ts` only reshape them, and text
-  files go into the message through the `attachment` template.
+  files go into the message through the `attachment` template. A Word or
+  PowerPoint file is converted to text in the browser when it is attached
+  (`src/lib/convert/`, P-45) — never by a tool or a server.
 - **`assembledPreview` is historical.** It records what was actually sent and is
   never recomputed.
 

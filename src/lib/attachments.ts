@@ -1,4 +1,4 @@
-import type { Attachment, AttachmentKind } from "@/types";
+import type { Attachment, AttachmentKind, OfficeKind } from "@/types";
 import { newId } from "@/lib/id";
 
 /**
@@ -18,12 +18,15 @@ export const ATTACHMENT_LIMITS = {
   pdfBytes: 10_000_000,
   /** About 100k tokens of text. */
   textBytes: 400_000,
+  /** A .docx or .pptx as picked, pictures and all; its text is held to `textBytes`. */
+  officeBytes: 30_000_000,
   perMessage: 10,
 } as const;
 
 const IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
 
-export type Prepared = Attachment | { refused: string };
+/** An attachment, a file that cannot be one (and why), or something said about one that was made. */
+export type Prepared = Attachment | { refused: string } | { note: string };
 
 /** An image or a PDF, by its type or name; anything else may still be text, which only its bytes can tell. */
 export function binaryKindOf(mediaType: string, name: string): Exclude<AttachmentKind, "text"> | null {
@@ -66,6 +69,8 @@ const FENCE_LANGS: Record<string, string> = {
   go: "go", rs: "rust", java: "java", kt: "kotlin", swift: "swift", c: "c", h: "c", cpp: "cpp",
   cs: "csharp", php: "php", sh: "sh", zsh: "sh", bash: "sh", sql: "sql", html: "html", css: "css",
   json: "json", yaml: "yaml", yml: "yaml", toml: "toml", xml: "xml", md: "markdown", csv: "csv",
+  // P-45: an Office file is sent as the Markdown it was converted to.
+  docx: "markdown", pptx: "markdown",
 };
 
 /** A text file as a fenced block, the fence longer than any run of backticks inside it. */
@@ -85,7 +90,9 @@ export function formatBytes(n: number): string {
 /** One line naming a file without its contents, for the record of what was sent. */
 export function attachmentLabel(a: Attachment): string {
   const detail =
-    a.kind === "image" && a.width && a.height
+    a.convertedFrom
+      ? `converted from ${a.convertedFrom}`
+      : a.kind === "image" && a.width && a.height
       ? `${a.width}×${a.height}`
       : a.kind === "pdf" && a.pages
         ? `${a.pages} page${a.pages === 1 ? "" : "s"}`
@@ -102,32 +109,84 @@ export function attachmentUrl(a: Attachment): string {
 /* Reading a picked file (browser only)                                */
 /* ------------------------------------------------------------------ */
 
-/** A picked, pasted or dropped file, as it will be stored and sent — or why it cannot be. */
-export async function prepareAttachment(file: File): Promise<Prepared> {
+/**
+ * A picked, pasted or dropped file, as it will be stored and sent — or why it
+ * cannot be. Usually one attachment; an Office file becomes its text and its
+ * pictures (P-45), with a note when something could not come along.
+ */
+export async function prepareAttachment(file: File): Promise<Prepared[]> {
   const name = file.name || "pasted";
   const kind = binaryKindOf(file.type, name);
   try {
-    if (kind === "image") return await prepareImage(file, name);
+    if (kind === "image") return [await prepareImage(file, name)];
     if (kind === "pdf") {
       if (file.size > ATTACHMENT_LIMITS.pdfBytes) {
-        return { refused: `${name} is ${formatBytes(file.size)}; a PDF can be at most ${formatBytes(ATTACHMENT_LIMITS.pdfBytes)}.` };
+        return [{ refused: `${name} is ${formatBytes(file.size)}; a PDF can be at most ${formatBytes(ATTACHMENT_LIMITS.pdfBytes)}.` }];
       }
       const bytes = new Uint8Array(await file.arrayBuffer());
       const pages = countPdfPages(bytes);
-      return {
+      return [{
         id: newId("f"), kind: "pdf", name, mediaType: "application/pdf", bytes: bytes.length,
         data: toBase64(bytes), ...(pages ? { pages } : {}),
-      };
+      }];
     }
+    const office = officeKindOf(file.type, name);
+    if (office === "legacy") {
+      return [{ refused: `${name} is an old-style Office file. Save it as .docx or .pptx first, then attach that.` }];
+    }
+    if (office) return await prepareOffice(file, name, office);
     if (file.size > ATTACHMENT_LIMITS.textBytes) {
-      return { refused: `${name} is ${formatBytes(file.size)}; a text file can be at most ${formatBytes(ATTACHMENT_LIMITS.textBytes)}.` };
+      return [{ refused: `${name} is ${formatBytes(file.size)}; a text file can be at most ${formatBytes(ATTACHMENT_LIMITS.textBytes)}.` }];
     }
     const text = decodeText(new Uint8Array(await file.arrayBuffer()));
-    if (text === null) return { refused: `${name} is not an image, a PDF or a text file, so it cannot be sent.` };
-    return { id: newId("f"), kind: "text", name, mediaType: "text/plain", bytes: file.size, data: text };
+    if (text === null) {
+      return [{ refused: `${name} is not an image, a PDF, a Word or PowerPoint file, or a text file, so it cannot be sent.` }];
+    }
+    return [{ id: newId("f"), kind: "text", name, mediaType: "text/plain", bytes: file.size, data: text }];
   } catch {
-    return { refused: `${name} could not be read.` };
+    return [{ refused: `${name} could not be read.` }];
   }
+}
+
+/** Word and PowerPoint by type or name; their pre-2007 formats only so they can be named in a refusal. */
+export function officeKindOf(mediaType: string, name: string): OfficeKind | "legacy" | null {
+  const type = mediaType.toLowerCase();
+  if (type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || /\.docx$/i.test(name)) return "docx";
+  if (type === "application/vnd.openxmlformats-officedocument.presentationml.presentation" || /\.pptx$/i.test(name)) return "pptx";
+  if (/\.(doc|ppt)$/i.test(name) || type === "application/msword" || type === "application/vnd.ms-powerpoint") return "legacy";
+  return null;
+}
+
+/**
+ * An Office file as a text attachment and one image attachment per picture,
+ * which keep the order the text numbers them in. The converter is loaded
+ * only now, so the app's first load does not carry it.
+ */
+async function prepareOffice(file: File, name: string, kind: OfficeKind): Promise<Prepared[]> {
+  if (file.size > ATTACHMENT_LIMITS.officeBytes) {
+    return [{ refused: `${name} is ${formatBytes(file.size)}; a Word or PowerPoint file can be at most ${formatBytes(ATTACHMENT_LIMITS.officeBytes)}.` }];
+  }
+  const { convertOffice } = await import("@/lib/convert");
+  let converted;
+  try {
+    converted = await convertOffice(kind, new Uint8Array(await file.arrayBuffer()));
+  } catch (err) {
+    return [{ refused: `${name} could not be read: ${err instanceof Error ? err.message : String(err)}` }];
+  }
+  const bytes = new TextEncoder().encode(converted.text).length;
+  if (!converted.text.trim()) return [{ refused: `${name} has no text in it.` }];
+  if (bytes > ATTACHMENT_LIMITS.textBytes) {
+    return [{ refused: `${name} holds ${formatBytes(bytes)} of text; at most ${formatBytes(ATTACHMENT_LIMITS.textBytes)} can be sent.` }];
+  }
+  const out: Prepared[] = [
+    { id: newId("f"), kind: "text", name, mediaType: "text/markdown", bytes, data: converted.text, convertedFrom: kind },
+  ];
+  for (const image of converted.images) {
+    const picture = new File([image.bytes as BlobPart], `${name} · ${image.name}`, { type: image.mediaType });
+    out.push(await prepareImage(picture, picture.name).catch(() => ({ refused: `${picture.name} could not be read.` })));
+  }
+  if (converted.note) out.push({ note: `${name}: ${converted.note}` });
+  return out;
 }
 
 /**

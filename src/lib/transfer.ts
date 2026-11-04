@@ -322,6 +322,7 @@ function parseAttachments(value: unknown): Pick<ConversationNode, "attachments">
       ...(typeof a.width === "number" ? { width: a.width } : {}),
       ...(typeof a.height === "number" ? { height: a.height } : {}),
       ...(typeof a.pages === "number" ? { pages: a.pages } : {}),
+      ...(a.convertedFrom === "docx" || a.convertedFrom === "pptx" ? { convertedFrom: a.convertedFrom } : {}),
     }));
   return attachments.length ? { attachments } : {};
 }

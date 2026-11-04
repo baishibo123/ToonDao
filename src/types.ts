@@ -145,7 +145,11 @@ export interface Attachment {
   height?: number;
   /** A PDF's page count, as far as a quick look could tell. */
   pages?: number;
+  /** A text attachment made from an Office file (P-45); its pictures are attachments of their own. */
+  convertedFrom?: OfficeKind;
 }
+
+export type OfficeKind = "docx" | "pptx";
 
 export type AttachmentKind = "image" | "pdf" | "text";
 

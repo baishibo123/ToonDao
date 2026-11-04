@@ -599,3 +599,26 @@ deleting the tail, as Claude Code's rewind does — simpler, but it takes the
 asides and parked passages under it; and moving the line to whichever child
 was read last, which P-4 rejected because rows would move as you navigate. A
 rewind moves the line once, on purpose.
+
+**P-45 · Word and PowerPoint files are converted to text when attached, in the
+browser.** A .docx or .pptx becomes a Markdown text attachment (P-43's path from
+there on) plus one image attachment per picture inside it. Word: paragraphs,
+headings (by style name, which is the same in every language, or outline
+level), numbered and bulleted lists (from numbering.xml), tables, bold and
+italic, links, and what a reader sees — tracked deletions and field codes out,
+insertions and field results in. PowerPoint: one section per slide in the
+deck's order, the title as its heading, body placeholders as bullets by level,
+free text boxes as prose, tables, pictures, and the speaker notes. A picture
+stands in the text as `[image N: name]`, numbered in the order the images are
+sent, because an image block carries no name; one in a format the model cannot
+take (EMF, WMF, TIFF, SVG) is named as not sent, and the composer says so. A
+zip of up to 30 MB is read, its text held to the text-file limit; .doc and .ppt
+are refused with a hint to re-save. The zip reader is ours and inflates with the
+platform's `DecompressionStream`, so there is no dependency, and the converter
+is loaded with `import()` only when such a file is added. Checked against a
+.docx written by macOS `textutil` as well as hand-built parts. Considered: a
+tool the model calls — Claude Code's Read cannot open a .docx, and the bridge
+never adds a tool that runs commands; an MCP server, local or remote — another
+process to run, only on the bridge route, and a remote one sends the file to a
+third party; mammoth.js — HTML-first, its Markdown output deprecated, and large.
+Spreadsheets (.xlsx) are left for later: they need a sheet parser.

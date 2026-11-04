@@ -21,7 +21,7 @@ export function AttachmentChips({
   return (
     <div className={`files${onRemove ? " files--draft" : ""}`}>
       {files.map((file) => (
-        <span key={file.id} className={`file file--${file.kind}`} title={describe(file)}>
+        <span key={file.id} className={`file file--${file.kind}${file.convertedFrom ? ` file--${file.convertedFrom}` : ""}`} title={describe(file)}>
           {file.kind === "image" ? (
             <button
               type="button"
@@ -33,7 +33,7 @@ export function AttachmentChips({
             </button>
           ) : (
             <span className="file__tag" aria-hidden>
-              {file.kind === "pdf" ? "PDF" : "TXT"}
+              {file.kind === "pdf" ? "PDF" : file.convertedFrom ? file.convertedFrom.toUpperCase() : "TXT"}
             </span>
           )}
           {file.kind === "image" ? null : (
