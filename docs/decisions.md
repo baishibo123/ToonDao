@@ -590,8 +590,11 @@ a `line` the oldest still holds it, as P-4 says. The earlier question and its
 tail stay in the tree untouched and become a nested row and a fork mark, read
 and continued as an aside: nothing is deleted. A rewound quote reply keeps its
 quote. Deleting the version on the line gives the line back to the oldest.
-Not offered on the first question (it hangs off no reply, and a second root
-would have nothing to open as an aside from) nor inside an aside. Considered:
+On the first question ↺ starts a new conversation instead, with the question
+in its box: a first question hangs off no reply, and a second root would have
+nothing to open as an aside from. The new conversation keeps the old one's pace
+and the project snapshot it learns from; the old one stays whole (the person
+chose this, 2026-11-03). Not offered inside an aside. Considered:
 deleting the tail, as Claude Code's rewind does — simpler, but it takes the
 asides and parked passages under it; and moving the line to whichever child
 was read last, which P-4 rejected because rows would move as you navigate. A

@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { NodeId, TextAnchor } from "@/types";
 import { newId } from "@/lib/id";
+import type { AskAgainSeed } from "@/lib/draft";
 
 /**
  * Ephemeral UI state. Nothing here is persisted — it is all about what the user
@@ -117,6 +118,13 @@ interface UIState {
   requestScrollTo: (id: NodeId) => void;
 
   composerFocusNonce: number;
+  /**
+   * Words, files and choices for the thread's composer to take once (P-44):
+   * the first question of a conversation, asked again in a new one. The nonce
+   * makes the same seed twice two requests.
+   */
+  composerSeed: (AskAgainSeed & { nonce: number }) | null;
+  seedComposer: (seed: AskAgainSeed) => void;
   focusComposer: () => void;
 
   /* -- asides ----------------------------------------------------- */
@@ -198,6 +206,9 @@ export const useUI = create<UIState>((set) => ({
     set((s) => ({ scrollTarget: { id, nonce: (s.scrollTarget?.nonce ?? 0) + 1 } })),
 
   composerFocusNonce: 0,
+  composerSeed: null,
+  seedComposer: (seed) =>
+    set((s) => ({ composerSeed: { ...seed, nonce: (s.composerSeed?.nonce ?? 0) + 1 }, pending: null, selection: null })),
   focusComposer: () => set((s) => ({ composerFocusNonce: s.composerFocusNonce + 1 })),
 
   asides: [],

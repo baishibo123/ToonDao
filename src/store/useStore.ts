@@ -25,7 +25,7 @@ import { rootsOf, subtreeIds, type NodeMap } from "@/lib/tree";
 import { buildOutline, spineLeaf, threadOf } from "@/lib/outline";
 import { parkPassage, pruneParked } from "@/lib/later";
 import { toolScopeFor, type ToolGrant } from "@/lib/toolScope";
-import { planSubmission } from "@/lib/draft";
+import { planSubmission, restartedConversation } from "@/lib/draft";
 import { branchEffort, branchModel, branchPacing } from "@/lib/model";
 import type { Effort, ProjectSummary, RateLimit, ToolUse, Usage } from "@/lib/bridgeProtocol";
 
@@ -99,6 +99,8 @@ interface AppState {
 
   init: () => Promise<void>;
   newConversation: () => Promise<string>;
+  /** A new conversation set up like this one, to ask its first question again in (P-44). */
+  restartConversation: (fromId: string) => Promise<string>;
   selectConversation: (id: string) => Promise<void>;
   deleteConversation: (id: string) => Promise<void>;
   renameConversation: (id: string, title: string) => Promise<void>;
@@ -237,6 +239,16 @@ export const useStore = create<AppState>((set, get) => ({
       preferredChild: {},
     }));
     return conversation.id;
+  },
+
+  restartConversation: async (fromId) => {
+    const patch = restartedConversation(get().conversations.find((c) => c.id === fromId));
+    const id = await get().newConversation();
+    if (Object.keys(patch).length) {
+      await db.conversations.update(id, patch);
+      set((s) => ({ conversations: s.conversations.map((c) => (c.id === id ? { ...c, ...patch } : c)) }));
+    }
+    return id;
   },
 
   selectConversation: async (id) => {

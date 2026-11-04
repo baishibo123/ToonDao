@@ -13,6 +13,7 @@ import { CropRail } from "@/components/CropRail";
 import { messageDomId, useSurface } from "@/components/Surface";
 import { focusNode } from "@/store/focusNode";
 import { useStartGesture } from "@/hooks/useStartGesture";
+import { askAgainSeed } from "@/lib/draft";
 
 interface MessageViewProps {
   node: ConversationNode;
@@ -30,6 +31,8 @@ export const MessageView = memo(function MessageView({ node }: MessageViewProps)
   const setAsideActive = useUI((s) => s.setAsideActive);
   const toggleInspector = useUI((s) => s.toggleInspector);
   const startGesture = useStartGesture();
+  const restartConversation = useStore((s) => s.restartConversation);
+  const seedComposer = useUI((s) => s.seedComposer);
   /**
    * While a rewind is being written (P-44), this message and everything after
    * it on the thread is what will move to a side row, so it is dimmed. The
@@ -230,22 +233,30 @@ export const MessageView = memo(function MessageView({ node }: MessageViewProps)
                 ? "context"
                 : `context · ${policyLabel(node.contextPolicy)}`}
             </button>
-            {/* P-44: the thread's questions only, and not the first, which hangs off no reply. */}
-            {node.role === "user" && !asideId && node.parentId && nodes[node.parentId]?.role === "assistant" && !streamingNodeId ? (
+            {/*
+              P-44, the thread's questions only. A later one is asked again in
+              place, under the same reply; the first hangs off no reply, so it
+              is asked again in a new conversation and this one stays whole.
+            */}
+            {node.role === "user" && !asideId && !streamingNodeId && (node.parentId === null || nodes[node.parentId]?.role === "assistant") ? (
               <button
                 type="button"
                 className="btn btn--ghost btn--sm"
-                onClick={() =>
+                onClick={() => {
+                  if (node.parentId === null) {
+                    void restartConversation(node.conversationId).then(() => seedComposer(askAgainSeed(node)));
+                    return;
+                  }
                   startGesture({
                     kind: "rewind",
                     nodeId: node.id,
-                    parentId: node.parentId!,
+                    parentId: node.parentId,
                     ...(node.origin?.kind === "quote-reply" && node.origin.anchor
                       ? { quote: { sourceNodeId: node.origin.sourceNodeId, anchor: node.origin.anchor } }
                       : {}),
-                  })
-                }
-                title={REWIND_META.blurb}
+                  });
+                }}
+                title={node.parentId === null ? REWIND_META.restartBlurb : REWIND_META.blurb}
               >
                 {REWIND_META.glyph} {REWIND_META.action}
               </button>

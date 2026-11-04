@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { draftNode, gestureOpensAside, planIsSendable, planSubmission } from "@/lib/draft";
+import {
+  askAgainSeed,
+  draftNode,
+  gestureOpensAside,
+  planIsSendable,
+  planSubmission,
+  restartedConversation,
+} from "@/lib/draft";
 import { assembleContext, isContextRoot } from "@/lib/assembleContext";
 import { DEFAULT_TEMPLATES } from "@/lib/templates";
 import { TreeFixture } from "./helpers";
@@ -240,5 +247,29 @@ describe("P-44 rewind — asks an earlier question again, under the same reply",
     expect(plan.policy).toEqual({ kind: "quoted", quote: anchor.text, base: "full-ancestry" });
     expect(plan.origin).toEqual({ kind: "quote-reply", sourceNodeId: "a", anchor });
     expect(gestureOpensAside({ kind: "rewind", nodeId: "q", parentId: "a" })).toBe(false);
+  });
+});
+
+describe("P-44 asking again — what goes back into the box", () => {
+  it("is the question as it was asked: words, files, and only the choices it set itself", () => {
+    const t = new TreeFixture();
+    const q = t.add("user", "What is this?", null);
+    expect(askAgainSeed(q)).toEqual({ text: "What is this?", attachments: [], model: null, effort: null, pacing: null });
+    const file = { id: "f", kind: "text" as const, name: "a.md", mediaType: "text/plain", bytes: 1, data: "x" };
+    Object.assign(q, { attachments: [file], model: "opus", effort: "high", pacing: false });
+    expect(askAgainSeed(q)).toEqual({ text: "What is this?", attachments: [file], model: "opus", effort: "high", pacing: false });
+  });
+
+  it("a first question asked again gets a new conversation set up like the old one", () => {
+    const base = { id: "c", title: "Old", createdAt: 1, updatedAt: 1, rootId: null, activeNodeId: null };
+    expect(restartedConversation(undefined)).toEqual({});
+    expect(restartedConversation({ ...base, titleSource: "set" })).toEqual({});
+    expect(restartedConversation({ ...base, pacing: false })).toEqual({ pacing: false });
+    const project = { slug: "osmo", snapshot: "s1", name: "osmo dock" };
+    expect(restartedConversation({ ...base, project })).toEqual({
+      project,
+      title: "Learning: osmo dock",
+      titleSource: "set",
+    });
   });
 });

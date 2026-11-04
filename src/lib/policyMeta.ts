@@ -97,6 +97,7 @@ export const REWIND_META = {
   glyph: "↺",
   cssVar: "--hue-continuation",
   blurb: "Ask this again from here. What followed it moves to a side row; nothing is deleted.",
+  restartBlurb: "Ask this again in a new conversation, starting from these words. This conversation stays as it is.",
 } as const;
 
 export const POLICY_CLASS: Record<PolicyKind, string> = {

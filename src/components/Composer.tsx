@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "@/store/useStore";
 import { draftKey, useUI, type PendingGesture } from "@/store/useUI";
-import { draftNode, planIsSendable, planSubmission } from "@/lib/draft";
+import { askAgainSeed, draftNode, planIsSendable, planSubmission, type AskAgainSeed } from "@/lib/draft";
 import { contextStart } from "@/lib/assembleContext";
 import { nodeStoreFromMap } from "@/types";
 import { ContextChip, Inspector } from "@/components/ContextChip";
@@ -90,12 +90,22 @@ export function Composer() {
   const streaming = streamingNodeId !== null;
 
   /**
-   * A rewind (P-44) brings the question back into the box — its words, its
-   * files and any model, effort or pace it set — so asking it again starts
-   * from what was asked. Backing out empties the box again, unless it was
-   * edited. A rewind whose question is gone (deleted, another conversation)
-   * is dropped.
+   * Asking a question again (P-44) brings it back into the box — its words, its
+   * files and any model, effort or pace it set — so it starts from what was
+   * asked. Two ways in: a rewind in the thread (a pending gesture; backing out
+   * empties the box again, unless it was edited, and one whose question is
+   * gone is dropped), and a conversation's first question, asked again in a
+   * new conversation (a one-shot seed, taken by the thread's composer).
    */
+  const applySeed = (seed: AskAgainSeed) => {
+    setText(seed.text);
+    setFiles(seed.attachments);
+    setFileNotice(null);
+    setModelOverride(seed.model);
+    setEffortOverride(seed.effort);
+    setPacingOverride(seed.pacing);
+    textareaRef.current?.focus();
+  };
   const rewind = pending?.kind === "rewind" ? pending : null;
   const rewindTarget = rewind ? nodes[rewind.nodeId] : undefined;
   const prefilled = useRef<{ nodeId: string; text: string } | null>(null);
@@ -106,26 +116,23 @@ export function Composer() {
     }
     if (rewind && rewindTarget && prefilled.current?.nodeId !== rewind.nodeId) {
       prefilled.current = { nodeId: rewind.nodeId, text: rewindTarget.content };
-      setText(rewindTarget.content);
-      setFiles(rewindTarget.attachments ?? []);
-      setFileNotice(null);
-      setModelOverride(rewindTarget.model ?? null);
-      setEffortOverride(rewindTarget.effort ?? null);
-      setPacingOverride(typeof rewindTarget.pacing === "boolean" ? rewindTarget.pacing : null);
-      textareaRef.current?.focus();
+      applySeed(askAgainSeed(rewindTarget));
     }
     if (!rewind && prefilled.current) {
-      if (text === prefilled.current.text) {
-        setText("");
-        setFiles([]);
-        setModelOverride(null);
-        setEffortOverride(null);
-        setPacingOverride(null);
-      }
+      if (text === prefilled.current.text) applySeed(EMPTY_SEED);
       prefilled.current = null;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rewind?.nodeId, rewindTarget, conversationId]);
+
+  const seed = useUI((s) => (asideId ? null : s.composerSeed));
+  const seededNonce = useRef(seed?.nonce ?? 0);
+  useEffect(() => {
+    if (!seed || seed.nonce === seededNonce.current) return;
+    seededNonce.current = seed.nonce;
+    applySeed(seed);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seed?.nonce]);
 
   const plan = useMemo(
     () => planSubmission({ text, pending, activeLeafId }),
@@ -543,6 +550,8 @@ export function Composer() {
     </div>
   );
 }
+
+const EMPTY_SEED: AskAgainSeed = { text: "", attachments: [], model: null, effort: null, pacing: null };
 
 function placeholderFor(kind: string | undefined, hasHistory: boolean): string {
   switch (kind) {

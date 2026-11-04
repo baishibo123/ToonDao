@@ -1,11 +1,14 @@
 import type {
+  Attachment,
   BranchOrigin,
+  Conversation,
   ContextPolicy,
   ConversationNode,
   NodeId,
   TextAnchor,
 } from "@/types";
 import type { PendingGesture } from "@/store/useUI";
+import type { Effort } from "@/lib/bridgeProtocol";
 
 /**
  * Gesture → policy. The single mapping.
@@ -200,5 +203,49 @@ export function draftNode(
     status: "complete",
     origin: plan.origin,
     contextPolicy: plan.policy,
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* Asking a question again (P-44)                                      */
+/* ------------------------------------------------------------------ */
+
+/** What goes back into the box when a question is asked again. */
+export interface AskAgainSeed {
+  text: string;
+  attachments: Attachment[];
+  model: string | null;
+  effort: Effort | null;
+  pacing: boolean | null;
+}
+
+/**
+ * A question as it was asked: its words, its files, and the model, effort and
+ * pace it set for itself (not what it inherited, which the box shows anyway).
+ */
+export function askAgainSeed(node: ConversationNode): AskAgainSeed {
+  return {
+    text: node.content,
+    attachments: node.attachments ?? [],
+    model: node.model ?? null,
+    effort: node.effort ?? null,
+    pacing: typeof node.pacing === "boolean" ? node.pacing : null,
+  };
+}
+
+/**
+ * Asking a conversation's first question again starts a new conversation
+ * (P-44): a first question hangs off no reply, so the old one could not stay
+ * beside it as a fork. The new one keeps what the old one was set up with —
+ * its pace, and the project snapshot it learns from, with that title — and is
+ * otherwise new; the old conversation is left as it is.
+ */
+export function restartedConversation(source: Conversation | undefined): Partial<Conversation> {
+  if (!source) return {};
+  return {
+    ...(typeof source.pacing === "boolean" ? { pacing: source.pacing } : {}),
+    ...(source.project
+      ? { project: source.project, title: `Learning: ${source.project.name}`, titleSource: "set" as const }
+      : {}),
   };
 }
