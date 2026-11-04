@@ -48,6 +48,10 @@ Rules that hold for the life of the project. Why each one exists is in
   navigation, and `commitNode()` for a thread send, which extends the root
   spine by construction — a rewind's question lands on it because its reply's
   `line` is set first (P-44). Aside sends are `detached` and never move it.
+- **Replies stream in parallel, keyed by node** (`streams`, P-46). A pane's ■
+  stops the reply that is its own leaf; switching conversations stops none; a
+  reply whose conversation is not open writes to the database only, never into
+  the open conversation's node map.
 - **`focusNode()` in `src/store/focusNode.ts` is the only router.** Anything that
   means "go to this node" calls it; nothing else decides between the thread and
   an aside.

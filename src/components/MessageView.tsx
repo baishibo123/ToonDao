@@ -24,7 +24,9 @@ export const MessageView = memo(function MessageView({ node }: MessageViewProps)
   const { asideId } = useSurface();
   const nodes = useStore((s) => s.nodes);
   const preferredChild = useStore((s) => s.preferredChild);
-  const streamingNodeId = useStore((s) => s.streamingNodeId);
+  const streaming = useStore((s) => node.id in s.streams);
+  /** While the thread's own reply is written, its questions cannot be asked again yet. */
+  const threadBusy = useStore((s) => (s.activeNodeId ? s.activeNodeId in s.streams : false));
   const regenerate = useStore((s) => s.regenerate);
   const deleteSubtree = useStore((s) => s.deleteSubtree);
   const assemble = useStore((s) => s.assemble);
@@ -52,7 +54,6 @@ export const MessageView = memo(function MessageView({ node }: MessageViewProps)
   const openInspector = useUI((s) => s.openInspectors.has(node.id));
   const cropHover = useUI((s) => (s.cropHover?.nodeId === node.id ? s.cropHover.charOffset : null));
 
-  const streaming = streamingNodeId === node.id;
 
   /**
    * Switch to another attempt at this same turn. It is on this spine, so it
@@ -238,7 +239,7 @@ export const MessageView = memo(function MessageView({ node }: MessageViewProps)
               place, under the same reply; the first hangs off no reply, so it
               is asked again in a new conversation and this one stays whole.
             */}
-            {node.role === "user" && !asideId && !streamingNodeId && (node.parentId === null || nodes[node.parentId]?.role === "assistant") ? (
+            {node.role === "user" && !asideId && !threadBusy && (node.parentId === null || nodes[node.parentId]?.role === "assistant") ? (
               <button
                 type="button"
                 className="btn btn--ghost btn--sm"

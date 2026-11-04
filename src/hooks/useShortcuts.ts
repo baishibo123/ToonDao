@@ -52,7 +52,8 @@ export function useShortcuts(): void {
         // An aside backs out one level, the way the breadcrumb does.
         if (ui.asides.length > 1) return void ui.popAsidesTo(ui.asides.at(-2)!.id);
         if (ui.asides.length === 1) return void ui.closeAsides();
-        if (store.streamingNodeId) return void store.stop();
+        // Only the thread is left by now: stop its reply, if it is being written.
+        if (store.activeNodeId && store.streams[store.activeNodeId]) return void store.stop(store.activeNodeId);
         return;
       }
 
@@ -65,10 +66,15 @@ export function useShortcuts(): void {
         return;
       }
 
-      if (e.altKey && e.key === "Backspace" && store.streamingNodeId) {
-        e.preventDefault();
-        store.stop();
-        return;
+      if (e.altKey && e.key === "Backspace") {
+        // The reply of the pane being typed in: an aside's, else the thread's.
+        const asideId = (document.activeElement as Element | null)?.closest?.("[data-aside-id]")?.getAttribute("data-aside-id");
+        const leaf = asideId ? ui.asides.find((f) => f.id === asideId)?.activeNodeId : store.activeNodeId;
+        if (leaf && store.streams[leaf]) {
+          e.preventDefault();
+          store.stop(leaf);
+          return;
+        }
       }
 
       // Sibling branch switching, from anywhere including the composer.

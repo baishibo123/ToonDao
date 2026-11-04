@@ -91,8 +91,13 @@ interface AppState {
   templates: TemplateSet;
   settings: Settings;
 
-  streamingNodeId: NodeId | null;
-  abort: AbortController | null;
+  /**
+   * Replies being written, by id — any number at once: the thread and an
+   * aside, or two conversations (P-46). Each stops only itself, and switching
+   * conversations stops none; a reply whose conversation is not open is
+   * written to the database alone and shows when its conversation is opened.
+   */
+  streams: Record<NodeId, { abort: AbortController; conversationId: string }>;
   /** The subscription's usage window, as the Claude Code bridge last reported
    *  it. Null until a bridge request has run. Not persisted: it is live state. */
   rateLimit: RateLimit | null;
@@ -122,7 +127,8 @@ interface AppState {
     assistantNodeId: NodeId,
     opts?: { detached?: boolean; onCommitted?: (nodeId: NodeId) => void },
   ) => Promise<NodeId | null>;
-  stop: () => void;
+  /** Stop one reply; with no id, every reply in the open conversation. */
+  stop: (nodeId?: NodeId) => void;
   deleteSubtree: (id: NodeId) => Promise<void>;
 
   updateSettings: (patch: Partial<Settings>) => Promise<void>;
@@ -161,8 +167,7 @@ export const useStore = create<AppState>((set, get) => ({
   preferredChild: {},
   templates: DEFAULT_TEMPLATES,
   settings: DEFAULT_SETTINGS,
-  streamingNodeId: null,
-  abort: null,
+  streams: {},
   rateLimit: null,
 
   nodeStore: () => {
@@ -252,7 +257,8 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   selectConversation: async (id) => {
-    get().stop();
+    // Replies still being written keep going (P-46); they write to the
+    // database while their conversation is not the one open.
     const rows = await db.nodes.where("conversationId").equals(id).toArray();
     const nodes: NodeMap = {};
     for (const row of rows) nodes[row.id] = row;
@@ -266,6 +272,9 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   deleteConversation: async (id) => {
+    for (const [nodeId, stream] of Object.entries(get().streams)) {
+      if (stream.conversationId === id) get().stop(nodeId);
+    }
     await db.transaction("rw", db.conversations, db.nodes, async () => {
       await db.nodes.where("conversationId").equals(id).delete();
       await db.conversations.delete(id);
@@ -456,10 +465,16 @@ export const useStore = create<AppState>((set, get) => ({
     });
   },
 
-  stop: () => {
-    const { abort } = get();
-    if (abort) abort.abort();
-    set({ abort: null, streamingNodeId: null });
+  stop: (nodeId) => {
+    const { streams, conversationId } = get();
+    const ids = nodeId ? [nodeId] : Object.keys(streams).filter((id) => streams[id]?.conversationId === conversationId);
+    for (const id of ids) streams[id]?.abort.abort();
+    if (!ids.length) return;
+    set((s) => {
+      const next = { ...s.streams };
+      for (const id of ids) delete next[id];
+      return { streams: next };
+    });
   },
 
   deleteSubtree: async (id) => {
@@ -699,7 +714,9 @@ async function runStream(set: Setter, get: Getter, req: StreamRequest): Promise<
   }
 
   const controller = new AbortController();
-  set({ abort: controller, streamingNodeId: assistantNode.id });
+  set((s) => ({
+    streams: { ...s.streams, [assistantNode.id]: { abort: controller, conversationId: req.conversationId } },
+  }));
   // The question being answered decides the tools, through the aside it was
   // asked in, if any; a conversation that learns from a project may read the
   // snapshot it is pinned to.
@@ -751,15 +768,11 @@ async function runStream(set: Setter, get: Getter, req: StreamRequest): Promise<
         toolUse.push(delta.tool);
         // Shown while the reply is still streaming, so a pause reads as
         // "looking something up" rather than as a stall.
-        set((s) => ({
-          nodes: { ...s.nodes, [assistantNode.id]: { ...s.nodes[assistantNode.id], toolUse: [...toolUse] } },
-        }));
+        setLive(set, assistantNode.id, { toolUse: [...toolUse] });
       }
       if (!delta.text) continue;
       text += delta.text;
-      set((s) => ({
-        nodes: { ...s.nodes, [assistantNode.id]: { ...s.nodes[assistantNode.id], content: text } },
-      }));
+      setLive(set, assistantNode.id, { content: text });
       if (Date.now() - lastPersist > STREAM_PERSIST_MS) {
         lastPersist = Date.now();
         void db.nodes.update(assistantNode.id, { content: text });
@@ -777,11 +790,24 @@ async function runStream(set: Setter, get: Getter, req: StreamRequest): Promise<
       ...(aborted ? {} : { error: err instanceof Error ? err.message : String(err) }),
     });
   } finally {
-    if (get().streamingNodeId === assistantNode.id) {
-      set({ abort: null, streamingNodeId: null });
+    if (get().streams[assistantNode.id]) {
+      set((s) => {
+        const next = { ...s.streams };
+        delete next[assistantNode.id];
+        return { streams: next };
+      });
     }
   }
   return assistantNode.id;
+}
+
+/**
+ * A streaming reply's latest text, on screen only if its conversation is the
+ * one open: the node map holds that conversation alone, and a reply written
+ * elsewhere must not appear in it (P-46). The database gets it either way.
+ */
+function setLive(set: Setter, id: NodeId, patch: Partial<ConversationNode>): void {
+  set((s) => (s.nodes[id] ? { nodes: { ...s.nodes, [id]: { ...s.nodes[id], ...patch } } } : {}));
 }
 
 /* ------------------------------------------------------------------ */
@@ -803,6 +829,19 @@ async function commitNode(
   node: ConversationNode,
   detached = false,
 ): Promise<void> {
+  // The person may have opened another conversation while the question was
+  // being written (P-46): the node then goes to the database only, and shows
+  // when its own conversation is opened again.
+  if (node.conversationId !== get().conversationId) {
+    await db.transaction("rw", db.nodes, async () => {
+      await db.nodes.put(node);
+      const parent = node.parentId ? await db.nodes.get(node.parentId) : undefined;
+      if (parent && !parent.childrenIds.includes(node.id)) {
+        await db.nodes.update(parent.id, { childrenIds: [...parent.childrenIds, node.id] });
+      }
+    });
+    return;
+  }
   const parent = node.parentId ? get().nodes[node.parentId] : undefined;
   const parentChildren = parent ? [...parent.childrenIds, node.id] : null;
 

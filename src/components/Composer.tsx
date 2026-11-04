@@ -52,7 +52,7 @@ export function Composer() {
   const conversationId = useStore((s) => s.conversationId);
   const appActiveNodeId = useStore((s) => s.activeNodeId);
   const nodes = useStore((s) => s.nodes);
-  const streamingNodeId = useStore((s) => s.streamingNodeId);
+  const streams = useStore((s) => s.streams);
   const submit = useStore((s) => s.submit);
   const stop = useStore((s) => s.stop);
   const assemble = useStore((s) => s.assemble);
@@ -87,7 +87,9 @@ export function Composer() {
     else setGlobalPending(next);
   };
 
-  const streaming = streamingNodeId !== null;
+  // This surface's own reply, which is its leaf while it is written (P-46); a
+  // reply streaming in another pane or conversation leaves this box free.
+  const streaming = activeLeafId !== null && activeLeafId in streams;
 
   /**
    * Asking a question again (P-44) brings it back into the box — its words, its
@@ -418,7 +420,7 @@ export function Composer() {
               <button
                 type="button"
                 className="composer__send composer__send--stop"
-                onClick={stop}
+                onClick={() => activeLeafId && stop(activeLeafId)}
                 title="Stop generating"
                 aria-label="Stop generating"
               >

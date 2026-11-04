@@ -622,3 +622,18 @@ never adds a tool that runs commands; an MCP server, local or remote — another
 process to run, only on the bridge route, and a remote one sends the file to a
 third party; mammoth.js — HTML-first, its Markdown output deprecated, and large.
 Spreadsheets (.xlsx) are left for later: they need a sheet parser.
+
+**P-46 · Replies are written in parallel, and each stops only itself.** The
+store keeps every reply being written by id (`streams`), not one global
+stream, so the thread and an aside answer at the same time and each composer's
+■ stops its own pane's reply — the one that is its leaf. Switching conversations
+stops nothing (the person's call, 2026-11-03: they may start another answer
+elsewhere while one is written); the node map holds only the open conversation,
+so a reply whose conversation is not open is written to the database alone
+(`setLive()`, and `commitNode()` for a question committed after the switch) and
+shows, still streaming, when its conversation is opened again. Deleting a
+conversation stops its replies. Esc at the end of its chain stops the thread's
+reply; ⌥⌫ the reply of the pane being typed in. Caching is unaffected: a
+thread and a departure share no prefix, so their cache entries live side by
+side. Considered: keeping one stream and only fixing which button shows ■ —
+smaller, but a second request would still overwrite the first's abort.

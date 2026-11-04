@@ -22,7 +22,10 @@ export function Transcript({ leafId, fromNodeId, empty }: TranscriptProps = {}) 
   const scrollerRef = useRef<HTMLDivElement>(null);
   const nodes = useStore((s) => s.nodes);
   const appActiveNodeId = useStore((s) => s.activeNodeId);
-  const streamingNodeId = useStore((s) => s.streamingNodeId);
+  const leafStreaming = useStore((s) => {
+    const leaf = leafId === undefined ? s.activeNodeId : leafId;
+    return leaf ? leaf in s.streams : false;
+  });
   const scrollTarget = useUI((s) => s.scrollTarget);
 
   const activeNodeId = leafId === undefined ? appActiveNodeId : leafId;
@@ -79,8 +82,8 @@ export function Transcript({ leafId, fromNodeId, empty }: TranscriptProps = {}) 
   }, []);
 
   useEffect(() => {
-    if (streamingNodeId) pinnedRef.current = true;
-  }, [streamingNodeId]);
+    if (leafStreaming) pinnedRef.current = true;
+  }, [leafStreaming]);
 
   const lastContent = path.at(-1)?.content.length ?? 0;
   useEffect(() => {
@@ -88,7 +91,7 @@ export function Transcript({ leafId, fromNodeId, empty }: TranscriptProps = {}) 
     if (!el || !pinnedRef.current) return;
     el.scrollTo({ top: el.scrollHeight, behavior: "instant" });
     autoTopRef.current = el.scrollTop;
-  }, [lastContent, path.length, streamingNodeId]);
+  }, [lastContent, path.length, leafStreaming]);
 
   // Scoped to this scroller rather than looked up by DOM id: the same node can
   // be on screen in the main thread and in a window at once, and each surface
