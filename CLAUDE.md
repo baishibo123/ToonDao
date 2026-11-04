@@ -43,6 +43,10 @@ Rules that hold for the life of the project. Why each one exists is in
 - **A pane shows exactly one spine.** A spine is turns joined by `continuation`
   or `quote-reply`; everything else departs. The thread shows the root spine; an
   aside shows one departure. No pane renders two spines.
+- **The innermost aside is on the right, the one it left in the centre**
+  (`placeOf()` in `src/lib/panes.ts`, P-49); the thread holds the centre only
+  while at most one aside is open. Panes move between columns by class, never
+  by remounting, so a draft and a scroll position survive the move.
 - **`activeNodeId` stays on the root spine.** Everything that moves it must land
   there: `mainSpineCursor()` on load and after a delete, `focusNode()` for
   navigation, and `commitNode()` for a thread send, which extends the root

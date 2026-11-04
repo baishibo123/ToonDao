@@ -13,6 +13,7 @@ import { useParkedMarks } from "@/hooks/useParkedMarks";
 import { useShortcuts } from "@/hooks/useShortcuts";
 import { Shortcuts } from "@/components/Shortcuts";
 import { textScale } from "@/lib/textSize";
+import { asideBasis, threadPlace } from "@/lib/panes";
 
 export default function App() {
   const ready = useStore((s) => s.ready);
@@ -28,6 +29,9 @@ export default function App() {
   const [naming, setNaming] = useState(false);
   const setShortcutsOpen = useUI((s) => s.setShortcutsOpen);
   const textSize = useStore((s) => s.settings.textSize);
+  const asideShare = useStore((s) => s.settings.asideShare);
+  const asideCount = useUI((s) => s.asides.length);
+  const wide = useUI((s) => s.wideAsideId !== null && s.wideAsideId === s.asides.at(-1)?.id);
 
   useSelectionWatcher();
   useTermHover();
@@ -50,8 +54,13 @@ export default function App() {
   return (
     <div className="app">
       <Sidebar />
-      <main className="main">
-        <div className="thread">
+      <main
+        className={`main${asideCount > 0 ? " main--split" : ""}${wide ? " main--wide" : ""}`}
+        style={asideShare === undefined ? undefined : { ["--aside-basis" as string]: asideBasis(asideShare) }}
+      >
+        {/* Hidden rather than unmounted while an aside holds the centre (P-49),
+            so the thread's draft and scroll position wait for it. */}
+        <div className="thread" hidden={threadPlace(asideCount) === "hidden"}>
           {bootError ? (
             <p className="msg__error" role="alert" style={{ margin: "0 0 10px" }}>
               {bootError}
@@ -100,7 +109,7 @@ export default function App() {
           </div>
           <Composer />
         </div>
-        {/* Side conversations sit beside the thread, never over it. */}
+        {/* Side conversations sit beside the line they left, never over it. */}
         <AsidePane />
       </main>
       <SelectionPopover />

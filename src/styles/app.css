@@ -173,6 +173,9 @@
   padding: 12px 14px 14px 16px;
   gap: 10px;
 }
+.thread[hidden] { display: none; }
+/* With a pane beside it, the divider is the gap between them. */
+.main--split .thread { order: 1; padding-right: 0; }
 
 .thread__card {
   flex: 1;

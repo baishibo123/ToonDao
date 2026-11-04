@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "@/store/useStore";
 import { useUI, type AsideFrame } from "@/store/useUI";
 import { Transcript } from "@/components/Transcript";
@@ -6,27 +6,30 @@ import { Composer } from "@/components/Composer";
 import { SurfaceProvider } from "@/components/Surface";
 import { BRANCH_META, branchKindForGesture } from "@/lib/policyMeta";
 import { pathToRoot, turnNumbers, type NodeMap } from "@/lib/tree";
-import { branchLabel } from "@/lib/outline";
+import { branchLabel, spineLeaf } from "@/lib/outline";
+import { asideBasis, clampShare, placeOf, type PanePlace } from "@/lib/panes";
 import { focusNode } from "@/store/focusNode";
 import type { BranchKind } from "@/types";
 
 /**
- * The margin: side conversations, docked beside the thread.
+ * The side conversations: the innermost on the right, beside the line it left.
  *
  * A lens, a crop or an isolation is a second thing you are doing while the first
- * is unfinished. It opens here, beside the passage it came from, so the passage
- * stays readable while you read the answer to it — a margin never covers the
- * text. One side conversation is shown at a time; a question raised inside one
- * opens a deeper one in its place, and the frames above it become the
- * breadcrumb home.
+ * is unfinished. It opens on the right, beside the passage it came from, so the
+ * passage stays readable while you read the answer to it — a margin never covers
+ * the text. A question raised inside an aside opens a deeper one on the right,
+ * and the aside it was asked in moves to the centre (P-49): the line you are
+ * branching from is the one worth the wide column.
  *
- * Every frame stays mounted and only the innermost is shown, so a half-typed
- * follow-up survives a trip down the breadcrumb and back.
+ * Every frame is a sibling of the thread in `.main` and stays mounted; moving
+ * between the centre and the right is a class change, so a half-typed follow-up
+ * and a scroll position survive the move and a trip down the breadcrumb.
  */
 export function AsidePane() {
   const conversationId = useStore((s) => s.conversationId);
   const asides = useUI((s) => s.asides);
   const closeAsides = useUI((s) => s.closeAsides);
+  const wide = useUI((s) => s.wideAsideId !== null && s.wideAsideId === s.asides.at(-1)?.id);
 
   // Switching conversations empties the node map, so an aside from the other
   // one would have nothing to show.
@@ -36,36 +39,38 @@ export function AsidePane() {
   }, [stale, closeAsides]);
 
   if (asides.length === 0 || stale) return null;
-  const top = asides[asides.length - 1];
 
   return (
-    <div className="asidepane">
-      {asides.map((frame, i) => (
-        <AsideView
-          key={frame.id}
-          frame={frame}
-          trail={asides.slice(0, i)}
-          visible={frame.id === top.id}
-        />
-      ))}
-    </div>
+    <>
+      {asides.map((frame, i) => {
+        const place = placeOf(i, asides.length);
+        return (
+          <div key={frame.id} className={`asideslot asideslot--${place}`} hidden={place === "hidden"}>
+            <AsideView frame={frame} trail={asides.slice(0, i)} place={place} />
+          </div>
+        );
+      })}
+      {wide ? null : <Divider />}
+    </>
   );
 }
 
 function AsideView({
   frame,
   trail,
-  visible,
+  place,
 }: {
   frame: AsideFrame;
   /** The frames above this one, outermost first. */
   trail: AsideFrame[];
-  visible: boolean;
+  place: PanePlace;
 }) {
   const ref = useRef<HTMLElement>(null);
   const nodes = useStore((s) => s.nodes);
   const closeAsides = useUI((s) => s.closeAsides);
   const popAsidesTo = useUI((s) => s.popAsidesTo);
+  const toggleWide = useUI((s) => s.toggleWide);
+  const wide = useUI((s) => s.wideAsideId === frame.id) && place === "side";
 
   const surface = useMemo(() => ({ asideId: frame.id }), [frame.id]);
   const about = useMemo(() => describeFrame(frame, nodes), [frame, nodes]);
@@ -73,12 +78,12 @@ function AsideView({
   const leaf =
     frame.activeNodeId && nodes[frame.activeNodeId] ? frame.activeNodeId : frame.rootNodeId;
 
-  // An aside takes the keyboard when it appears, because the next act is to
-  // type into it. Focus lands on the section so a screen reader announces what
-  // opened; the composer takes it from there.
+  // An aside takes the keyboard when it arrives on the right, because the next
+  // act is to type into it. Focus lands on the section so a screen reader
+  // announces what opened; the composer takes it from there.
   useEffect(() => {
-    if (visible) ref.current?.focus({ preventScroll: true });
-  }, [visible]);
+    if (place === "side") ref.current?.focus({ preventScroll: true });
+  }, [place]);
 
   /**
    * A frame is a view over nodes it does not own, and they can be deleted from
@@ -94,12 +99,14 @@ function AsideView({
     else closeAsides();
   }, [orphaned, parent, popAsidesTo, closeAsides]);
 
+  /** ✕ backs out one level: the reverse of opening, so the centre slides back. */
+  const close = () => (parent ? popAsidesTo(parent.id) : closeAsides());
+
   return (
     <section
       ref={ref}
       className="aside"
       data-aside-id={frame.id}
-      hidden={!visible}
       tabIndex={-1}
       aria-label={`${about.meta.label}: ${about.title}`}
       // The aside carries its gesture's hue, so which kind of side conversation
@@ -135,21 +142,35 @@ function AsideView({
         <button
           type="button"
           className="aside__btn"
-          onClick={() => focusNode(frame.sourceNodeId)}
+          onClick={() => showSource(frame, parent, place)}
           title="Show the passage this came from"
           aria-label="Show the passage this came from"
         >
           ↖
         </button>
-        <button
-          type="button"
-          className="aside__btn"
-          onClick={closeAsides}
-          title="Close (Esc goes back one level)"
-          aria-label="Close"
-        >
-          ✕
-        </button>
+        {place === "side" ? (
+          <>
+            <button
+              type="button"
+              className="aside__btn"
+              onClick={() => toggleWide(frame.id)}
+              aria-pressed={wide}
+              title={wide ? "Back beside the conversation (Esc)" : "Fill the canvas"}
+              aria-label={wide ? "Back beside the conversation" : "Fill the canvas"}
+            >
+              {wide ? "⤡" : "⤢"}
+            </button>
+            <button
+              type="button"
+              className="aside__btn"
+              onClick={close}
+              title={parent ? "Close, back one level (Esc)" : "Close (Esc)"}
+              aria-label="Close"
+            >
+              ✕
+            </button>
+          </>
+        ) : null}
       </header>
 
       <div className="aside__about">
@@ -185,6 +206,95 @@ function AsideView({
         </div>
       </SurfaceProvider>
     </section>
+  );
+}
+
+/**
+ * ↖ on the right: the passage is in the pane beside it — the centre aside, or
+ * the thread — so it is scrolled to there, moving that aside's leaf onto it if
+ * it is on another variant, without folding the chain the way `focusNode()`
+ * would. From the centre the passage is off screen, so the router decides.
+ */
+function showSource(frame: AsideFrame, parent: AsideFrame | undefined, place: PanePlace): void {
+  if (place !== "side" || !parent) return void focusNode(frame.sourceNodeId);
+  const { nodes, preferredChild } = useStore.getState();
+  const { setAsideActive, requestScrollTo } = useUI.getState();
+  const shown = parent.activeNodeId ? pathToRoot(nodes, parent.activeNodeId) : [];
+  if (!shown.some((n) => n.id === frame.sourceNodeId)) {
+    setAsideActive(parent.id, spineLeaf(nodes, frame.sourceNodeId, preferredChild));
+  }
+  requestScrollTo(frame.sourceNodeId);
+}
+
+/**
+ * The line between the centre and the right. Dragging it sets the side pane's
+ * share of the canvas, inside `PANE_LIMITS` on both sides; the arrow keys move
+ * it too, and a double click puts it back. The share is a setting, so it holds
+ * across reloads, and it is written once, when the drag ends.
+ */
+function Divider() {
+  const updateSettings = useStore((s) => s.updateSettings);
+  const share = useStore((s) => s.settings.asideShare);
+  const [dragging, setDragging] = useState(false);
+  const drag = useRef<{ startX: number; startWidth: number; share: number | null } | null>(null);
+
+  const measure = (el: Element) => {
+    const main = el.closest(".main");
+    const side = main?.querySelector(".asideslot--side");
+    return main && side ? { main: main as HTMLElement, canvas: main.clientWidth, side: side.getBoundingClientRect().width } : null;
+  };
+  const apply = (main: HTMLElement, next: number) => main.style.setProperty("--aside-basis", asideBasis(next));
+
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    const m = measure(e.currentTarget);
+    if (!m) return;
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    drag.current = { startX: e.clientX, startWidth: m.side, share: null };
+    setDragging(true);
+  };
+  const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const d = drag.current;
+    const m = d && measure(e.currentTarget);
+    if (!d || !m) return;
+    // The side pane is on the right, so moving left widens it.
+    d.share = clampShare(d.startWidth + (d.startX - e.clientX), m.canvas);
+    apply(m.main, d.share);
+  };
+  const onPointerUp = () => {
+    const d = drag.current;
+    drag.current = null;
+    setDragging(false);
+    if (d?.share != null) void updateSettings({ asideShare: d.share });
+  };
+  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const step = e.key === "ArrowLeft" ? 1 : e.key === "ArrowRight" ? -1 : 0;
+    if (!step) return;
+    const m = measure(e.currentTarget);
+    if (!m) return;
+    e.preventDefault();
+    void updateSettings({ asideShare: clampShare(m.side + step * 0.03 * m.canvas, m.canvas) });
+  };
+
+  return (
+    <div
+      className={`panedivider${dragging ? " panedivider--dragging" : ""}`}
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Resize the side conversation"
+      aria-valuenow={share === undefined ? undefined : Math.round(share * 100)}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      tabIndex={0}
+      title="Drag to resize · double-click to reset"
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
+      onDoubleClick={() => void updateSettings({ asideShare: undefined })}
+      onKeyDown={onKeyDown}
+    />
   );
 }
 

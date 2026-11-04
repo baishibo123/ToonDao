@@ -60,8 +60,9 @@ export interface SelectionState {
  * answer to it. That is how a margin works, and a margin never covers the text.
  *
  * WHY A STACK. An aside can raise a question of its own. Asking it opens a
- * deeper aside in the same pane, and the frames above it become the breadcrumb
- * back: one side conversation at a time, with a way home.
+ * deeper aside on the right, the aside it was asked in moves to the centre
+ * (P-49), and the frames above it become the breadcrumb back: one side
+ * conversation beside the line it left, with a way home.
  *
  * A frame is a *view*, not a container: the nodes it shows live in the same tree
  * as everything else, which is why nothing here is persisted — closing the pane
@@ -129,8 +130,9 @@ interface UIState {
 
   /* -- asides ----------------------------------------------------- */
 
-  /** Open side conversations, outermost first. The pane shows the last one; the
-   *  others are its breadcrumb. Empty means the pane is closed. */
+  /** Open side conversations, outermost first. The last is on the right, the one
+   *  before it in the centre (`placeOf()`); all are its breadcrumb. Empty means
+   *  only the thread is open. */
   asides: AsideFrame[];
   /** Opens an aside for a gesture that has not been sent yet. `from` is the
    *  aside it was started in; without it, the aside replaces the whole stack. */
@@ -145,6 +147,12 @@ interface UIState {
   closeAsides: () => void;
   /** Back up the breadcrumb, keeping `id` as the open aside. */
   popAsidesTo: (id: string) => void;
+  /**
+   * The aside that fills the whole canvas, for a closer look (P-49). It names a
+   * frame, so it lapses by itself once that frame is no longer on the right.
+   */
+  wideAsideId: string | null;
+  toggleWide: (id: string) => void;
   setAsidePending: (id: string, pending: PendingGesture | null) => void;
   setAsideTurns: (id: string, turns: number) => void;
   setAsideActive: (id: string, nodeId: NodeId) => void;
@@ -274,6 +282,9 @@ export const useUI = create<UIState>((set) => ({
       const asides = s.asides.slice(0, at + 1);
       return { asides, openInspectors: withoutDrafts(s.openInspectors, s.asides, asides) };
     }),
+
+  wideAsideId: null,
+  toggleWide: (id) => set((s) => ({ wideAsideId: s.wideAsideId === id ? null : id })),
 
   setAsidePending: (id, pending) =>
     set((s) => ({

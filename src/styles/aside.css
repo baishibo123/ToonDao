@@ -8,10 +8,23 @@
    the transcript's marks and the sidebar's rows use (policyMeta.ts).
    ------------------------------------------------------------------ */
 
-.asidepane {
-  flex: 0 0 var(--aside-w);
+/* Every pane is a sibling in .main (P-49): the thread or an aside in the
+   centre, the innermost aside on the right. `order` puts them in columns,
+   whatever order they are mounted in, so moving one is a class change. */
+.asideslot {
   min-width: 0;
   display: flex;
+}
+.asideslot[hidden] { display: none; }
+.asideslot--center {
+  order: 1;
+  flex: 1;
+  padding: 12px 0 14px 16px;
+}
+.asideslot--side {
+  order: 3;
+  /* --aside-basis is the divider's share (asideBasis()); without one, the default. */
+  flex: 0 0 var(--aside-basis, var(--aside-w));
   padding: 12px 14px 14px 0;
   animation: asidein 160ms cubic-bezier(0.2, 0, 0.2, 1);
 }
@@ -20,6 +33,48 @@
   from { opacity: 0; transform: translateX(12px); }
   to { opacity: 1; transform: none; }
 }
+
+/* The centre reads like the thread: one comfortable column. */
+.asideslot--center .aside .transcript__inner { max-width: 720px; margin: 0 auto; }
+
+/* Filling the canvas, for a closer look: the centre steps aside, and a
+   drawing grows to the column rather than staying at its own size. */
+.main--wide .thread,
+.main--wide .asideslot--center { display: none; }
+.main--wide .asideslot--side { flex: 1; padding-left: 16px; animation: none; }
+.main--wide .aside .transcript__inner { max-width: 960px; margin: 0 auto; }
+.main--wide .aside .md-svg__img { width: 100%; max-height: 85vh; object-fit: contain; }
+
+/* -- the divider between the centre and the right ------------------ */
+
+.panedivider {
+  order: 2;
+  flex: 0 0 14px;
+  margin: 12px 0 14px;
+  position: relative;
+  cursor: col-resize;
+  touch-action: none;
+}
+.panedivider::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 50%;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: transparent;
+  transition: background var(--transition);
+}
+.panedivider:hover::after,
+.panedivider:focus-visible::after,
+.panedivider--dragging::after { background: var(--border-strong); }
+.panedivider:focus-visible { outline: none; }
+.panedivider--dragging::after { background: var(--focus); }
+/* While dragging, text under the pointer must not be selected and no pane
+   may take the pointer. */
+.main:has(.panedivider--dragging) { user-select: none; cursor: col-resize; }
+.main:has(.panedivider--dragging) .asideslot,
+.main:has(.panedivider--dragging) .thread { pointer-events: none; }
 
 .aside {
   flex: 1;
@@ -33,7 +88,6 @@
   box-shadow: var(--shadow-panel);
   overflow: hidden;
 }
-.aside[hidden] { display: none; }
 /* Focus stays visible, in the aside's own hue, so "this has the keyboard"
    and "this is the lens" are one mark rather than two. */
 .aside:focus-visible {
@@ -156,10 +210,14 @@
 /* Too narrow for two columns: the pane overlays the thread rather than
    squeezing it into a column nobody can read. */
 @media (max-width: 1100px) {
-  .asidepane {
+  .asideslot--side {
     position: absolute;
     inset: 0 0 0 auto;
     width: min(540px, 94%);
     z-index: 20;
   }
+  .main--wide .asideslot--side { width: 100%; }
+  .panedivider { display: none; }
+  .main--split .thread,
+  .asideslot--center { padding-right: 14px; }
 }

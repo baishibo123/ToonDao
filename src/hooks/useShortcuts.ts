@@ -13,7 +13,7 @@ export const SHORTCUTS: Shortcut[] = [
   { keys: "Enter", label: "Send" },
   { keys: "Shift ⏎", label: "Newline" },
   { keys: "Esc", label: "Drop the pending gesture, or back out of what is open" },
-  { keys: "⌘ ⇧ W", label: "Close the side conversation" },
+  { keys: "⌘ ⇧ W", label: "Close every side conversation" },
   { keys: "⌘ ⇧ N", label: "New conversation" },
   { keys: "⌘ ⇧ I", label: "Inspect the payload of the last message" },
   { keys: "⌘ ⇧ ,", label: "Settings" },
@@ -49,7 +49,9 @@ export function useShortcuts(): void {
         if (ui.pending) return void ui.setPending(null);
         if (ui.settingsOpen) return void ui.setSettingsOpen(false);
         if (ui.shortcutsOpen) return void ui.setShortcutsOpen(false);
-        // An aside backs out one level, the way the breadcrumb does.
+        // A closer look ends first: the aside goes back beside the line it left.
+        if (ui.wideAsideId && ui.wideAsideId === ui.asides.at(-1)?.id) return void ui.toggleWide(ui.wideAsideId);
+        // An aside backs out one level, the way ✕ and the breadcrumb do.
         if (ui.asides.length > 1) return void ui.popAsidesTo(ui.asides.at(-2)!.id);
         if (ui.asides.length === 1) return void ui.closeAsides();
         // Only the thread is left by now: stop its reply, if it is being written.

@@ -663,3 +663,23 @@ sign that is not math must be written `\$`, which the `rendering` template
 (2026-11-03): remark-math 6.0.0 and KaTeX 0.16.47, the major version
 remark-math itself depends on. Considered: MathML output alone, with no
 stylesheet or fonts — lighter, but rougher in every browser.
+
+**P-49 · An aside opened from an aside takes the right, and the one it left
+takes the centre (supersedes P-8's "in the same pane").** The centre column is
+the widest place on screen, and a branch often grows into the line of thought
+that matters; keeping the thread there while you work two levels down spent it
+on the conversation you had left. So the innermost aside is on the right and
+the aside it was asked in is in the centre (`placeOf()`); the thread holds the
+centre only while one aside or none is open. Every pane is a sibling in `.main`
+and stays mounted, so moving between columns keeps a draft and a scroll
+position. ✕ now backs out one level, the reverse of opening, so the centre
+slides back; the breadcrumb's Thread closes them all. ↖ on the right scrolls the
+pane beside it rather than folding the chain. The divider between the centre
+and the right is dragged to share the width, stopping at 320px for the right
+and 420px for the centre; the share is a setting (`asideShare`, optional, no
+schema change) and a double click resets it. ⤢ lets the right pane fill the
+canvas, where a drawing grows to the column, until ⤡ or Esc; it names its
+frame, so it lapses once that frame leaves the right. Asked for by the person
+(2026-09-26 and 2026-11-04). Considered: a floating window for a closer look —
+rejected again for P-7's reasons — and a separate "enter" action that puts a
+branch in the centre with nothing beside it, not needed yet.

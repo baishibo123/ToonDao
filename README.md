@@ -26,6 +26,9 @@ is asked for one idea at a time, stopping at a checkpoint with a question.
 
 The thread is always one linear conversation. Asides open beside it, never in
 it, and nest — an aside can have asides of its own, with a breadcrumb home.
+Asking inside an aside moves that aside into the centre and opens the new one
+beside it. Drag the line between them to share the width (double-click resets
+it), and ⤢ lets an aside fill the canvas for a closer look until ⤡ or Esc.
 Every aside is also a row in the sidebar, nested under what it left. An aside
 keeps its move's promise for as long as you talk in it: a follow-up carries what
 the move carried plus the aside's own turns, never the rest of the thread.

@@ -263,6 +263,8 @@ export interface Settings {
   maxTokens: number | null;
   /** How large the interface's text is (P-38). Optional: older settings read as "default". */
   textSize?: TextSize;
+  /** The side pane's share of the canvas, set by dragging the divider (P-49). Absent: the default width. */
+  asideShare?: number;
 }
 
 export type TextSize = "small" | "default" | "large" | "larger";
