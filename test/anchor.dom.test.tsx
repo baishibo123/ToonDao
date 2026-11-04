@@ -409,3 +409,28 @@ describe("rendered markup carries the anchoring contract", () => {
     expect(m.root.textContent).toContain('<img src=x onerror="boom()">');
   });
 });
+
+describe("a click counts only on the term's text", () => {
+  it("hits a box, give or take two pixels, and nothing beside it", async () => {
+    const { pointInRects } = await import("@/lib/selection");
+    const line = [{ left: 100, right: 300, top: 10, bottom: 30 }];
+    expect(pointInRects(line, { x: 200, y: 20 })).toBe(true);
+    expect(pointInRects(line, { x: 301.5, y: 20 })).toBe(true);
+    // The blank space after a line's last word, where a caret snaps back to it.
+    expect(pointInRects(line, { x: 420, y: 20 })).toBe(false);
+    expect(pointInRects([], { x: 200, y: 20 })).toBe(false);
+  });
+});
+
+describe("rangeForAnchor, for an anchor that opens and closes in markup", () => {
+  it("covers the emphasised text a clicked term expands to, markers and all", async () => {
+    const { rangeForAnchor } = await import("@/lib/selection");
+    const source = "Plain then **我建议的顺序：** and after";
+    const { root } = mount(source);
+    const start = source.indexOf("**");
+    const end = source.indexOf("**", start + 2) + 2;
+    expect(rangeForAnchor(root, { start, end })?.toString()).toBe("我建议的顺序：");
+    // Inside the text it maps as it always did.
+    expect(rangeForAnchor(root, { start: 0, end: 5 })?.toString()).toBe("Plain");
+  });
+});

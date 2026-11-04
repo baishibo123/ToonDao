@@ -16,7 +16,11 @@ export interface ReadSelection {
  * empty, or spans two different messages — a cross-message anchor has no
  * meaning, since offsets index one node's raw markdown.
  */
-export function readSelection(nodes: NodeMap): ReadSelection | null {
+export function readSelection(
+  nodes: NodeMap,
+  /** Where a click landed. A click counts only on the term's own text, not in the space beside it. */
+  point?: { x: number; y: number },
+): ReadSelection | null {
   const selection = window.getSelection();
   if (!selection || selection.rangeCount === 0) return null;
 
@@ -45,6 +49,9 @@ export function readSelection(nodes: NodeMap): ReadSelection | null {
     : resolveRange(range, root, source);
   const anchor = resolved ? trimAnchor(resolved, source) : null;
   if (!anchor || anchor.end <= anchor.start) return null;
+  // A click in the blank space after a line puts the caret at that line's
+  // end, which would expand to its last word; only a click on the word is one.
+  if (range.collapsed && point && !pointOnAnchor(root, anchor, point)) return null;
 
   const rect = range.collapsed
     ? rectForAnchor(root, anchor) ?? range.getBoundingClientRect()
@@ -117,6 +124,28 @@ export function rangeForAnchor(
   return range;
 }
 
+/** Is the point on the anchor's rendered text (within `slop` pixels)? */
+export function pointOnAnchor(
+  root: Element,
+  anchor: { start: number; end: number },
+  point: { x: number; y: number },
+): boolean {
+  const range = rangeForAnchor(root, anchor);
+  return range ? pointInRects([...range.getClientRects()], point) : false;
+}
+
+/** Pure, for testing without layout: a hit on any of the boxes, give or take `slop`. */
+export function pointInRects(
+  rects: ReadonlyArray<{ left: number; right: number; top: number; bottom: number }>,
+  point: { x: number; y: number },
+  slop = 2,
+): boolean {
+  return rects.some(
+    (r) =>
+      point.x >= r.left - slop && point.x <= r.right + slop && point.y >= r.top - slop && point.y <= r.bottom + slop,
+  );
+}
+
 function rectForAnchor(root: Element, anchor: { start: number; end: number }): DOMRect | null {
   const range = rangeForAnchor(root, anchor);
   if (!range) return null;
@@ -136,15 +165,23 @@ function pointForSourceOffset(
 ): { node: Node; offset: number } | null {
   const leaves = [...root.querySelectorAll("[data-leaf-index]")];
   let best: { node: Node; offset: number } | null = null;
+  /** The end of the last leaf wholly before the offset, for an end that falls in markup. */
+  let before: { node: Node; offset: number } | null = null;
 
   for (const leaf of leaves) {
     const srcStart = Number(leaf.getAttribute("data-src-start"));
     const srcEnd = Number(leaf.getAttribute("data-src-end"));
     if (!Number.isFinite(srcStart) || !Number.isFinite(srcEnd)) continue;
-    if (sourceOffset < srcStart) break;
-    if (sourceOffset > srcEnd) continue;
-
     const text = leaf.textContent ?? "";
+    // An offset in markup between leaves — the `**` an emphasised term's anchor
+    // opens and closes with — snaps to the text it encloses: a start to the
+    // next leaf's first character, an end to the previous leaf's last.
+    if (sourceOffset < srcStart) return best ?? (edge === "start" ? textPointIn(leaf, 0) : before);
+    if (sourceOffset > srcEnd) {
+      before = textPointIn(leaf, text.length);
+      continue;
+    }
+
     // The leaf's source span may include markup (backticks, asterisks), so clamp
     // the proportional position into the rendered range rather than assuming a
     // 1:1 mapping.
@@ -153,7 +190,7 @@ function pointForSourceOffset(
     if (point) best = point;
     if (sourceOffset <= srcEnd && edge === "start") return best;
   }
-  return best;
+  return best ?? (edge === "end" ? before : null);
 }
 
 function textPointIn(leaf: Element, offset: number): { node: Node; offset: number } | null {

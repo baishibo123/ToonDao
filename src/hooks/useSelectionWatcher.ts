@@ -31,7 +31,10 @@ export function useSelectionWatcher(): void {
         if (target?.closest?.("a[href]")) return;
 
         const { nodes } = useStore.getState();
-        const found = readSelection(nodes);
+        const found = readSelection(
+          nodes,
+          event instanceof MouseEvent ? { x: event.clientX, y: event.clientY } : undefined,
+        );
         if (!found) {
           setSelection(null);
           return;

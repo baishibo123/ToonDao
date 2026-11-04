@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useStore } from "@/store/useStore";
 import { expandToTerm } from "@/lib/anchor";
-import { rangeForAnchor } from "@/lib/selection";
+import { pointInRects, rangeForAnchor } from "@/lib/selection";
 
 const HIGHLIGHT_NAME = "toondao-term";
 
@@ -48,12 +48,15 @@ export function useTermHover(): void {
         const anchor = expandToTerm(caret, root, node.content);
         if (!anchor || anchor.end <= anchor.start) return clear();
 
+        const range = rangeForAnchor(root, anchor);
+        if (!range) return clear();
+        // The caret snaps to the nearest text, so the pointer over blank space
+        // would underline the word at that line's end. Only the word itself does.
+        if (!pointInRects([...range.getClientRects()], { x: event.clientX, y: event.clientY })) return clear();
+
         const key = `${nodeId}:${anchor.start}:${anchor.end}`;
         if (key === lastKey) return;
         lastKey = key;
-
-        const range = rangeForAnchor(root, anchor);
-        if (!range) return clear();
         registry.set(HIGHLIGHT_NAME, new HighlightCtor(range));
       });
     };
