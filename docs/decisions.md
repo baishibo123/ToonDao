@@ -637,3 +637,11 @@ reply; ⌥⌫ the reply of the pane being typed in. Caching is unaffected: a
 thread and a departure share no prefix, so their cache entries live side by
 side. Considered: keeping one stream and only fixing which button shows ■ —
 smaller, but a second request would still overwrite the first's abort.
+
+**P-47 · Every request says what this chat draws.** The model cannot know that
+an svg block is shown as a picture (P-42), and without being told it drew ASCII
+art or told the person to save a file. The `rendering` template is appended to
+the system message of every request, after Settings → System prompt and before
+Pacing, so switching pacing keeps the prefix before it. It is a template, so it
+can be edited, or emptied to leave it out. Adding it changes every system
+message once, so each conversation misses the cache on its next turn.

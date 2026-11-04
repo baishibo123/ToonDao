@@ -188,6 +188,8 @@ export const useStore = create<AppState>((set, get) => ({
     return assembleContext(node, get().nodeStore(), get().templates, {
       systemPrompt: get().settings.systemPrompt,
       pacing,
+      // P-47: every request is told what this chat can draw.
+      rendering: true,
     });
   },
 

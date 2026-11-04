@@ -88,6 +88,7 @@ const TEMPLATE_IDS: TemplateId[] = [
   "learning_map",
   "title",
   "attachment",
+  "rendering",
 ];
 
 /**

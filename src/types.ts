@@ -217,7 +217,8 @@ export type TemplateId =
   | "pacing"
   | "learning_map"
   | "title"
-  | "attachment";
+  | "attachment"
+  | "rendering";
 
 export interface PromptTemplate {
   id: TemplateId;

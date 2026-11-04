@@ -40,6 +40,11 @@ Treat the text above as the entire context. Answer only about it.`,
   // method is the learn-project skill's, kept general: no project is assumed to
   // have decision records, and the language is the reader's — their standing
   // instructions first (P-33), since this message itself is in English.
+  // P-47: a standing note in every request's system message. The model cannot
+  // know what this app's renderer does with its output, and without being told
+  // it draws in ASCII art or tells the person to save a file.
+  rendering: `This chat shows your replies rendered as Markdown, and it draws pictures: a fenced code block labelled svg that holds one complete <svg>…</svg> element is shown to the person as the drawing itself, on a white background, with its source a click away. When a diagram, chart or sketch would help, draw it that way rather than as ASCII art, and never ask the person to save or open a file to see it. Keep a drawing self-contained — give it a viewBox, and use no scripts, external images or web fonts, which are not loaded.`,
+
   // P-43: a text or code file attached to a question, written into its message.
   attachment: `Attached file: {{name}}
 
@@ -107,6 +112,11 @@ export const TEMPLATE_META: Record<
     label: "Title",
     vars: ["asks", "answer"],
     note: "P-34 — one short request after a conversation's first reply, and on ↻ beside its title. {{asks}} is the person's messages on the thread, clipped; {{answer}} the opening of the latest reply. Sent without the system prompt or pacing.",
+  },
+  rendering: {
+    label: "What this chat draws",
+    vars: [],
+    note: "P-47 — in the system message of every request (after Settings → System prompt, before Pacing), so the model knows an svg code block is shown as a picture. No variables. Empty it to leave it out.",
   },
   attachment: {
     label: "Attached file",

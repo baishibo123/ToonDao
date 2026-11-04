@@ -697,3 +697,23 @@ describe("contextStart (P-27)", () => {
     expect(policyLabel(followUp.contextPolicy, lens.contextPolicy)).toBe("this aside");
   });
 });
+
+describe("P-47 what this chat draws", () => {
+  it("joins the system message after the person's own prompt and before pacing, on every policy", () => {
+    const t = new TreeFixture();
+    const u = t.add("user", "draw me a cache", null);
+    const msgs = assembleContext(u, t, T, { systemPrompt: "Mine.", rendering: true, pacing: true });
+    expect(msgs[0]).toEqual({ role: "system", content: `Mine.\n\n${T.rendering}\n\n${T.pacing}` });
+    expect(T.rendering).toContain("svg");
+
+    const isolated = t.add("user", "", u.id, { kind: "isolated", payload: "x" }, "isolated-selection");
+    expect(assembleContext(isolated, t, T, { rendering: true })[0]).toEqual({ role: "system", content: T.rendering });
+  });
+
+  it("is left out when its template is emptied, or not asked for", () => {
+    const t = new TreeFixture();
+    const u = t.add("user", "hi", null);
+    expect(assembleContext(u, t, { ...T, rendering: "  " }, { rendering: true })).toEqual([{ role: "user", content: "hi" }]);
+    expect(assembleContext(u, t, T)).toEqual([{ role: "user", content: "hi" }]);
+  });
+});

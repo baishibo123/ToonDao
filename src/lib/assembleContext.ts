@@ -25,6 +25,9 @@ export interface AssembleOptions {
   /** Append the `pacing` template to the system message. Global, like the
    *  system prompt, so it reaches every policy the same way. */
   pacing?: boolean;
+  /** Append the `rendering` template: what this chat draws as pictures
+   *  (P-47). Global, like pacing; the store always sets it. */
+  rendering?: boolean;
 }
 
 export function assembleContext(
@@ -332,17 +335,20 @@ function clampOffset(offset: number, content: string): number {
 }
 
 /**
- * The one system message: the user's own prompt first, then the pacing
- * instruction when it is on. Either may be absent; with neither, there is no
- * system message at all.
+ * The one system message: the user's own prompt first, then what this chat
+ * renders, then the pacing instruction when it is on. Any may be absent; with
+ * none, there is no system message at all.
  */
 function withSystem(
   messages: ChatMessage[],
   opts: AssembleOptions,
   templates: TemplateSet,
 ): ChatMessage[] {
+  // Most constant first, so a later part switching (pacing) keeps the prefix
+  // before it the same.
   const parts = [
     opts.systemPrompt?.trim() ?? "",
+    opts.rendering ? (templates.rendering ?? "").trim() : "",
     opts.pacing ? (templates.pacing ?? "").trim() : "",
   ].filter(Boolean);
   if (parts.length === 0) return messages;
