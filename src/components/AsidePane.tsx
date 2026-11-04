@@ -79,10 +79,16 @@ function AsideView({
     frame.activeNodeId && nodes[frame.activeNodeId] ? frame.activeNodeId : frame.rootNodeId;
 
   // An aside takes the keyboard when it arrives on the right, because the next
-  // act is to type into it. Focus lands on the section so a screen reader
-  // announces what opened; the composer takes it from there.
+  // act is to type into it: the caret goes straight into its box, inside the
+  // labelled section, so a screen reader still announces what opened. A child's
+  // effect runs before this one, so focusing the section here took the caret
+  // back out of the box the composer had just put it in.
   useEffect(() => {
-    if (place === "side") ref.current?.focus({ preventScroll: true });
+    if (place !== "side") return;
+    const section = ref.current;
+    if (!section || section.contains(document.activeElement)) return;
+    const box = section.querySelector<HTMLTextAreaElement>(".aside__composer textarea");
+    (box ?? section).focus({ preventScroll: true });
   }, [place]);
 
   /**
