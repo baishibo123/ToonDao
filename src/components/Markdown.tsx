@@ -1,4 +1,4 @@
-import { memo, type ReactNode } from "react";
+import { memo, useState, type ReactNode } from "react";
 import type { RootContent } from "mdast";
 import {
   BLOCK_PATH_ATTR,
@@ -8,6 +8,7 @@ import {
   parseMarkdown,
   type AnnotatedNode,
 } from "@/lib/anchor";
+import { svgPictureUrl } from "@/lib/svg";
 
 /**
  * Block-anchored markdown renderer.
@@ -70,15 +71,14 @@ function Node({ node }: { node: AnnotatedNode }): ReactNode {
         </code>
       );
 
-    case "code":
-      return (
-        <pre className="md-pre" {...attrs}>
-          {node.lang ? <span className="md-code-lang">{node.lang}</span> : null}
-          <code className="md-code">
-            <span {...{ [LEAF_ATTR]: node.__leafIndex }}>{node.value}</span>
-          </code>
-        </pre>
+    case "code": {
+      const picture = svgPictureUrl(node.lang, node.value);
+      return picture ? (
+        <SvgBlock node={node} url={picture} attrs={attrs} />
+      ) : (
+        <CodeBlock node={node} attrs={attrs} />
       );
+    }
 
     case "paragraph":
       return <p {...attrs}>{renderChildren(node)}</p>;
@@ -168,6 +168,49 @@ function Node({ node }: { node: AnnotatedNode }): ReactNode {
     default:
       return renderChildren(node as { children?: RootContent[] });
   }
+}
+
+type CodeNode = AnnotatedNode & { lang?: string | null; value: string };
+
+function CodeBlock({ node, attrs }: { node: CodeNode; attrs: Record<string, string | number> }) {
+  return (
+    <pre className="md-pre" {...attrs}>
+      {node.lang ? <span className="md-code-lang">{node.lang}</span> : null}
+      <code className="md-code">
+        <span {...{ [LEAF_ATTR]: node.__leafIndex }}>{node.value}</span>
+      </code>
+    </pre>
+  );
+}
+
+/**
+ * A finished SVG drawn as a picture (P-42), its source one click away. The
+ * figure carries the block's source range, so selecting the picture quotes
+ * the whole block; the source stays in the page for selecting part of it. An
+ * SVG the browser cannot draw falls back to plain code.
+ */
+function SvgBlock({
+  node,
+  url,
+  attrs,
+}: {
+  node: CodeNode;
+  url: string;
+  attrs: Record<string, string | number>;
+}) {
+  const [broken, setBroken] = useState(false);
+  if (broken) return <CodeBlock node={node} attrs={attrs} />;
+  return (
+    <figure className="md-svg" {...attrs}>
+      <div className="md-svg__paper">
+        <img className="md-svg__img" src={url} alt="Drawing from this reply" onError={() => setBroken(true)} />
+      </div>
+      <details className="md-svg__source">
+        <summary>SVG source</summary>
+        <CodeBlock node={node} attrs={{}} />
+      </details>
+    </figure>
+  );
 }
 
 function Row({ node, head }: { node?: AnnotatedNode; head?: boolean }): ReactNode {

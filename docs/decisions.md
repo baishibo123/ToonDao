@@ -541,3 +541,17 @@ but every shell would carry instructions written for Claude Code; and
 `--setting-sources project,local` (the first version), which leaves the user's
 settings file out entirely, deny rules with it. The person kept the default
 (off) on 2026-11-02.
+
+### Pictures
+
+**P-42 · A reply's SVG is drawn, as an image.** Claude writes no raster images,
+but it draws well in SVG. A fenced block (`svg`, `xml`, `html` or unlabelled)
+whose source is one finished `<svg>…</svg>` element is shown as a picture on a
+white sheet, with its source under a toggle; until the closing tag streams in
+it stays code. The picture is an `<img>` from a `data:` URL, never markup put
+into the page: an SVG loaded as an image runs no script and fetches nothing, so
+the renderer still never injects a reply's HTML. The namespace a model often
+leaves out is added (an image draws nothing without it), and a viewBox-only
+drawing is sized by its viewBox rather than the 300 px default. Selecting the
+picture quotes the whole block. Considered: Mermaid as well — easier diagrams,
+but a large dependency; the person chose SVG only (2026-11-03).
