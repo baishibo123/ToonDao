@@ -55,6 +55,8 @@ export interface ConversationNode {
    * branch, asides included, found by walking up like `effort` (P-37).
    */
   pacing?: boolean;
+  /** On a user node: the files attached to this question (P-43). */
+  attachments?: Attachment[];
   /** Outside sources the model used while writing this reply (bridge only). */
   toolUse?: ToolUse[];
   /** Tokens the request cost, as the bridge measured them. */
@@ -108,7 +110,38 @@ export type PolicyKind = ContextPolicy["kind"];
 export interface ChatMessage {
   role: "system" | "user" | "assistant";
   content: string;
+  /**
+   * Images and PDFs sent with this turn, for a provider adapter to place
+   * beside `content` (P-43). Text files are never here: `assembleContext()`
+   * has already written them into `content` through the `attachment` template.
+   */
+  attachments?: Attachment[];
 }
+
+/**
+ * A file the person attached to a question (P-43). Stored on the question's
+ * node, so it is part of that turn: it is sent wherever the turn is sent whole,
+ * and never in a departure's carved-out text.
+ */
+export interface Attachment {
+  id: string;
+  kind: AttachmentKind;
+  /** The file's name as picked. */
+  name: string;
+  /** image/png, image/jpeg, image/gif, image/webp, application/pdf, text/plain. */
+  mediaType: string;
+  /** Size of the stored file (after an image was shrunk), in bytes. */
+  bytes: number;
+  /** Base64 for an image or a PDF; the text itself for a text file. */
+  data: string;
+  /** An image's size in pixels, as stored. */
+  width?: number;
+  height?: number;
+  /** A PDF's page count, as far as a quick look could tell. */
+  pages?: number;
+}
+
+export type AttachmentKind = "image" | "pdf" | "text";
 
 /* ------------------------------------------------------------------ */
 /* Conversations, templates, settings                                  */
@@ -173,7 +206,8 @@ export type TemplateId =
   | "quote_reply"
   | "pacing"
   | "learning_map"
-  | "title";
+  | "title"
+  | "attachment";
 
 export interface PromptTemplate {
   id: TemplateId;

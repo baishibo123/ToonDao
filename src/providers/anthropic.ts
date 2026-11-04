@@ -2,6 +2,8 @@ import type { ChatMessage, ProviderConfig } from "@/types";
 import { ProviderError, type ChatOpts, type Delta, type Provider } from "./types";
 import { readSSE } from "./sse";
 import { asProviderError, errorDetail, joinUrl } from "./openai";
+import { claudeContent } from "./content";
+import type { WireBlock } from "@/lib/bridgeProtocol";
 
 /**
  * Native Anthropic adapter — POST /v1/messages, SSE.
@@ -80,7 +82,7 @@ interface AnthropicEvent {
  */
 export function splitSystem(messages: ChatMessage[]): {
   system: string;
-  turns: Array<{ role: "user" | "assistant"; content: string }>;
+  turns: Array<{ role: "user" | "assistant"; content: string | WireBlock[] }>;
 } {
   const system = messages
     .filter((m) => m.role === "system")
@@ -88,6 +90,6 @@ export function splitSystem(messages: ChatMessage[]): {
     .join("\n\n");
   const turns = messages
     .filter((m): m is ChatMessage & { role: "user" | "assistant" } => m.role !== "system")
-    .map((m) => ({ role: m.role, content: m.content }));
+    .map((m) => ({ role: m.role, content: claudeContent(m) }));
   return { system, turns };
 }

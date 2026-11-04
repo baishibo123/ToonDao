@@ -11,6 +11,7 @@ const IDS: TemplateId[] = [
   "pacing",
   "learning_map",
   "title",
+  "attachment",
 ];
 
 /**

@@ -10,6 +10,9 @@ import { BRANCH_META } from "@/lib/policyMeta";
 import { useSurface } from "@/components/Surface";
 import { findParked } from "@/lib/later";
 import { EFFORTS, type Effort, type RateLimit } from "@/lib/bridgeProtocol";
+import { ATTACHMENT_LIMITS, prepareAttachment } from "@/lib/attachments";
+import { AttachmentChips } from "@/components/Attachments";
+import type { Attachment } from "@/types";
 
 /**
  * The one gesture that docks into a composer rather than opening an aside: a
@@ -39,6 +42,12 @@ export function Composer() {
   const [modelOverride, setModelOverride] = useState<string | null>(null);
   const [effortOverride, setEffortOverride] = useState<Effort | null>(null);
   const [pacingOverride, setPacingOverride] = useState<boolean | null>(null);
+  /** Files for this question (P-43), already read into what will be sent. */
+  const [files, setFiles] = useState<Attachment[]>([]);
+  /** Why a file was not added; shown until the next add or send. */
+  const [fileNotice, setFileNotice] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const conversationId = useStore((s) => s.conversationId);
   const appActiveNodeId = useStore((s) => s.activeNodeId);
@@ -89,10 +98,13 @@ export function Composer() {
   // — the user can see exactly what the model will see, before committing.
   const draftMessages = useMemo(() => {
     if (!conversationId) return [];
-    const draft = draftNode(plan, conversationId);
+    const draft = {
+      ...draftNode(plan, conversationId),
+      ...(files.length ? { attachments: files } : {}),
+    };
     return assemble(pacingOverride === null ? draft : { ...draft, pacing: pacingOverride });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plan, conversationId, nodes, templates, systemPrompt, pacing, pacingOverride, conversations, assemble]);
+  }, [plan, conversationId, nodes, templates, systemPrompt, pacing, pacingOverride, conversations, assemble, files]);
 
   // A later turn in an aside carries the aside, not the thread, and the chip
   // names it by the move that opened the aside.
@@ -107,8 +119,21 @@ export function Composer() {
   // An aside with neither a gesture nor a first message has nothing to attach
   // a message to — sending would start a stray root — so it cannot send.
   const attached = asideId ? Boolean(frame?.pending || frame?.rootNodeId) : true;
+  // A file is a question by itself ("what is this?").
   const sendable =
-    planIsSendable(plan, pending) && !streaming && Boolean(conversationId) && attached;
+    (planIsSendable(plan, pending) || files.length > 0) && !streaming && Boolean(conversationId) && attached;
+
+  const addFiles = async (picked: readonly File[]) => {
+    if (picked.length === 0) return;
+    const room = ATTACHMENT_LIMITS.perMessage - files.length;
+    const results = await Promise.all(picked.slice(0, Math.max(0, room)).map(prepareAttachment));
+    const added = results.filter((r): r is Attachment => !("refused" in r));
+    const refusals = results.flatMap((r) => ("refused" in r ? [r.refused] : []));
+    if (picked.length > room) refusals.push(`A message can carry at most ${ATTACHMENT_LIMITS.perMessage} files.`);
+    setFiles((current) => [...current, ...added].slice(0, ATTACHMENT_LIMITS.perMessage));
+    setFileNotice(refusals.length ? refusals.join(" ") : null);
+    textareaRef.current?.focus();
+  };
 
   // The thread's composer answers the global focus request; an aside's answers
   // its own gesture changing, which is what docking a quote into it looks like.
@@ -176,6 +201,7 @@ export function Composer() {
       ...(modelOverride ? { model: modelOverride } : {}),
       ...(effortOverride && provider?.kind === "claude-code" ? { effort: effortOverride } : {}),
       ...(pacingOverride !== null ? { pacing: pacingOverride } : {}),
+      ...(files.length ? { attachments: files } : {}),
       ...(asideId
         ? {
             detached: true,
@@ -192,6 +218,8 @@ export function Composer() {
     setModelOverride(null);
     setEffortOverride(null);
     setPacingOverride(null);
+    setFiles([]);
+    setFileNotice(null);
   };
 
   /**
@@ -204,7 +232,24 @@ export function Composer() {
   const quote = pending?.kind === "quote" ? pending : null;
 
   return (
-    <div className="composer">
+    <div
+      className={`composer${dragging ? " composer--dropping" : ""}`}
+      onDragOver={(e) => {
+        if (!e.dataTransfer.types.includes("Files")) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "copy";
+        setDragging(true);
+      }}
+      onDragLeave={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragging(false);
+      }}
+      onDrop={(e) => {
+        if (!e.dataTransfer.files.length) return;
+        e.preventDefault();
+        setDragging(false);
+        void addFiles([...e.dataTransfer.files]);
+      }}
+    >
       <div className="composer__inner">
         {quote ? (
           <div className="composer__gesture composer__gesture--quote">
@@ -232,52 +277,101 @@ export function Composer() {
         ) : null}
 
         <div className="composer__box">
-          <textarea
-            ref={textareaRef}
-            className="composer__input"
-            rows={1}
-            value={text}
-            placeholder={placeholderFor(pending?.kind, activeLeafId !== null)}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-                e.preventDefault();
-                send();
-              }
-              if (e.key === "Escape" && quote) {
-                e.preventDefault();
-                // Handled here, so the global Escape chain does not also fire
-                // and close the aside (or stop a stream) on the same keypress.
-                // Any other gesture lets Escape through: backing out of an
-                // aside is how its gesture is dropped.
-                e.stopPropagation();
-                setPending(null);
-              }
-            }}
-          />
-          {streaming ? (
+          <AttachmentChips files={files} onRemove={(id) => setFiles((current) => current.filter((f) => f.id !== id))} />
+          <div className="composer__row">
             <button
               type="button"
-              className="composer__send composer__send--stop"
-              onClick={stop}
-              title="Stop generating"
-              aria-label="Stop generating"
+              className="composer__attach"
+              onClick={() => fileInputRef.current?.click()}
+              title="Attach images, PDFs or text files — or paste or drop them here"
+              aria-label="Attach files"
             >
-              ■
+              <svg viewBox="0 0 16 16" aria-hidden>
+                <path
+                  d="M10.5 4.5 5.6 9.4a1.5 1.5 0 0 0 2.1 2.1l5-5a3 3 0 0 0-4.2-4.2l-5 5a4.5 4.5 0 0 0 6.4 6.4l4.4-4.4"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.4"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
             </button>
-          ) : (
-            <button
-              type="button"
-              className="composer__send"
-              disabled={!sendable}
-              onClick={send}
-              title="Send (Enter)"
-              aria-label="Send"
-            >
-              ↑
-            </button>
-          )}
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              hidden
+              onChange={(e) => {
+                void addFiles([...(e.target.files ?? [])]);
+                e.target.value = "";
+              }}
+            />
+            <textarea
+              ref={textareaRef}
+              className="composer__input"
+              rows={1}
+              value={text}
+              placeholder={placeholderFor(pending?.kind, activeLeafId !== null)}
+              onChange={(e) => setText(e.target.value)}
+              onPaste={(e) => {
+                // A screenshot or a copied image arrives as a file with no text;
+                // a paste that also has text (a document copies a picture of
+                // itself too) stays a text paste.
+                const pasted = [...e.clipboardData.files];
+                if (pasted.length === 0 || e.clipboardData.getData("text/plain")) return;
+                e.preventDefault();
+                void addFiles(pasted);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                  e.preventDefault();
+                  send();
+                }
+                if (e.key === "Escape" && quote) {
+                  e.preventDefault();
+                  // Handled here, so the global Escape chain does not also fire
+                  // and close the aside (or stop a stream) on the same keypress.
+                  // Any other gesture lets Escape through: backing out of an
+                  // aside is how its gesture is dropped.
+                  e.stopPropagation();
+                  setPending(null);
+                }
+              }}
+            />
+            {streaming ? (
+              <button
+                type="button"
+                className="composer__send composer__send--stop"
+                onClick={stop}
+                title="Stop generating"
+                aria-label="Stop generating"
+              >
+                ■
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="composer__send"
+                disabled={!sendable}
+                onClick={send}
+                title="Send (Enter)"
+                aria-label="Send"
+              >
+                ↑
+              </button>
+            )}
+          </div>
         </div>
+
+        {fileNotice ? (
+          <p className="composer__notice" role="status">
+            {fileNotice}
+            <button type="button" className="btn btn--ghost btn--sm" onClick={() => setFileNotice(null)} aria-label="Dismiss">
+              ✕
+            </button>
+          </p>
+        ) : null}
 
         <div className="composer__foot">
           {/*

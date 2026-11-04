@@ -555,3 +555,27 @@ leaves out is added (an image draws nothing without it), and a viewBox-only
 drawing is sized by its viewBox rather than the 300 px default. Selecting the
 picture quotes the whole block. Considered: Mermaid as well — easier diagrams,
 but a large dependency; the person chose SVG only (2026-11-03).
+
+**P-43 · A question can carry files: images, PDFs and text files, as part of
+its turn.** The composer takes them from 📎, a paste (a screenshot; a paste that
+also has text stays text) or a drop, at most ten per message. Each is read once,
+when it is added, into what will be sent and stored on the question's node as
+an optional field (no schema version): an image larger than 1568 px on its long
+edge — what Claude sees at most — is shrunk, as PNG or JPEG, under the API's
+5 MB; a PDF goes as it is, up to 10 MB; anything else is sent only if its bytes
+are UTF-8 text, up to 400 KB. A file belongs to its turn, so it goes wherever
+the turn is sent whole: every later turn of the thread re-sends it (the cache
+covers the repeat), and a departure — a window, a cut, a passage — carries its
+carved-out text without the files in it, though its own files go with it.
+Images and PDFs reach the model as themselves: Anthropic image and document
+blocks, the same blocks on Claude Code's stdin through the bridge (verified:
+Haiku read a PNG's colour and a PDF's word in one run), and OpenAI's
+`image_url` and `file` parts. Text files are written into the message through
+the user-editable `attachment` template, fenced, before the question's words,
+so they read the same on every provider and the wording stays a template; this
+replaced sending them as text documents, which only Claude takes. The record of
+what was sent names each file instead of copying it. The bridge admits only
+base64 images of the four types the API takes and base64 PDFs
+(`decodeContent()`), never a URL to fetch. An export carries the files, so it
+grows with them. Considered: a separate Dexie table for files, which keeps node
+records small but needs a version bump an older build cannot open.

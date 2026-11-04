@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type {
+  Attachment,
   BranchOrigin,
   ChatMessage,
   Conversation,
@@ -40,6 +41,8 @@ export interface SubmitRequest {
   effort?: Effort;
   /** Per-branch Pace answers (P-37). Absent means inherit from the branch. */
   pacing?: boolean;
+  /** Files attached to this question (P-43), stored on its node. */
+  attachments?: Attachment[];
   /**
    * Send without moving the app's cursor.
    *
@@ -366,6 +369,7 @@ export const useStore = create<AppState>((set, get) => ({
       ...(request.model ? { model: request.model } : {}),
       ...(request.effort ? { effort: request.effort } : {}),
       ...(typeof request.pacing === "boolean" ? { pacing: request.pacing } : {}),
+      ...(request.attachments?.length ? { attachments: request.attachments } : {}),
     };
 
     const detached = request.detached === true;
@@ -396,7 +400,8 @@ export const useStore = create<AppState>((set, get) => ({
         : {}),
     });
 
-    await touchConversation(set, get, conversationId, request.text);
+    // A question that is a file alone is named after the file until the model names it.
+    await touchConversation(set, get, conversationId, request.text || request.attachments?.[0]?.name || "");
     // The first finished reply in a conversation nobody has named yet: name it.
     const named = get().conversations.find((c) => c.id === conversationId)?.titleSource;
     if (!detached && request.parentId === null && !named && get().nodes[assistantNodeId]?.status === "complete") {

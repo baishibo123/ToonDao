@@ -1,5 +1,7 @@
 import { isEffort } from "@/lib/bridgeProtocol";
 import type {
+  Attachment,
+  AttachmentKind,
   Conversation,
   ConversationNode,
   ConversationProject,
@@ -85,6 +87,7 @@ const TEMPLATE_IDS: TemplateId[] = [
   "pacing",
   "learning_map",
   "title",
+  "attachment",
 ];
 
 /**
@@ -188,6 +191,7 @@ export function parseBundle(
         : {}),
       ...(typeof value.error === "string" ? { error: value.error } : {}),
       ...parseBridgeRecord(value),
+      ...parseAttachments(value.attachments),
     };
   });
 
@@ -289,6 +293,36 @@ function parseBridgeRecord(value: Record<string, unknown>): Partial<Conversation
     };
   }
   return out;
+}
+
+/**
+ * A question's files (P-43). Each is kept only whole — a kind, a name and its
+ * data — so a hand-edited bundle cannot put a half-file into a prompt. Their
+ * ids are local to the node and need no remap.
+ */
+function parseAttachments(value: unknown): Pick<ConversationNode, "attachments"> {
+  if (!Array.isArray(value)) return {};
+  const attachments: Attachment[] = value
+    .filter(isRecord)
+    .filter(
+      (a) =>
+        (a.kind === "image" || a.kind === "pdf" || a.kind === "text") &&
+        typeof a.name === "string" &&
+        typeof a.mediaType === "string" &&
+        typeof a.data === "string",
+    )
+    .map((a) => ({
+      id: typeof a.id === "string" ? a.id : newId("f"),
+      kind: a.kind as AttachmentKind,
+      name: a.name as string,
+      mediaType: a.mediaType as string,
+      data: a.data as string,
+      bytes: numberOr(a.bytes, (a.data as string).length),
+      ...(typeof a.width === "number" ? { width: a.width } : {}),
+      ...(typeof a.height === "number" ? { height: a.height } : {}),
+      ...(typeof a.pages === "number" ? { pages: a.pages } : {}),
+    }));
+  return attachments.length ? { attachments } : {};
 }
 
 /**

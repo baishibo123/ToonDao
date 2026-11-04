@@ -7,6 +7,7 @@ import type {
   TemplateSet,
 } from "@/types";
 import { asBlockquote, renderTemplate } from "@/lib/templates";
+import { attachmentLabel, fenced } from "@/lib/attachments";
 
 /**
  * THE prompt constructor. Pure, synchronous, deterministic.
@@ -46,7 +47,7 @@ export function assembleContext(
 
   switch (policy.kind) {
     case "full-ancestry":
-      return withSystem(lineageMessages(node, store, templates, none), opts, templates);
+      return withSystem(lineageMessages(node, store, templates, none, true), opts, templates);
 
     // A departure is sent as one user message (A-2), and the same text stands
     // in for everything above the aside in every later turn there (P-27), so
@@ -55,7 +56,7 @@ export function assembleContext(
     case "truncated":
     case "isolated":
       return withSystem(
-        [{ role: "user", content: departurePrompt(node, store, templates, none) }],
+        [{ role: "user", content: departurePrompt(node, store, templates, none, true), ...sentFiles(node) }],
         opts,
         templates,
       );
@@ -66,11 +67,11 @@ export function assembleContext(
       if (parent) {
         base =
           policy.base === "windowed"
-            ? windowedMessages(parent.id, policy.turns ?? 2, store, templates, none)
-            : lineageMessages(parent, store, templates, none);
+            ? windowedMessages(parent.id, policy.turns ?? 2, store, templates, none, true)
+            : lineageMessages(parent, store, templates, none, true);
       }
-      const body = `${asBlockquote(policy.quote)}\n\n${node.content}`.trimEnd();
-      return withSystem([...base, { role: "user", content: body }], opts, templates);
+      const body = withFiles(`${asBlockquote(policy.quote)}\n\n${node.content}`.trimEnd(), node, templates);
+      return withSystem([...base, { role: "user", content: body, ...sentFiles(node) }], opts, templates);
     }
   }
 }
@@ -84,30 +85,39 @@ export function assembleContext(
  * departure (an aside inside an aside), so this recurses. In a well-formed
  * tree it only ever moves upward; `visiting` keeps a corrupt cycle from
  * hanging the UI.
+ *
+ * Files (P-43): the window or the cut is carved-out text, so the turns inside
+ * it carry none of theirs; a departure's own files are part of the message it
+ * was sent as, and `files` says whether this prompt is being sent as a message
+ * (true) or quoted inside another departure's text (false).
  */
 function departurePrompt(
   node: ConversationNode,
   store: NodeStore,
   templates: TemplateSet,
   visiting: ReadonlySet<NodeId>,
+  files: boolean,
 ): string {
   if (visiting.has(node.id)) return node.content;
+  const own = (text: string) => (files ? withFiles(text, node, templates) : text);
   const inner = new Set(visiting).add(node.id);
   const policy = node.contextPolicy;
 
   switch (policy.kind) {
     case "windowed": {
-      const window = windowedMessages(policy.upToNodeId, policy.turns, store, templates, inner);
-      return renderTemplate(templates.concept_lens, {
-        context_turns: asProse(window),
-        concept: node.content,
-      });
+      const window = windowedMessages(policy.upToNodeId, policy.turns, store, templates, inner, false);
+      return own(
+        renderTemplate(templates.concept_lens, {
+          context_turns: asProse(window),
+          concept: node.content,
+        }),
+      );
     }
 
     case "truncated": {
       const source = store.get(policy.upToNodeId);
       const above = source?.parentId ? store.get(source.parentId) : undefined;
-      const before = above ? lineageMessages(above, store, templates, inner) : [];
+      const before = above ? lineageMessages(above, store, templates, inner, false) : [];
       const head = source
         ? source.content.slice(0, clampOffset(policy.charOffset, source.content))
         : "";
@@ -120,13 +130,12 @@ function departurePrompt(
       const body = renderTemplate(templates.structural_crop, {
         truncated_context: asProse(truncated),
       });
-      return appendNote(body, node);
+      return own(appendNote(body, node));
     }
 
     case "isolated":
-      return appendNote(
-        renderTemplate(templates.isolated_selection, { selection: policy.payload }),
-        node,
+      return own(
+        appendNote(renderTemplate(templates.isolated_selection, { selection: policy.payload }), node),
       );
 
     case "full-ancestry":
@@ -210,15 +219,22 @@ export function contextStart(
   return first && first.id !== asked.id && isContextRoot(first) ? first : null;
 }
 
+/**
+ * The lineage as messages. `files` is true when they are sent as messages, so
+ * each question brings its files along; false when they become a departure's
+ * prose, which is text alone.
+ */
 function lineageMessages(
   node: ConversationNode,
   store: NodeStore,
   templates: TemplateSet,
   visiting: ReadonlySet<NodeId>,
+  files: boolean,
 ): ChatMessage[] {
   return lineageChain(node, store, { inclusive: true }).map((n) => ({
     role: n.role,
-    content: ancestorContent(n, store, templates, visiting),
+    content: ancestorContent(n, store, templates, visiting, files),
+    ...(files ? sentFiles(n) : {}),
   }));
 }
 
@@ -233,10 +249,11 @@ function windowedMessages(
   store: NodeStore,
   templates: TemplateSet,
   visiting: ReadonlySet<NodeId>,
+  files: boolean,
 ): ChatMessage[] {
   const target = store.get(upToNodeId);
   if (!target) return [];
-  const all = lineageMessages(target, store, templates, visiting);
+  const all = lineageMessages(target, store, templates, visiting, files);
   const wanted = Math.max(1, Math.floor(turns)) * 2;
   const slice = all.slice(Math.max(0, all.length - wanted));
   while (slice.length > 1 && slice[0].role === "assistant") slice.shift();
@@ -257,12 +274,14 @@ function ancestorContent(
   store: NodeStore,
   templates: TemplateSet,
   visiting: ReadonlySet<NodeId>,
+  files: boolean,
 ): string {
   if (node.role === "assistant") return node.content;
-  if (isContextRoot(node)) return departurePrompt(node, store, templates, visiting);
+  if (isContextRoot(node)) return departurePrompt(node, store, templates, visiting, files);
   const policy = node.contextPolicy;
-  if (policy.kind === "quoted") return `${asBlockquote(policy.quote)}\n\n${node.content}`.trimEnd();
-  return node.content;
+  const body =
+    policy.kind === "quoted" ? `${asBlockquote(policy.quote)}\n\n${node.content}`.trimEnd() : node.content;
+  return files ? withFiles(body, node, templates) : body;
 }
 
 /* ------------------------------------------------------------------ */
@@ -285,6 +304,26 @@ function appendNote(body: string, node: ConversationNode): string {
   const note = node.content.trim();
   if (!note) return body;
   return `${body}\n\n${note}`;
+}
+
+/**
+ * A question's text files, each through the `attachment` template, before its
+ * own words (P-43). Text is text on every provider, so these are written into
+ * the message rather than handed to an adapter.
+ */
+function withFiles(text: string, node: ConversationNode, templates: TemplateSet): string {
+  const texts = (node.attachments ?? []).filter((a) => a.kind === "text");
+  if (texts.length === 0) return text;
+  const files = texts.map((a) =>
+    renderTemplate(templates.attachment, { name: a.name, contents: fenced(a.data, a.name) }),
+  );
+  return [...files, text].filter((part) => part.trim()).join("\n\n");
+}
+
+/** A question's images and PDFs, which a provider adapter places beside the text. */
+function sentFiles(node: ConversationNode): Pick<ChatMessage, "attachments"> {
+  const binary = (node.attachments ?? []).filter((a) => a.kind !== "text");
+  return binary.length ? { attachments: binary } : {};
 }
 
 function clampOffset(offset: number, content: string): number {
@@ -374,6 +413,10 @@ export function policyLabel(policy: ContextPolicy, start?: ContextPolicy): strin
  *  `assembledPreview`. This is a *record*, not a prompt — never send it. */
 export function formatPayload(messages: ChatMessage[]): string {
   return messages
-    .map((m) => `### ${m.role}\n${m.content}`)
+    .map((m) => {
+      // A file is named, not copied: the record stays readable and small.
+      const files = (m.attachments ?? []).map(attachmentLabel).join("\n");
+      return `### ${m.role}\n${files ? `${files}\n` : ""}${m.content}`;
+    })
     .join("\n\n---\n\n");
 }

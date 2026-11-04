@@ -1,6 +1,7 @@
 import type { ChatMessage, ProviderConfig } from "@/types";
 import { ProviderError, type ChatOpts, type Delta, type Provider } from "./types";
 import { readSSE } from "./sse";
+import { openAIContent } from "./content";
 
 /**
  * OpenAI-compatible adapter — the lingua franca. POST /chat/completions, SSE.
@@ -21,7 +22,7 @@ export function createOpenAICompatibleProvider(config: ProviderConfig): Provider
 
       const body: Record<string, unknown> = {
         model: opts.model,
-        messages,
+        messages: messages.map((m) => ({ role: m.role, content: openAIContent(m) })),
         stream: true,
       };
       if (opts.temperature !== undefined) body.temperature = opts.temperature;

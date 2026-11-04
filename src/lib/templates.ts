@@ -40,6 +40,11 @@ Treat the text above as the entire context. Answer only about it.`,
   // method is the learn-project skill's, kept general: no project is assumed to
   // have decision records, and the language is the reader's — their standing
   // instructions first (P-33), since this message itself is in English.
+  // P-43: a text or code file attached to a question, written into its message.
+  attachment: `Attached file: {{name}}
+
+{{contents}}`,
+
   // P-34: a conversation's title, written by the model in one short request
   // after the first reply, or when the person asks for it again. Kept small on
   // purpose: the asks and an answer's opening, clipped, and nothing else.
@@ -102,6 +107,11 @@ export const TEMPLATE_META: Record<
     label: "Title",
     vars: ["asks", "answer"],
     note: "P-34 — one short request after a conversation's first reply, and on ↻ beside its title. {{asks}} is the person's messages on the thread, clipped; {{answer}} the opening of the latest reply. Sent without the system prompt or pacing.",
+  },
+  attachment: {
+    label: "Attached file",
+    vars: ["name", "contents"],
+    note: "P-43 — a text or code file attached to a question, placed before the question's own words. {{name}} is the file name; {{contents}} the file, already fenced as a code block. Images and PDFs are sent as themselves and do not use this.",
   },
   learning_map: {
     label: "Learning map",

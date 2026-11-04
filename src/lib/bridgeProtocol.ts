@@ -69,10 +69,53 @@ export interface ProjectRef {
   snapshot: string;
 }
 
+/**
+ * A part of a question that is not its text (P-43), in the Anthropic API's own
+ * shape, which is also what Claude Code takes on stdin. Only base64 sources:
+ * a question carries its files, never a link for the bridge to follow.
+ */
+export type WireBlock =
+  | { type: "text"; text: string }
+  | { type: "image"; source: { type: "base64"; media_type: WireImageType; data: string } }
+  | { type: "document"; source: { type: "base64"; media_type: "application/pdf"; data: string }; title?: string };
+
+export const WIRE_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"] as const;
+export type WireImageType = (typeof WIRE_IMAGE_TYPES)[number];
+
+/** A message's content as the bridge received it, or null when it is neither a string nor blocks of the shapes above. */
+export function decodeContent(value: unknown): string | WireBlock[] | null {
+  if (typeof value === "string") return value;
+  if (!Array.isArray(value) || value.length === 0) return null;
+  const blocks: WireBlock[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object") return null;
+    const block = item as Record<string, unknown>;
+    const source = (block.source && typeof block.source === "object" ? block.source : {}) as Record<string, unknown>;
+    const base64 = source.type === "base64" && typeof source.data === "string" && /^[A-Za-z0-9+/]*={0,2}$/.test(source.data);
+    if (block.type === "text" && typeof block.text === "string") {
+      blocks.push({ type: "text", text: block.text });
+    } else if (block.type === "image" && base64 && (WIRE_IMAGE_TYPES as readonly unknown[]).includes(source.media_type)) {
+      blocks.push({
+        type: "image",
+        source: { type: "base64", media_type: source.media_type as WireImageType, data: source.data as string },
+      });
+    } else if (block.type === "document" && base64 && source.media_type === "application/pdf") {
+      blocks.push({
+        type: "document",
+        source: { type: "base64", media_type: "application/pdf", data: source.data as string },
+        ...(typeof block.title === "string" ? { title: block.title } : {}),
+      });
+    } else {
+      return null;
+    }
+  }
+  return blocks;
+}
+
 /** The body the adapter posts. Standard fields, plus one namespaced extension. */
 export interface BridgeRequest {
   model: string;
-  messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
+  messages: Array<{ role: "system" | "user" | "assistant"; content: string | WireBlock[] }>;
   stream: true;
   toondao?: { toolScope?: ToolScope; project?: ProjectRef; effort?: Effort };
 }

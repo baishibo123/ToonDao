@@ -2,6 +2,7 @@ import type { ChatMessage, ProviderConfig } from "@/types";
 import { ProviderError, type ChatOpts, type Delta, type Provider } from "./types";
 import { readSSE } from "./sse";
 import { errorDetail, joinUrl } from "./openai";
+import { claudeContent } from "./content";
 import {
   decodeBridgeFrame,
   decodeProject,
@@ -26,7 +27,7 @@ export function createClaudeCodeProvider(config: ProviderConfig): Provider {
       const url = joinUrl(config.baseUrl, "chat/completions");
       const body: BridgeRequest = {
         model: opts.model,
-        messages,
+        messages: messages.map((m) => ({ role: m.role, content: claudeContent(m) })),
         stream: true,
         toondao: {
           toolScope: opts.toolScope ?? "none",

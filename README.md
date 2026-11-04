@@ -29,6 +29,11 @@ Every aside is also a row in the sidebar, nested under what it left. An aside
 keeps its move's promise for as long as you talk in it: a follow-up carries what
 the move carried plus the aside's own turns, never the rest of the thread.
 
+A question can carry **files** — images, PDFs and text or code files — from 📎,
+a paste or a drop; they stay with that turn of the thread, and an aside carries
+only the text it carved out. When a reply draws in **SVG**, the drawing is shown,
+with its source a click away.
+
 Every message has a **context** action showing exactly what the model was sent.
 Where a payload is anything other than the conversation on screen, the message
 says so above its text, and the composer shows it before you send.

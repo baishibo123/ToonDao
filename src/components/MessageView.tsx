@@ -1,4 +1,5 @@
 import { memo, useMemo, useRef } from "react";
+import { AttachmentChips } from "@/components/Attachments";
 import { nodeStoreFromMap, type ConversationNode } from "@/types";
 import { Markdown } from "@/components/Markdown";
 import { Inspector } from "@/components/ContextChip";
@@ -126,6 +127,8 @@ export const MessageView = memo(function MessageView({ node }: MessageViewProps)
             ))}
           </p>
         ) : null}
+
+        {node.attachments?.length ? <AttachmentChips files={node.attachments} /> : null}
 
         <div className="msg__content" ref={contentRef}>
           <TailDimmedContent node={node} cropAt={cropHover} />

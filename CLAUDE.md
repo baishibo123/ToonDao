@@ -28,6 +28,11 @@ Rules that hold for the life of the project. Why each one exists is in
 - **Every prompt text the app injects is a template** (`src/lib/templates.ts`,
   user-editable, stored in IndexedDB). Never hardcode prompt wording at a call
   site; read it from the store's `TemplateSet`.
+- **A file is part of its question's turn** (`ConversationNode.attachments`,
+  P-43). It is sent wherever that turn is sent whole and never inside a
+  departure's carved-out text; `assembleContext()` decides which messages carry
+  files, the adapters in `src/providers/content.ts` only reshape them, and text
+  files go into the message through the `attachment` template.
 - **`assembledPreview` is historical.** It records what was actually sent and is
   never recomputed.
 

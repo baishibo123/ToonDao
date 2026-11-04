@@ -33,6 +33,7 @@ import {
   sseError,
   sseEvent,
   sseText,
+  decodeContent,
   isEffort,
   type Effort,
   type RateLimit,
@@ -1062,8 +1063,10 @@ function parseMessages(value: unknown): ChatMessage[] | null {
     if (!item || typeof item !== "object") return null;
     const { role, content } = item as Record<string, unknown>;
     if (role !== "system" && role !== "user" && role !== "assistant") return null;
-    if (typeof content !== "string") return null;
-    out.push({ role, content });
+    // A question's files arrive as blocks (P-43); the shared decoder admits only base64 images and PDFs.
+    const decoded = decodeContent(content);
+    if (decoded === null) return null;
+    out.push({ role, content: decoded });
   }
   return out;
 }
