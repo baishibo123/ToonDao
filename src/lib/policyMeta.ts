@@ -87,6 +87,18 @@ export const LATER_META = {
   blurb: "Parked, not chased: marked where it is, listed in the sidebar, asked when you are ready.",
 } as const;
 
+/**
+ * Not a branch kind either: a rewind sends an ordinary continuation (or quote
+ * reply) that takes the thread over from the question it asks again (P-44).
+ */
+export const REWIND_META = {
+  label: "Asking again",
+  action: "rewind",
+  glyph: "↺",
+  cssVar: "--hue-continuation",
+  blurb: "Ask this again from here. What followed it moves to a side row; nothing is deleted.",
+} as const;
+
 export const POLICY_CLASS: Record<PolicyKind, string> = {
   "full-ancestry": "",
   windowed: "chip--windowed",

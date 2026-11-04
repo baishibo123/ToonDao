@@ -403,3 +403,50 @@ describe("a second continuation off an earlier message", () => {
     expect(branchLabel(forked.user)).toBe("what about the other case?");
   });
 });
+
+describe("P-44 rewind — the reply's line names the question that holds the thread", () => {
+  /** q1 a1 q2 a2 q3 a3, then q2 asked again under a1. */
+  function rewound() {
+    const t = new TreeFixture();
+    const [q1, a1, q2, a2, q3, a3] = t.linear(3);
+    const again = t.add("user", "question asked again", a1!.id);
+    const reply = t.add("assistant", "answer to it", again.id);
+    return { t, q1: q1!, a1: a1!, q2: q2!, a2: a2!, q3: q3!, a3: a3!, again, reply };
+  }
+
+  it("without a line, the oldest holds it, as before", () => {
+    const { t, a1, q2, again } = rewound();
+    const nodes = mapOf(t);
+    expect(spineChild(nodes, a1.id)?.id).toBe(q2.id);
+    expect(buildOutline(nodes, t.conversationId).threads[0]!.children.map((c) => c.headNodeId)).toEqual([again.id]);
+  });
+
+  it("with one, the transcript's rule and the sidebar's agree: the new version is the thread, the old tail a fork", () => {
+    const { t, q1, a1, q2, a3, again, reply } = rewound();
+    a1.line = again.id;
+    const nodes = mapOf(t);
+    expect(spineChild(nodes, a1.id)?.id).toBe(again.id);
+    expect(spineLeaf(nodes, q1.id)).toBe(reply.id);
+    expect(forksOf(nodes, a1.id).map((n) => n.id)).toEqual([q2.id]);
+
+    const outline = buildOutline(nodes, t.conversationId);
+    const main = outline.threads[0]!;
+    expect(main.leafNodeId).toBe(reply.id);
+    expect(main.children.map((c) => c.headNodeId)).toEqual([q2.id]);
+    expect(threadOf(outline, a3.id)?.depth).toBe(1);
+  });
+
+  it("a remembered choice still wins in the transcript, and never moves a row", () => {
+    const { t, a1, q2, again } = rewound();
+    a1.line = again.id;
+    const nodes = mapOf(t);
+    expect(spineChild(nodes, a1.id, { [a1.id]: q2.id })?.id).toBe(q2.id);
+    expect(buildOutline(nodes, t.conversationId).threads[0]!.children.map((c) => c.headNodeId)).toEqual([q2.id]);
+  });
+
+  it("a line naming a question that is gone falls back to the oldest", () => {
+    const { t, a1, q2 } = rewound();
+    a1.line = "deleted";
+    expect(spineChild(mapOf(t), a1.id)?.id).toBe(q2.id);
+  });
+});

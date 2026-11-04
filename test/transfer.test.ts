@@ -475,3 +475,21 @@ describe("hostile and damaged input", () => {
     expect(parsed.templates).toEqual({ concept_lens: "custom" });
   });
 });
+
+describe("a rewind's line (P-44)", () => {
+  it("survives an import, remapped with every other id", () => {
+    const t = new TreeFixture();
+    const [, a1] = t.linear(2);
+    const again = t.add("user", "asked again", a1!.id);
+    a1!.line = again.id;
+    const conversation: Conversation = {
+      id: t.conversationId, title: "Rewound", createdAt: 1, updatedAt: 2, rootId: t.all()[0]!.id, activeNodeId: again.id,
+    };
+    const raw = JSON.stringify(buildBundle({ conversations: [conversation], nodes: t.all(), templates: T, settings: DEFAULT_SETTINGS }));
+    const parsed = parseBundle(raw, { conversations: new Set([conversation.id]), nodes: new Set(t.all().map((n) => n.id)) });
+    const reply = parsed.nodes.find((n) => n.content === a1!.content)!;
+    const asked = parsed.nodes.find((n) => n.content === "asked again")!;
+    expect(asked.id).not.toBe(again.id);
+    expect(reply.line).toBe(asked.id);
+  });
+});

@@ -55,6 +55,12 @@ export interface ConversationNode {
    * branch, asides included, found by walking up like `effort` (P-37).
    */
   pacing?: boolean;
+  /**
+   * On a reply: which of its next questions carries the thread, set only by a
+   * rewind (P-44). Without it the oldest does. Lineage is untouched: the
+   * question it replaced keeps its place in the tree, as a fork.
+   */
+  line?: NodeId;
   /** On a user node: the files attached to this question (P-43). */
   attachments?: Attachment[];
   /** Outside sources the model used while writing this reply (bridge only). */

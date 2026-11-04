@@ -192,6 +192,7 @@ export function parseBundle(
       ...(typeof value.error === "string" ? { error: value.error } : {}),
       ...parseBridgeRecord(value),
       ...parseAttachments(value.attachments),
+      ...(typeof value.line === "string" ? { line: mapNode(value.line) } : {}),
     };
   });
 

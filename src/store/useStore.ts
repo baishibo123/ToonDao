@@ -44,6 +44,12 @@ export interface SubmitRequest {
   /** Files attached to this question (P-43), stored on its node. */
   attachments?: Attachment[];
   /**
+   * Set when this question asks an earlier one again (P-44): the reply above
+   * both names the new one as its `line`, so the thread follows it and the
+   * earlier question, with everything after it, becomes a fork.
+   */
+  rewinds?: NodeId;
+  /**
    * Send without moving the app's cursor.
    *
    * A branch sent from its own window must not drag the main transcript into
@@ -373,6 +379,11 @@ export const useStore = create<AppState>((set, get) => ({
     };
 
     const detached = request.detached === true;
+    // The line moves before the question lands, so the cursor commitNode sets
+    // is on the root spine from the first render.
+    if (request.rewinds && request.parentId && get().nodes[request.parentId]) {
+      await patchNode(set, request.parentId, { line: userNode.id });
+    }
     await commitNode(set, get, userNode, detached);
 
     // Assemble once, here. The payload is recorded on the node before the
@@ -447,9 +458,11 @@ export const useStore = create<AppState>((set, get) => ({
     const idSet = new Set(ids);
 
     await db.nodes.bulkDelete(ids);
+    // Deleting the version a rewind put on the line gives the line back to the oldest.
+    const unline = Boolean(node.parentId && nodes[node.parentId]?.line === id);
     if (node.parentId && nodes[node.parentId]) {
       const remaining = nodes[node.parentId].childrenIds.filter((c) => c !== id);
-      await db.nodes.update(node.parentId, { childrenIds: remaining });
+      await db.nodes.update(node.parentId, { childrenIds: remaining, ...(unline ? { line: undefined } : {}) });
     }
     // A parked passage whose message is gone can never be asked about.
     const parked = get().conversations.find((c) => c.id === node.conversationId)?.later;
@@ -464,7 +477,11 @@ export const useStore = create<AppState>((set, get) => ({
         if (idSet.has(key)) continue;
         next[key] =
           value.id === node.parentId
-            ? { ...value, childrenIds: value.childrenIds.filter((c) => c !== id) }
+            ? {
+                ...value,
+                childrenIds: value.childrenIds.filter((c) => c !== id),
+                ...(unline ? { line: undefined } : {}),
+              }
             : value;
       }
       const stillValid = activeNodeId && !idSet.has(activeNodeId);

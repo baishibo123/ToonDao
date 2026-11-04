@@ -51,6 +51,26 @@ export function planSubmission(args: {
   }
 
   switch (pending.kind) {
+    // P-44 — the question asked again, under the same reply as before. It
+    // continues the thread (the reply's `line` moves to it once sent), so it
+    // does not fork; a quote reply keeps its quote.
+    case "rewind":
+      return pending.quote
+        ? {
+            parentId: pending.parentId,
+            policy: { kind: "quoted", quote: pending.quote.anchor.text, base: "full-ancestry" },
+            origin: { kind: "quote-reply", sourceNodeId: pending.quote.sourceNodeId, anchor: pending.quote.anchor },
+            content: text,
+            forks: false,
+          }
+        : {
+            parentId: pending.parentId,
+            policy: { kind: "full-ancestry" },
+            origin: { kind: "continuation", sourceNodeId: pending.parentId },
+            content: text,
+            forks: false,
+          };
+
     // §5.4 — the messaging-app gesture. The one of the four that extends the
     // current path instead of opening a branch, because that is the social
     // convention it borrows from.

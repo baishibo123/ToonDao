@@ -4,7 +4,7 @@ import { nodeStoreFromMap, type ConversationNode } from "@/types";
 import { Markdown } from "@/components/Markdown";
 import { Inspector } from "@/components/ContextChip";
 import { contextStart, policyLabel } from "@/lib/assembleContext";
-import { BRANCH_META, branchColor } from "@/lib/policyMeta";
+import { BRANCH_META, REWIND_META, branchColor } from "@/lib/policyMeta";
 import { useStore } from "@/store/useStore";
 import { useUI } from "@/store/useUI";
 import { siblingsOf } from "@/lib/tree";
@@ -12,6 +12,7 @@ import { branchLabel, forksOf, spineLeaf } from "@/lib/outline";
 import { CropRail } from "@/components/CropRail";
 import { messageDomId, useSurface } from "@/components/Surface";
 import { focusNode } from "@/store/focusNode";
+import { useStartGesture } from "@/hooks/useStartGesture";
 
 interface MessageViewProps {
   node: ConversationNode;
@@ -28,6 +29,22 @@ export const MessageView = memo(function MessageView({ node }: MessageViewProps)
   const assemble = useStore((s) => s.assemble);
   const setAsideActive = useUI((s) => s.setAsideActive);
   const toggleInspector = useUI((s) => s.toggleInspector);
+  const startGesture = useStartGesture();
+  /**
+   * While a rewind is being written (P-44), this message and everything after
+   * it on the thread is what will move to a side row, so it is dimmed. The
+   * thread shows one path, so "after it" is "has it as an ancestor".
+   */
+  const rewindFrom = useUI((s) => (!asideId && s.pending?.kind === "rewind" ? s.pending.nodeId : null));
+  const rewound = useMemo(() => {
+    if (!rewindFrom) return false;
+    const seen = new Set<string>();
+    for (let cursor: string | null = node.id; cursor && !seen.has(cursor); cursor = nodes[cursor]?.parentId ?? null) {
+      if (cursor === rewindFrom) return true;
+      seen.add(cursor);
+    }
+    return false;
+  }, [rewindFrom, node.id, nodes]);
 
   const openInspector = useUI((s) => s.openInspectors.has(node.id));
   const cropHover = useUI((s) => (s.cropHover?.nodeId === node.id ? s.cropHover.charOffset : null));
@@ -89,7 +106,7 @@ export const MessageView = memo(function MessageView({ node }: MessageViewProps)
 
   return (
     <article
-      className={`msg msg--${node.role}`}
+      className={`msg msg--${node.role}${rewound ? " msg--rewound" : ""}`}
       id={messageDomId(node.id, asideId)}
       data-node-id={node.id}
     >
@@ -213,6 +230,26 @@ export const MessageView = memo(function MessageView({ node }: MessageViewProps)
                 ? "context"
                 : `context · ${policyLabel(node.contextPolicy)}`}
             </button>
+            {/* P-44: the thread's questions only, and not the first, which hangs off no reply. */}
+            {node.role === "user" && !asideId && node.parentId && nodes[node.parentId]?.role === "assistant" && !streamingNodeId ? (
+              <button
+                type="button"
+                className="btn btn--ghost btn--sm"
+                onClick={() =>
+                  startGesture({
+                    kind: "rewind",
+                    nodeId: node.id,
+                    parentId: node.parentId!,
+                    ...(node.origin?.kind === "quote-reply" && node.origin.anchor
+                      ? { quote: { sourceNodeId: node.origin.sourceNodeId, anchor: node.origin.anchor } }
+                      : {}),
+                  })
+                }
+                title={REWIND_META.blurb}
+              >
+                {REWIND_META.glyph} {REWIND_META.action}
+              </button>
+            ) : null}
             {node.parentId ? (
               <button
                 type="button"

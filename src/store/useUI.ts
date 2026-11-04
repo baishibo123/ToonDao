@@ -19,6 +19,17 @@ export type PendingGesture =
       charOffset: number;
       blockPath: string;
       discardedChars: number;
+    }
+  /**
+   * Asking an earlier question of the thread again (P-44). The new question
+   * goes under the same reply and takes the thread over; `quote` keeps the
+   * passage a quote reply answered.
+   */
+  | {
+      kind: "rewind";
+      nodeId: NodeId;
+      parentId: NodeId;
+      quote?: { sourceNodeId: NodeId; anchor: TextAnchor };
     };
 
 export interface Rect {
@@ -116,7 +127,8 @@ interface UIState {
   /** Opens an aside for a gesture that has not been sent yet. `from` is the
    *  aside it was started in; without it, the aside replaces the whole stack. */
   openAside: (args: {
-    gesture: PendingGesture;
+    /** A rewind never opens an aside: it stays in the thread. */
+    gesture: Exclude<PendingGesture, { kind: "rewind" }>;
     conversationId: string;
     from?: string;
   }) => string;

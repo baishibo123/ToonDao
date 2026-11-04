@@ -20,8 +20,10 @@ import { childrenOf, type NodeMap } from "@/lib/tree";
  * WHAT A ROW IS. The outline has one row per spine, nested under the spine it
  * left. Where a turn has two children that could each carry the line — you came
  * back and asked something else — the *oldest* holds it and the later one
- * becomes a nested row. An index that reorders itself as you navigate is
- * unusable, so the choice is stable rather than live.
+ * becomes a nested row, unless a rewind named the one that holds it (the
+ * reply's `line`, P-44). An index that reorders itself as you navigate is
+ * unusable, so the choice is stable rather than live: only a rewind, which you
+ * make on purpose, moves it.
  */
 
 /* ------------------------------------------------------------------ */
@@ -148,9 +150,12 @@ export function buildOutline(nodes: NodeMap, conversationId: string | null): Out
   const byId = new Map<string, OutlineThread>();
   const seen = new Set<string>();
 
-  /** The oldest trunk-kind child keeps the line. See the note above. */
-  const spineNext = (group: TurnGroup): TurnGroup | null =>
-    (childrenByParent.get(group.id) ?? []).find((k) => isTrunkKind(k.edgeKind)) ?? null;
+  /** The child a rewind named keeps the line, else the oldest trunk-kind one. See the note above. */
+  const spineNext = (group: TurnGroup): TurnGroup | null => {
+    const carrying = (childrenByParent.get(group.id) ?? []).filter((k) => isTrunkKind(k.edgeKind));
+    const named = carrying.find((k) => k.user.parentId !== null && nodes[k.user.parentId]?.line === k.user.id);
+    return named ?? carrying[0] ?? null;
+  };
 
   const build = (head: TurnGroup, depth: number): OutlineThread => {
     const turnIds: string[] = [];
@@ -232,8 +237,9 @@ export function threadOf(outline: Outline, nodeId: NodeId | null): OutlineThread
  *     or an isolation departs, and departures get their own window.
  *
  * Where a node has two children that could each carry the line, the remembered
- * choice wins, then the oldest — the same tie-break `buildOutline()` uses, so
- * the transcript and the sidebar never disagree about which line is which.
+ * choice wins, then the one a rewind named (`line`), then the oldest — the same
+ * tie-break `buildOutline()` uses after the remembered choice, so the
+ * transcript and the sidebar never disagree about which line is which.
  */
 export function spineChild(
   nodes: NodeMap,
@@ -256,7 +262,7 @@ export function spineChild(
     (kid) => kid.role === "user" && isTrunkKind(kid.origin?.kind ?? "continuation"),
   );
   if (carrying.length === 0) return null;
-  return carrying.find((kid) => kid.id === want) ?? carrying[0];
+  return carrying.find((kid) => kid.id === want) ?? carrying.find((kid) => kid.id === node.line) ?? carrying[0];
 }
 
 /** Down one spine to its end. Never crosses into a fork. */

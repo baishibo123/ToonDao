@@ -476,6 +476,10 @@
   border-left-width: 3px;
 }
 .composer__gesture--quote { border-left-color: var(--hue-quote); }
+.composer__gesture--rewind { border-left-color: var(--hue-continuation); }
+
+/* P-44: while a rewind is written, what will move to a side row recedes. */
+.msg--rewound { opacity: 0.38; transition: opacity var(--transition); }
 .composer__gesture--isolated { border-left-color: var(--hue-isolated); }
 .composer__gesture--concept { border-left-color: var(--hue-lens); }
 .composer__gesture--crop { border-left-color: var(--hue-crop); }

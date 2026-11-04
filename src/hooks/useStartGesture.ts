@@ -34,7 +34,8 @@ export function useStartGesture(): (
 
   return useCallback(
     (gesture, opts = {}) => {
-      if (gestureOpensAside(gesture)) {
+      // A rewind never forks (P-44); the kind check only narrows the type.
+      if (gesture.kind !== "rewind" && gestureOpensAside(gesture)) {
         if (!conversationId) return;
         openAside({
           gesture,

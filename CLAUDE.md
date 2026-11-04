@@ -44,7 +44,8 @@ Rules that hold for the life of the project. Why each one exists is in
 - **`activeNodeId` stays on the root spine.** Everything that moves it must land
   there: `mainSpineCursor()` on load and after a delete, `focusNode()` for
   navigation, and `commitNode()` for a thread send, which extends the root
-  spine by construction. Aside sends are `detached` and never move it.
+  spine by construction — a rewind's question lands on it because its reply's
+  `line` is set first (P-44). Aside sends are `detached` and never move it.
 - **`focusNode()` in `src/store/focusNode.ts` is the only router.** Anything that
   means "go to this node" calls it; nothing else decides between the thread and
   an aside.
@@ -53,7 +54,8 @@ Rules that hold for the life of the project. Why each one exists is in
 - **The spine rule is stated twice and the two must agree**, both in
   `src/lib/outline.ts`: `spineChild()` per node (used by `spineLeaf()`,
   `forksOf()` and the transcript) and `spineNext` inside `buildOutline()` per
-  turn (used by the sidebar). Both use `isTrunkKind()` and break ties
+  turn (used by the sidebar). Both use `isTrunkKind()`, give the line to the
+  child a rewind named in the reply's `line` (P-44), and otherwise break ties
   oldest-first. `spineChild()` also honours the remembered choice (which retry
   you are reading); the outline deliberately does not, so its rows never move
   as you navigate. Change one, check the other.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { draftNode, planIsSendable, planSubmission } from "@/lib/draft";
+import { draftNode, gestureOpensAside, planIsSendable, planSubmission } from "@/lib/draft";
 import { assembleContext, isContextRoot } from "@/lib/assembleContext";
 import { DEFAULT_TEMPLATES } from "@/lib/templates";
 import { TreeFixture } from "./helpers";
@@ -197,6 +197,8 @@ describe("plan → payload, end to end", () => {
       { kind: "isolated", sourceNodeId: "src", anchor },
       { kind: "concept", sourceNodeId: "src", anchor, turns: 2 },
       { kind: "crop", sourceNodeId: "src", charOffset: 6, blockPath: "0", discardedChars: 7 },
+      { kind: "rewind", nodeId: "q", parentId: "src" },
+      { kind: "rewind", nodeId: "q", parentId: "src", quote: { sourceNodeId: "src", anchor } },
     ];
     for (const pending of gestures) {
       const plan = planSubmission({ text: "ask", pending, activeLeafId: "leaf" });
@@ -207,5 +209,36 @@ describe("plan → payload, end to end", () => {
   it("the draft node is never persisted-shaped — it has a reserved id", () => {
     const plan = planSubmission({ text: "x", pending: null, activeLeafId: null });
     expect(draftNode(plan, "conv").id).toBe("__draft__");
+  });
+});
+
+describe("P-44 rewind — asks an earlier question again, under the same reply", () => {
+  it("continues the thread from that reply with the whole ancestry, whatever the cursor", () => {
+    const t = new TreeFixture();
+    const [, a1, q2, , , a3] = t.linear(3);
+    const plan = planSubmission({
+      text: "  asked differently  ",
+      pending: { kind: "rewind", nodeId: q2!.id, parentId: a1!.id },
+      activeLeafId: a3!.id,
+    });
+    expect(plan).toEqual({
+      parentId: a1!.id,
+      policy: { kind: "full-ancestry" },
+      origin: { kind: "continuation", sourceNodeId: a1!.id },
+      content: "asked differently",
+      forks: false,
+    });
+    expect(assembleContext(draftNode(plan, t.conversationId), t, T)).toHaveLength(3);
+  });
+
+  it("keeps the quote of a quote reply it asks again", () => {
+    const plan = planSubmission({
+      text: "why?",
+      pending: { kind: "rewind", nodeId: "q", parentId: "a", quote: { sourceNodeId: "a", anchor } },
+      activeLeafId: null,
+    });
+    expect(plan.policy).toEqual({ kind: "quoted", quote: anchor.text, base: "full-ancestry" });
+    expect(plan.origin).toEqual({ kind: "quote-reply", sourceNodeId: "a", anchor });
+    expect(gestureOpensAside({ kind: "rewind", nodeId: "q", parentId: "a" })).toBe(false);
   });
 });

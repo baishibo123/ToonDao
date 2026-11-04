@@ -579,3 +579,20 @@ base64 images of the four types the API takes and base64 PDFs
 (`decodeContent()`), never a URL to fetch. An export carries the files, so it
 grows with them. Considered: a separate Dexie table for files, which keeps node
 records small but needs a version bump an older build cannot open.
+
+**P-44 · Rewind asks an earlier question again, and keeps what followed it as a
+fork.** ↺ on a question in the thread puts its words, files and any model,
+effort or pace it set back in the box, under a band that says what will happen,
+and dims that question and everything after it. Sending adds the new question
+under the same reply, and the reply's `line` names it, so it holds the thread
+in both statements of the spine rule (`spineChild()` and `spineNext`); without
+a `line` the oldest still holds it, as P-4 says. The earlier question and its
+tail stay in the tree untouched and become a nested row and a fork mark, read
+and continued as an aside: nothing is deleted. A rewound quote reply keeps its
+quote. Deleting the version on the line gives the line back to the oldest.
+Not offered on the first question (it hangs off no reply, and a second root
+would have nothing to open as an aside from) nor inside an aside. Considered:
+deleting the tail, as Claude Code's rewind does — simpler, but it takes the
+asides and parked passages under it; and moving the line to whichever child
+was read last, which P-4 rejected because rows would move as you navigate. A
+rewind moves the line once, on purpose.

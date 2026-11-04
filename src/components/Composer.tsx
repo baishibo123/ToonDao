@@ -6,7 +6,7 @@ import { contextStart } from "@/lib/assembleContext";
 import { nodeStoreFromMap } from "@/types";
 import { ContextChip, Inspector } from "@/components/ContextChip";
 import { Picker } from "@/components/Picker";
-import { BRANCH_META } from "@/lib/policyMeta";
+import { BRANCH_META, REWIND_META } from "@/lib/policyMeta";
 import { useSurface } from "@/components/Surface";
 import { findParked } from "@/lib/later";
 import { EFFORTS, type Effort, type RateLimit } from "@/lib/bridgeProtocol";
@@ -88,6 +88,44 @@ export function Composer() {
   };
 
   const streaming = streamingNodeId !== null;
+
+  /**
+   * A rewind (P-44) brings the question back into the box — its words, its
+   * files and any model, effort or pace it set — so asking it again starts
+   * from what was asked. Backing out empties the box again, unless it was
+   * edited. A rewind whose question is gone (deleted, another conversation)
+   * is dropped.
+   */
+  const rewind = pending?.kind === "rewind" ? pending : null;
+  const rewindTarget = rewind ? nodes[rewind.nodeId] : undefined;
+  const prefilled = useRef<{ nodeId: string; text: string } | null>(null);
+  useEffect(() => {
+    if (rewind && (!rewindTarget || rewindTarget.conversationId !== conversationId)) {
+      setPending(null);
+      return;
+    }
+    if (rewind && rewindTarget && prefilled.current?.nodeId !== rewind.nodeId) {
+      prefilled.current = { nodeId: rewind.nodeId, text: rewindTarget.content };
+      setText(rewindTarget.content);
+      setFiles(rewindTarget.attachments ?? []);
+      setFileNotice(null);
+      setModelOverride(rewindTarget.model ?? null);
+      setEffortOverride(rewindTarget.effort ?? null);
+      setPacingOverride(typeof rewindTarget.pacing === "boolean" ? rewindTarget.pacing : null);
+      textareaRef.current?.focus();
+    }
+    if (!rewind && prefilled.current) {
+      if (text === prefilled.current.text) {
+        setText("");
+        setFiles([]);
+        setModelOverride(null);
+        setEffortOverride(null);
+        setPacingOverride(null);
+      }
+      prefilled.current = null;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rewind?.nodeId, rewindTarget, conversationId]);
 
   const plan = useMemo(
     () => planSubmission({ text, pending, activeLeafId }),
@@ -202,6 +240,7 @@ export function Composer() {
       ...(effortOverride && provider?.kind === "claude-code" ? { effort: effortOverride } : {}),
       ...(pacingOverride !== null ? { pacing: pacingOverride } : {}),
       ...(files.length ? { attachments: files } : {}),
+      ...(rewind ? { rewinds: rewind.nodeId } : {}),
       ...(asideId
         ? {
             detached: true,
@@ -214,6 +253,7 @@ export function Composer() {
         : {}),
     });
     setText("");
+    prefilled.current = null;
     setPending(null);
     setModelOverride(null);
     setEffortOverride(null);
@@ -230,6 +270,8 @@ export function Composer() {
    * an aside about nothing, whose next message would become a stray root.
    */
   const quote = pending?.kind === "quote" ? pending : null;
+  /** What Esc and ✕ drop from the band above the box. */
+  const banded = Boolean(quote || rewind);
 
   return (
     <div
@@ -270,6 +312,28 @@ export function Composer() {
               onClick={() => setPending(null)}
               aria-label="Remove"
               title="Remove (Esc)"
+            >
+              ✕
+            </button>
+          </div>
+        ) : null}
+
+        {rewind && rewindTarget ? (
+          <div className="composer__gesture composer__gesture--rewind">
+            <div className="gesture__main">
+              <div className="gesture__label" style={{ color: `var(${REWIND_META.cssVar})` }}>
+                <span aria-hidden>{REWIND_META.glyph}</span>
+                {REWIND_META.label}
+              </div>
+              {rewind.quote ? <div className="gesture__quote">{rewind.quote.anchor.text}</div> : null}
+              <div className="gesture__hint">{REWIND_META.blurb}</div>
+            </div>
+            <button
+              type="button"
+              className="btn btn--ghost btn--sm"
+              onClick={() => setPending(null)}
+              aria-label="Cancel"
+              title="Cancel (Esc)"
             >
               ✕
             </button>
@@ -328,7 +392,7 @@ export function Composer() {
                   e.preventDefault();
                   send();
                 }
-                if (e.key === "Escape" && quote) {
+                if (e.key === "Escape" && banded) {
                   e.preventDefault();
                   // Handled here, so the global Escape chain does not also fire
                   // and close the aside (or stop a stream) on the same keypress.
@@ -482,6 +546,8 @@ export function Composer() {
 
 function placeholderFor(kind: string | undefined, hasHistory: boolean): string {
   switch (kind) {
+    case "rewind":
+      return "Ask it again, changed as you like…";
     case "quote":
       return "Reply to the quoted passage…";
     case "isolated":

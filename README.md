@@ -18,6 +18,7 @@ conversation long.
 | says something you want to answer | **Reply** — select the passage | it is quoted above your message, in the same conversation |
 | has a passage worth examining alone | ask about **Just this** | it is answered in an aside with nothing else attached |
 | lost you partway down | cut it — **Lost me here**, on the answer's left edge | an aside picks up from the cut; nothing after it is sent |
+| answers a question you wish you had asked differently | **Rewind** — ↺ under your question | you ask it again from there; what followed becomes a side row, nothing deleted |
 | (inside an aside) | take it back — **To thread** | what you learned is quoted into the thread |
 
 One more, on the model's side: with **Pace answers** on (the default), the model
