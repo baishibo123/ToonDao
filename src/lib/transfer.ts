@@ -53,7 +53,12 @@ export function buildBundle(input: {
     format: "toondao.export",
     version: BUNDLE_VERSION,
     exportedAt: Date.now(),
-    conversations: input.conversations.map((c) => ({ ...c })),
+    // What was on screen is not the conversation (P-50), and its ids would not
+    // survive an import that remaps them.
+    conversations: input.conversations.map(({ view, ...c }) => {
+      void view;
+      return c;
+    }),
     nodes: input.nodes.map((n) => ({ ...n, childrenIds: [...n.childrenIds] })),
     templates: (Object.keys(input.templates) as TemplateId[]).map((id) => ({
       id,

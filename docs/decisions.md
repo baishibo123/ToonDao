@@ -683,3 +683,20 @@ frame, so it lapses once that frame leaves the right. Asked for by the person
 (2026-09-26 and 2026-11-04). Considered: a floating window for a closer look —
 rejected again for P-7's reasons — and a separate "enter" action that puts a
 branch in the centre with nothing beside it, not needed yet.
+
+**P-50 · What was on screen is kept with the conversation.** A conversation's
+optional `view` holds its open asides (with any unsent gesture), the wide one,
+the thread's unsent quote or rewind, every box's unsent words, files and
+choices, and each pane's scroll position as the first message showing plus
+an offset into it. It is written 300 ms behind the reader and at once when the
+page is hidden, without touching `updatedAt`, and a reload opens the
+conversation whose view was written last. On the way back it is checked
+against the tree (`restoreView()`): an aside whose messages are gone closes
+with every aside opened inside it, and a draft or a mark goes with its pane.
+Asked for by the person (2026-11-11) after a browser fault made reloads
+frequent; it also means a trip to another conversation and back keeps both.
+Considered: localStorage (outside the database the person exports and backs
+up), and a table of its own (a schema bump). Exports leave `view` out: it is
+not the conversation, and its ids would not survive a remapping import. The
+selection, open inspectors and Settings are not kept; losing them costs a
+click, not a place.

@@ -2,10 +2,14 @@ import { create } from "zustand";
 import type { NodeId, TextAnchor } from "@/types";
 import { newId } from "@/lib/id";
 import type { AskAgainSeed } from "@/lib/draft";
+import { EMPTY_DRAFT, type ComposerDraft, type RestoredView, type ScrollMark } from "@/lib/view";
 
 /**
- * Ephemeral UI state. Nothing here is persisted — it is all about what the user
- * is in the middle of doing, and none of it should survive a reload.
+ * What the reader is in the middle of doing. Most of it is gone at a reload;
+ * the part a reader would have to rebuild — the open asides, the gesture
+ * waiting in a box, the unsent words, where each pane was — is written to the
+ * conversation's `view` (P-50, `src/store/viewPersistence.ts`) and comes back
+ * through `restore()`.
  */
 
 /** A gesture that has been started but not yet sent. It determines the policy,
@@ -128,6 +132,17 @@ interface UIState {
   seedComposer: (seed: AskAgainSeed) => void;
   focusComposer: () => void;
 
+  /**
+   * Each box's unsent question, by `draftKey()`. In the store rather than the
+   * composer so it can be written to the conversation and restored (P-50).
+   */
+  drafts: Record<string, ComposerDraft>;
+  updateDraft: (key: string, patch: Partial<ComposerDraft> | ((draft: ComposerDraft) => Partial<ComposerDraft>)) => void;
+  /** Where each pane should scroll back to once it is laid out; the nonce makes each restore one request. */
+  restoredScroll: { marks: Record<string, ScrollMark>; nonce: number };
+  /** Puts a saved view back on screen (P-50). */
+  restore: (view: RestoredView) => void;
+
   /* -- asides ----------------------------------------------------- */
 
   /** Open side conversations, outermost first. The last is on the right, the one
@@ -219,6 +234,31 @@ export const useUI = create<UIState>((set) => ({
     set((s) => ({ composerSeed: { ...seed, nonce: (s.composerSeed?.nonce ?? 0) + 1 }, pending: null, selection: null })),
   focusComposer: () => set((s) => ({ composerFocusNonce: s.composerFocusNonce + 1 })),
 
+  drafts: {},
+  updateDraft: (key, patch) =>
+    set((s) => {
+      const current = s.drafts[key] ?? EMPTY_DRAFT;
+      const next = typeof patch === "function" ? patch(current) : patch;
+      return { drafts: { ...s.drafts, [key]: { ...current, ...next } } };
+    }),
+
+  restoredScroll: { marks: {}, nonce: 0 },
+  restore: (view) =>
+    set((s) => {
+      // An aside not yet sent shows what it will carry, as it did when opened.
+      const openInspectors = withoutDrafts(s.openInspectors, s.asides, []);
+      for (const f of view.asides) if (!f.rootNodeId) openInspectors.add(draftKey(f.id));
+      return {
+        asides: view.asides,
+        wideAsideId: view.wideAsideId,
+        pending: view.pending,
+        drafts: view.drafts,
+        selection: null,
+        openInspectors,
+        restoredScroll: { marks: view.scroll, nonce: s.restoredScroll.nonce + 1 },
+      };
+    }),
+
   asides: [],
 
   openAside: ({ gesture, conversationId, from }) => {
@@ -233,6 +273,7 @@ export const useUI = create<UIState>((set) => ({
       openInspectors.add(draftKey(id));
       return {
         openInspectors,
+        drafts: keepDrafts(s.drafts, kept),
         selection: null,
         asides: [
           ...kept,
@@ -265,6 +306,7 @@ export const useUI = create<UIState>((set) => ({
       });
       return {
         asides,
+        drafts: keepDrafts(s.drafts, asides),
         openInspectors: withoutDrafts(s.openInspectors, s.asides, asides),
       };
     }),
@@ -272,6 +314,7 @@ export const useUI = create<UIState>((set) => ({
   closeAsides: () =>
     set((s) => ({
       asides: [],
+      drafts: keepDrafts(s.drafts, []),
       openInspectors: withoutDrafts(s.openInspectors, s.asides, []),
     })),
 
@@ -280,7 +323,11 @@ export const useUI = create<UIState>((set) => ({
       const at = s.asides.findIndex((f) => f.id === id);
       if (at === -1) return {};
       const asides = s.asides.slice(0, at + 1);
-      return { asides, openInspectors: withoutDrafts(s.openInspectors, s.asides, asides) };
+      return {
+        asides,
+        drafts: keepDrafts(s.drafts, asides),
+        openInspectors: withoutDrafts(s.openInspectors, s.asides, asides),
+      };
     }),
 
   wideAsideId: null,
@@ -324,6 +371,14 @@ export const useUI = create<UIState>((set) => ({
 }));
 
 /* ------------------------------------------------------------------ */
+
+/** A closed aside's box goes with it, as it did when the box lived in the composer. */
+function keepDrafts(drafts: Record<string, ComposerDraft>, asides: AsideFrame[]): Record<string, ComposerDraft> {
+  const live = new Set([draftKey(), ...asides.map((f) => draftKey(f.id))]);
+  const kept: Record<string, ComposerDraft> = {};
+  for (const [key, draft] of Object.entries(drafts)) if (live.has(key)) kept[key] = draft;
+  return kept;
+}
 
 function clampTurns(turns: number): number {
   return Math.max(1, Math.min(5, turns));

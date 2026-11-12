@@ -75,6 +75,10 @@ Rules that hold for the life of the project. Why each one exists is in
 - **No Dexie schema version bump without a migration.** Prefer optional fields
   on existing records (as `Conversation.later` does), so an older build opening
   the same database still works.
+- **What was on screen is a conversation's `view`, not its content** (P-50):
+  written by `src/store/viewPersistence.ts` without touching `updatedAt`,
+  checked against the tree by `restoreView()` before it is shown, and never
+  exported. A composer's draft lives in `useUI.drafts`, not in the component.
 - **An export never contains an API key.** An id collision on import remaps every
   id in the bundle together, never some of them.
 - **A title the person typed is never replaced automatically.** Naming

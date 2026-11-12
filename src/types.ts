@@ -14,6 +14,7 @@
  */
 
 import type { Effort, ToolUse, Usage } from "@/lib/bridgeProtocol";
+import type { ConversationView } from "@/lib/view";
 
 export type NodeId = string;
 
@@ -191,6 +192,13 @@ export interface Conversation {
    * a conversation from before P-37 follows Settings.
    */
   pacing?: boolean;
+  /**
+   * What was on screen when this conversation was last open — its asides, the
+   * unsent words in each box, where each pane was scrolled (P-50) — so a reload
+   * or a trip elsewhere comes back to it. Optional, like `later`; never
+   * exported, and never part of what is sent.
+   */
+  view?: ConversationView;
 }
 
 /** A registered project and the snapshot a conversation reads (names only; the bridge holds the folder). */

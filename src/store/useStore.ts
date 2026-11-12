@@ -24,6 +24,7 @@ import { buildBundle, parseBundle } from "@/lib/transfer";
 import { rootsOf, subtreeIds, type NodeMap } from "@/lib/tree";
 import { buildOutline, spineLeaf, threadOf } from "@/lib/outline";
 import { parkPassage, pruneParked } from "@/lib/later";
+import { lastOpened } from "@/lib/view";
 import { toolScopeFor, type ToolGrant } from "@/lib/toolScope";
 import { planSubmission, restartedConversation } from "@/lib/draft";
 import { branchEffort, branchModel, branchPacing } from "@/lib/model";
@@ -209,8 +210,10 @@ export const useStore = create<AppState>((set, get) => ({
       const settings = { ...DEFAULT_SETTINGS, ...(storedSettings ?? {}) };
       set({ conversations, templates, settings, ready: true });
 
-      if (conversations.length > 0) {
-        await get().selectConversation(conversations[0].id);
+      // The conversation on screen at the last reload, not merely the newest (P-50).
+      const open = lastOpened(conversations);
+      if (open) {
+        await get().selectConversation(open.id);
       } else {
         await get().newConversation();
       }

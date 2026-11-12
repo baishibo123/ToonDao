@@ -1,7 +1,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "@/store/useStore";
 import { draftKey, useUI, type PendingGesture } from "@/store/useUI";
-import { askAgainSeed, draftNode, planIsSendable, planSubmission, type AskAgainSeed } from "@/lib/draft";
+import { askAgainSeed, draftNode, planIsSendable, planSubmission } from "@/lib/draft";
+import { EMPTY_DRAFT, type ComposerDraft } from "@/lib/view";
 import { contextStart } from "@/lib/assembleContext";
 import { nodeStoreFromMap } from "@/types";
 import { ContextChip, Inspector } from "@/components/ContextChip";
@@ -37,13 +38,20 @@ const QUOTE_COPY = {
 export function Composer() {
   const { asideId } = useSurface();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [text, setText] = useState("");
-  /** null means "whatever this branch inherits" (§8 P3). */
-  const [modelOverride, setModelOverride] = useState<string | null>(null);
-  const [effortOverride, setEffortOverride] = useState<Effort | null>(null);
-  const [pacingOverride, setPacingOverride] = useState<boolean | null>(null);
-  /** Files for this question (P-43), already read into what will be sent. */
-  const [files, setFiles] = useState<Attachment[]>([]);
+  const key = draftKey(asideId);
+  /**
+   * The unsent question lives in the UI store under this surface's key, so it
+   * is written to the conversation and survives a reload (P-50). The model,
+   * effort and pace are null for "whatever this branch inherits" (§8 P3); the
+   * files (P-43) are already read into what will be sent.
+   */
+  const draft = useUI((s) => s.drafts[key]) ?? EMPTY_DRAFT;
+  const updateDraft = useUI((s) => s.updateDraft);
+  const { text, attachments: files, model: modelOverride, effort: effortOverride, pacing: pacingOverride } = draft;
+  const setText = (next: string) => updateDraft(key, { text: next });
+  const setModelOverride = (model: string | null) => updateDraft(key, { model });
+  const setEffortOverride = (effort: Effort | null) => updateDraft(key, { effort });
+  const setPacingOverride = (pacing: boolean | null) => updateDraft(key, { pacing });
   /** Why a file was not added; shown until the next add or send. */
   const [fileNotice, setFileNotice] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -76,7 +84,6 @@ export function Composer() {
   const setAsideTurns = useUI((s) => s.setAsideTurns);
   const attachAside = useUI((s) => s.attachAside);
   const focusNonce = useUI((s) => s.composerFocusNonce);
-  const key = draftKey(asideId);
   const showDraftInspector = useUI((s) => s.openInspectors.has(key));
 
   const pending: PendingGesture | null = asideId ? (frame?.pending ?? null) : globalPending;
@@ -99,30 +106,37 @@ export function Composer() {
    * gone is dropped), and a conversation's first question, asked again in a
    * new conversation (a one-shot seed, taken by the thread's composer).
    */
-  const applySeed = (seed: AskAgainSeed) => {
-    setText(seed.text);
-    setFiles(seed.attachments);
+  const applySeed = (seed: ComposerDraft) => {
+    updateDraft(key, {
+      text: seed.text,
+      attachments: seed.attachments,
+      model: seed.model,
+      effort: seed.effort,
+      pacing: seed.pacing,
+      prefilled: seed.prefilled,
+    });
     setFileNotice(null);
-    setModelOverride(seed.model);
-    setEffortOverride(seed.effort);
-    setPacingOverride(seed.pacing);
     textareaRef.current?.focus();
   };
   const rewind = pending?.kind === "rewind" ? pending : null;
   const rewindTarget = rewind ? nodes[rewind.nodeId] : undefined;
-  const prefilled = useRef<{ nodeId: string; text: string } | null>(null);
+  // What the rewind put in the box is kept with the draft, so a rewind
+  // restored after a reload finds its words already there and leaves them be.
+  const prefilled = draft.prefilled;
   useEffect(() => {
     if (rewind && (!rewindTarget || rewindTarget.conversationId !== conversationId)) {
       setPending(null);
       return;
     }
-    if (rewind && rewindTarget && prefilled.current?.nodeId !== rewind.nodeId) {
-      prefilled.current = { nodeId: rewind.nodeId, text: rewindTarget.content };
-      applySeed(askAgainSeed(rewindTarget));
+    if (rewind && rewindTarget && prefilled?.nodeId !== rewind.nodeId) {
+      applySeed({
+        ...askAgainSeed(rewindTarget),
+        prefilled: { nodeId: rewind.nodeId, text: rewindTarget.content },
+      });
     }
-    if (!rewind && prefilled.current) {
-      if (text === prefilled.current.text) applySeed(EMPTY_SEED);
-      prefilled.current = null;
+    if (!rewind && prefilled) {
+      if (text === prefilled.text) applySeed(EMPTY_DRAFT);
+      else updateDraft(key, { prefilled: undefined });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rewind?.nodeId, rewindTarget, conversationId]);
@@ -181,7 +195,7 @@ export function Composer() {
     if (made.length > room) {
       said.push(`A message can carry at most ${ATTACHMENT_LIMITS.perMessage} files; ${made.length - room} were left out.`);
     }
-    setFiles((current) => [...current, ...made.slice(0, room)]);
+    updateDraft(key, (current) => ({ attachments: [...current.attachments, ...made.slice(0, room)] }));
     setFileNotice(said.length ? said.join(" ") : null);
     textareaRef.current?.focus();
   };
@@ -265,14 +279,8 @@ export function Composer() {
           }
         : {}),
     });
-    setText("");
-    prefilled.current = null;
+    applySeed(EMPTY_DRAFT);
     setPending(null);
-    setModelOverride(null);
-    setEffortOverride(null);
-    setPacingOverride(null);
-    setFiles([]);
-    setFileNotice(null);
   };
 
   /**
@@ -354,7 +362,7 @@ export function Composer() {
         ) : null}
 
         <div className="composer__box">
-          <AttachmentChips files={files} onRemove={(id) => setFiles((current) => current.filter((f) => f.id !== id))} />
+          <AttachmentChips files={files} onRemove={(id) => updateDraft(key, (current) => ({ attachments: current.attachments.filter((f) => f.id !== id) }))} />
           <div className="composer__row">
             <button
               type="button"
@@ -556,8 +564,6 @@ export function Composer() {
     </div>
   );
 }
-
-const EMPTY_SEED: AskAgainSeed = { text: "", attachments: [], model: null, effort: null, pacing: null };
 
 function placeholderFor(kind: string | undefined, hasHistory: boolean): string {
   switch (kind) {

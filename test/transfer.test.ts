@@ -153,6 +153,14 @@ describe("secrets", () => {
     // Base URLs and model names do come along, so an import is one paste away.
     expect(text).toContain("https://api.openai.com/v1");
   });
+
+  it("leaves what was on screen out of an export (P-50)", () => {
+    const { conversation, nodes } = richFixture();
+    const view = { savedAt: 1, asides: [], wideAsideId: null, pending: null, drafts: { __draft__: { text: "unsent", attachments: [], model: null, effort: null, pacing: null } }, scroll: {} };
+    const bundle = buildBundle({ conversations: [{ ...conversation, view }], nodes, templates: T, settings: DEFAULT_SETTINGS });
+    expect(JSON.stringify(bundle)).not.toContain("unsent");
+    expect(bundle.conversations[0]).not.toHaveProperty("view");
+  });
 });
 
 describe("id collisions", () => {

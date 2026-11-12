@@ -11,6 +11,7 @@ import { useSelectionWatcher } from "@/hooks/useSelectionWatcher";
 import { useTermHover } from "@/hooks/useTermHover";
 import { useParkedMarks } from "@/hooks/useParkedMarks";
 import { useShortcuts } from "@/hooks/useShortcuts";
+import { useViewPersistence } from "@/store/viewPersistence";
 import { Shortcuts } from "@/components/Shortcuts";
 import { textScale } from "@/lib/textSize";
 import { asideBasis, threadPlace } from "@/lib/panes";
@@ -33,6 +34,8 @@ export default function App() {
   const asideCount = useUI((s) => s.asides.length);
   const wide = useUI((s) => s.wideAsideId !== null && s.wideAsideId === s.asides.at(-1)?.id);
 
+  // Before init, so the first conversation it opens is restored too (P-50).
+  useViewPersistence();
   useSelectionWatcher();
   useTermHover();
   useParkedMarks();
