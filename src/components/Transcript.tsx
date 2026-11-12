@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { NodeId } from "@/types";
 import { useStore } from "@/store/useStore";
 import { draftKey, useUI } from "@/store/useUI";
@@ -56,6 +56,8 @@ export function Transcript({ leafId, fromNodeId, empty }: TranscriptProps = {}) 
   // down and read to the old check as still being at the bottom.
   const pinnedRef = useRef(true);
   const autoTopRef = useRef(0);
+  /** More than half a screen above the end: the way back down is offered. */
+  const [away, setAway] = useState(false);
   useEffect(() => {
     const el = scrollerRef.current;
     if (!el) return;
@@ -81,6 +83,7 @@ export function Transcript({ leafId, fromNodeId, empty }: TranscriptProps = {}) 
     const onScroll = () => {
       if (el.clientHeight === 0) return;
       const gap = el.scrollHeight - el.scrollTop - el.clientHeight;
+      setAway(gap > el.clientHeight / 2);
       if (gap < 8) pinnedRef.current = true;
       else if (el.scrollTop < autoTopRef.current - 2) leave();
       // Where the reader is, for the conversation's view (P-50) — but not
@@ -187,12 +190,38 @@ export function Transcript({ leafId, fromNodeId, empty }: TranscriptProps = {}) 
     );
   }
 
+  /** Back to the end, following what is written there again. */
+  const jumpToEnd = (button: HTMLButtonElement) => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    // The button hides on the way down, and a focused element hiding cancels
+    // the glide, so it lets go of the focus first.
+    button.blur();
+    pinnedRef.current = true;
+    restoringRef.current = null;
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+  };
+
   return (
     <div className="transcript" ref={scrollerRef}>
       <div className="transcript__inner">
         {path.map((node) => (
           <MessageView key={node.id} node={node} />
         ))}
+      </div>
+      {/* Stuck to the pane's bottom edge, so it floats over the text wherever
+          the pane is scrolled, in whichever column the pane sits. */}
+      <div className="transcript__jump">
+        <button
+          type="button"
+          className={`jumpend${leafStreaming ? " jumpend--live" : ""}`}
+          hidden={!away}
+          onClick={(e) => jumpToEnd(e.currentTarget)}
+          title={leafStreaming ? "Jump to the reply being written" : "Jump to the latest"}
+          aria-label={leafStreaming ? "Jump to the reply being written" : "Jump to the latest"}
+        >
+          ↓
+        </button>
       </div>
     </div>
   );

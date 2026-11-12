@@ -713,3 +713,13 @@ text: never quoted, and a press on one is not a reading move. Where the
 Clipboard API is refused, the copy command carries both forms. Asked for by
 the person (2026-11-11). Considered: a second "copy formatted" button, which
 doubles a choice the paste target already makes.
+
+**P-52 · A pane read away from its end offers the way back.** A round ↓
+appears at the bottom of a pane once it is more than half a screen above its
+end, and stays until the pane is back there; a dot on it says a reply is
+still being written below. Pressing it glides to the end and turns following
+back on (the follow a scroll up switched off). It is sticky inside the
+scroller, so it moves with its pane between columns without a wrapper. Asked
+for by the person (2026-11-11), who suggested showing it only while
+scrolling up; agreed instead: shown for as long as you are up there, since a
+button that hides when you stop scrolling is gone when you reach for it.

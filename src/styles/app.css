@@ -229,6 +229,51 @@
   padding: 0 24px;
 }
 
+/* The way back to the end: stuck to the pane's bottom edge, taking no room.
+   Sticky insets count from inside the scroller's 40px bottom padding, so
+   -26px puts it 14px above the edge. */
+.transcript__jump {
+  position: sticky;
+  bottom: -26px;
+  height: 0;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+.jumpend {
+  pointer-events: auto;
+  position: relative;
+  transform: translateY(-100%);
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-raised);
+  color: var(--text-dim);
+  font-size: calc(16px * var(--text-scale, 1));
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgb(0 0 0 / 0.12);
+  animation: jumpend-in 140ms ease-out;
+}
+.jumpend[hidden] { display: none; }
+.jumpend:hover { color: var(--text); }
+/* A reply is still being written below. */
+.jumpend--live::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--focus);
+}
+@keyframes jumpend-in {
+  from { opacity: 0; transform: translateY(-80%); }
+  to { opacity: 1; transform: translateY(-100%); }
+}
+
 .empty {
   max-width: 520px;
   margin: 12vh auto 0;
