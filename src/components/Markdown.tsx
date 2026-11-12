@@ -1,4 +1,4 @@
-import { memo, useEffect, useState, type ReactNode } from "react";
+import { createContext, memo, useContext, useEffect, useState, type ReactNode } from "react";
 import type { RootContent } from "mdast";
 import {
   BLOCK_PATH_ATTR,
@@ -10,6 +10,10 @@ import {
 } from "@/lib/anchor";
 import { svgPictureUrl } from "@/lib/svg";
 import { katexReady, loadKatex, typeset } from "@/lib/math";
+import { CopyButton } from "@/components/CopyButton";
+
+/** The Markdown being rendered, so a block can copy its own source. */
+const SourceContext = createContext("");
 
 /**
  * Block-anchored markdown renderer.
@@ -146,17 +150,20 @@ function Node({ node }: { node: AnnotatedNode }): ReactNode {
 
     case "table":
       return (
-        <div className="md-table-wrap">
-          <table {...attrs}>
-            <thead>
-              <Row node={node.children?.[0] as AnnotatedNode | undefined} head />
-            </thead>
-            <tbody>
-              {(node.children ?? []).slice(1).map((row, i) => (
-                <Row key={i} node={row as AnnotatedNode} />
-              ))}
-            </tbody>
-          </table>
+        <div className="md-copyable">
+          <TableCopy node={node} />
+          <div className="md-table-wrap">
+            <table {...attrs}>
+              <thead>
+                <Row node={node.children?.[0] as AnnotatedNode | undefined} head />
+              </thead>
+              <tbody>
+                {(node.children ?? []).slice(1).map((row, i) => (
+                  <Row key={i} node={row as AnnotatedNode} />
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       );
 
@@ -195,20 +202,37 @@ function MathTex({ tex, display, attrs }: { tex: string; display: boolean; attrs
       </Tag>
     );
   }
-  return <Tag className={className} {...attrs} dangerouslySetInnerHTML={{ __html: html }} />;
+  const formula = <Tag className={className} {...attrs} dangerouslySetInnerHTML={{ __html: html }} />;
+  if (!display) return formula;
+  return (
+    <div className="md-copyable">
+      <CopyButton text={tex} title="Copy this formula as TeX" />
+      {formula}
+    </div>
+  );
 }
 
 type CodeNode = AnnotatedNode & { lang?: string | null; value: string };
 
 function CodeBlock({ node, attrs }: { node: CodeNode; attrs: Record<string, string | number> }) {
   return (
-    <pre className="md-pre" {...attrs}>
-      {node.lang ? <span className="md-code-lang">{node.lang}</span> : null}
-      <code className="md-code">
-        <span {...{ [LEAF_ATTR]: node.__leafIndex }}>{node.value}</span>
-      </code>
-    </pre>
+    <div className="md-copyable">
+      <CopyButton text={node.value} title="Copy this code" />
+      <pre className="md-pre" {...attrs}>
+        {node.lang ? <span className="md-code-lang">{node.lang}</span> : null}
+        <code className="md-code">
+          <span {...{ [LEAF_ATTR]: node.__leafIndex }}>{node.value}</span>
+        </code>
+      </pre>
+    </div>
   );
+}
+
+/** A table copies as the Markdown it was written in, which pastes as a table almost anywhere. */
+function TableCopy({ node }: { node: AnnotatedNode }) {
+  const source = useContext(SourceContext);
+  if (node.__srcStart === undefined || node.__srcEnd === undefined) return null;
+  return <CopyButton text={source.slice(node.__srcStart, node.__srcEnd)} title="Copy this table as Markdown" />;
 }
 
 /**
@@ -264,10 +288,12 @@ function Row({ node, head }: { node?: AnnotatedNode; head?: boolean }): ReactNod
 export const Markdown = memo(function Markdown({ source, className }: MarkdownProps) {
   const { root } = parseMarkdown(source);
   return (
-    <div className={className ? `md ${className}` : "md"}>
-      {root.children.map((child, i) => (
-        <Node key={i} node={child as AnnotatedNode} />
-      ))}
-    </div>
+    <SourceContext.Provider value={source}>
+      <div className={className ? `md ${className}` : "md"}>
+        {root.children.map((child, i) => (
+          <Node key={i} node={child as AnnotatedNode} />
+        ))}
+      </div>
+    </SourceContext.Provider>
   );
 });

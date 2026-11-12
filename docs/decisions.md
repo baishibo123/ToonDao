@@ -700,3 +700,16 @@ up), and a table of its own (a schema bump). Exports leave `view` out: it is
 not the conversation, and its ids would not survive a remapping import. The
 selection, open inspectors and Settings are not kept; losing them costs a
 click, not a place.
+
+**P-51 · A block copies its source; a message copies both forms.** A code
+block, a display formula and a table each get a copy at their corner, shown
+on hover: the code without its fence, the formula as TeX, the table as its
+Markdown, because that is what gets pasted where it will run or render. A
+message's copy puts its Markdown on the clipboard as plain text and the
+rendered reply as HTML (`pastableHtml()`: the page's controls and attributes
+removed, a formula kept as MathML), so an editor gets the source and a
+document gets the formatting from one button. The buttons are controls, not
+text: never quoted, and a press on one is not a reading move. Where the
+Clipboard API is refused, the copy command carries both forms. Asked for by
+the person (2026-11-11). Considered: a second "copy formatted" button, which
+doubles a choice the paste target already makes.

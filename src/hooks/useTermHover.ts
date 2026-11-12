@@ -36,7 +36,7 @@ export function useTermHover(): void {
         const target = event.target as Element | null;
         const message = target?.closest?.("[data-node-id]");
         const root = message?.querySelector(".md");
-        if (!message || !root || !root.contains(target as Node)) return clear();
+        if (!message || !root || !root.contains(target as Node) || target?.closest?.(".copybtn")) return clear();
 
         const nodeId = message.getAttribute("data-node-id");
         const node = nodeId ? useStore.getState().nodes[nodeId] : undefined;

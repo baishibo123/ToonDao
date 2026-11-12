@@ -34,6 +34,9 @@ keeps its move's promise for as long as you talk in it: a follow-up carries what
 the move carried plus the aside's own turns, never the rest of the thread.
 A reload, or a trip to another conversation and back, finds the same asides
 open, the same unsent words in each box and each pane where you left it.
+A code block, a formula or a table copies its source from its corner; a
+message's **copy** pastes as Markdown into an editor and formatted into a
+document.
 
 A question can carry **files** — images, PDFs, Word and PowerPoint files (read as
 text, their pictures alongside) and text or code files — from 📎,

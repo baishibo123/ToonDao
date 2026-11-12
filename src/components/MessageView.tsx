@@ -2,6 +2,8 @@ import { memo, useMemo, useRef } from "react";
 import { AttachmentChips } from "@/components/Attachments";
 import { nodeStoreFromMap, type ConversationNode } from "@/types";
 import { Markdown } from "@/components/Markdown";
+import { CopyButton } from "@/components/CopyButton";
+import { pastableHtml } from "@/lib/clipboard";
 import { Inspector } from "@/components/ContextChip";
 import { contextStart, policyLabel } from "@/lib/assembleContext";
 import { BRANCH_META, REWIND_META, branchColor } from "@/lib/policyMeta";
@@ -195,14 +197,16 @@ export const MessageView = memo(function MessageView({ node }: MessageViewProps)
           ) : null}
 
           <span className="msg__actions">
-            <button
-              type="button"
+            {/* The Markdown for an editor, the rendered reply for a document. */}
+            <CopyButton
               className="btn btn--ghost btn--sm"
-              onClick={() => void navigator.clipboard?.writeText(node.content)}
-              title="Copy raw markdown"
-            >
-              copy
-            </button>
+              text={() => node.content}
+              html={() => {
+                const md = contentRef.current?.querySelector(".md");
+                return md ? pastableHtml(md) : undefined;
+              }}
+              title="Copy this message — as Markdown, or formatted where you paste it"
+            />
             {node.role === "assistant" && !streaming ? (
               <button
                 type="button"
