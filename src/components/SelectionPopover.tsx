@@ -41,11 +41,15 @@ export function SelectionPopover() {
 
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
 
+  // Placed from the toolbar's measured size, so it is first rendered unseen
+  // (`pos` null) and placed in the layout effect before the browser paints. A
+  // guessed size put it over the very word it is about.
   const place = useCallback(
     (rect: { top: number; bottom: number; left: number; right: number }) => {
       const el = ref.current;
-      const width = el?.offsetWidth || 250;
-      const height = el?.offsetHeight || 40;
+      if (!el) return;
+      const width = el.offsetWidth;
+      const height = el.offsetHeight;
       const gap = 8;
       const centre = (rect.left + rect.right) / 2;
       const left = Math.max(
@@ -106,7 +110,7 @@ export function SelectionPopover() {
     [selection],
   );
 
-  if (!selection || !sourceNode || !pos) return null;
+  if (!selection || !sourceNode) return null;
 
   const anchor = selection.anchor;
   const parked = findParked(later ?? [], selection.nodeId, anchor);
@@ -122,7 +126,7 @@ export function SelectionPopover() {
     <div
       ref={ref}
       className="selpop"
-      style={{ top: pos.top, left: pos.left }}
+      style={pos ? { top: pos.top, left: pos.left } : { top: 0, left: 0, visibility: "hidden" }}
       role="toolbar"
       aria-label="Selection actions"
       // Keep mousedown from clearing the very selection these actions act on.
