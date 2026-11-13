@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { useStore } from "@/store/useStore";
 import { bundleFilename } from "@/lib/transfer";
+import { saveFile } from "@/lib/fileOut";
 
 /**
  * §8 P3: "JSON export/import (full tree fidelity — this is the user's data and
@@ -23,12 +24,7 @@ export function DataPane() {
   const download = async (getText: () => Promise<string>) => {
     try {
       const text = await getText();
-      const url = URL.createObjectURL(new Blob([text], { type: "application/json" }));
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = bundleFilename();
-      link.click();
-      URL.revokeObjectURL(url);
+      saveFile(bundleFilename(), text, "application/json");
       setStatus({ kind: "ok", text: `Exported ${(text.length / 1024).toFixed(1)} kB.` });
     } catch (err) {
       setStatus({ kind: "error", text: err instanceof Error ? err.message : String(err) });

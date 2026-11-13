@@ -52,7 +52,7 @@ function copyByCommand(text: string, html?: string): boolean {
  */
 export function pastableHtml(rendered: Element): string {
   const copy = rendered.cloneNode(true) as Element;
-  for (const el of copy.querySelectorAll(".copybtn, .md-code-lang, .md-svg__source, .katex-html")) el.remove();
+  for (const el of copy.querySelectorAll(".md-blocktools, .copybtn, .savebtn, .md-code-lang, .md-svg__source, .katex-html")) el.remove();
   for (const el of [copy, ...copy.querySelectorAll("*")]) {
     for (const name of el.getAttributeNames()) {
       if (name.startsWith("data-") || name === "class" || name === "style" || name === "aria-hidden") {

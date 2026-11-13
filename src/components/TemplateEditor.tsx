@@ -13,6 +13,7 @@ const IDS: TemplateId[] = [
   "title",
   "attachment",
   "rendering",
+  "files",
 ];
 
 /**

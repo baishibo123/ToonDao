@@ -215,16 +215,25 @@ button {
   line-height: 1.55;
   white-space: pre;
 }
-/* A block's copy: shown while the block is hovered or the button has focus,
-   where the code's language tag sits, which steps aside for it. */
+/* A block's copy (and a code block's save): shown while the block is hovered
+   or a button has focus, where the code's language tag sits, which steps
+   aside for them. */
 .md .md-copyable { position: relative; }
 /* A table's copy sits at the table's corner, not the column's. */
 .md .md-copyable:has(> .md-table-wrap) { width: fit-content; max-width: 100%; }
-.md .md-copyable > .copybtn {
+.md .md-copyable > .md-blocktools {
   position: absolute;
   top: 0.3em;
   right: 0.35em;
   z-index: 1;
+  display: flex;
+  gap: 0.3em;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.md .md-copyable:hover > .md-blocktools,
+.md .md-copyable > .md-blocktools:focus-within { opacity: 1; }
+.md .md-blocktools > button {
   padding: 0.15em 0.55em;
   border: 1px solid var(--border);
   border-radius: calc(var(--radius) * 0.7);
@@ -235,12 +244,8 @@ button {
   line-height: 1.5;
   cursor: pointer;
   user-select: none;
-  opacity: 0;
-  transition: opacity 120ms ease;
 }
-.md .md-copyable:hover > .copybtn,
-.md .md-copyable > .copybtn:focus-visible { opacity: 1; }
-.md .md-copyable > .copybtn:hover { color: var(--text); border-color: var(--border-strong); }
+.md .md-blocktools > button:hover { color: var(--text); border-color: var(--border-strong); }
 .md .md-copyable:hover .md-code-lang { opacity: 0; }
 
 .md .md-code-lang {
@@ -251,6 +256,13 @@ button {
   font-size: 0.68em;
   color: var(--text-faint);
   user-select: none;
+}
+/* A file's path can be long; the whole of it is in the tag's title. */
+.md .md-code-lang--file {
+  max-width: 60%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .md hr {

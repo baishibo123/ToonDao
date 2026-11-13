@@ -44,10 +44,20 @@ describe("a block's copy", () => {
 
   it("is not text the reading moves can quote", () => {
     const root = mount(SOURCE);
-    for (const button of root.querySelectorAll(".copybtn")) {
+    for (const button of root.querySelectorAll(".copybtn, .savebtn")) {
       expect(button.closest("[data-leaf-index]")).toBeNull();
       expect(button.querySelector("[data-leaf-index]")).toBeNull();
     }
+  });
+});
+
+describe("a code block's save (P-53)", () => {
+  it("names the file the fence names, and shows that path in place of the language", () => {
+    const root = mount(["```python app/main.py", "print(1)", "```", "", "```bash", "ls", "```"].join("\n"));
+    const [named, plain] = [...root.querySelectorAll(".savebtn")];
+    expect(named.getAttribute("title")).toBe("Save as app/main.py");
+    expect(plain.getAttribute("title")).toBe("Save as snippet.sh");
+    expect([...root.querySelectorAll(".md-code-lang")].map((el) => el.textContent)).toEqual(["app/main.py", "bash"]);
   });
 });
 
@@ -59,6 +69,7 @@ describe("a reply's formatted copy", () => {
     expect(html).toContain("<table>");
     expect(html).toContain("<math");
     expect(html).not.toContain("copy</button>");
+    expect(html).not.toContain("save</button>");
     expect(html).not.toContain("python</span>");
     expect(html).not.toMatch(/data-|class=|katex-html/);
   });

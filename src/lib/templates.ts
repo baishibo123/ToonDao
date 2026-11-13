@@ -45,6 +45,11 @@ Treat the text above as the entire context. Answer only about it.`,
   // it draws in ASCII art or tells the person to save a file.
   rendering: `This chat shows your replies rendered as Markdown, and it draws pictures: a fenced code block labelled svg that holds one complete <svg>…</svg> element is shown to the person as the drawing itself, on a white background, with its source a click away. When a diagram, chart or sketch would help, draw it that way rather than as ASCII art, and never ask the person to save or open a file to see it. Keep a drawing self-contained — give it a viewBox, and use no scripts, external images or web fonts, which are not loaded. Math is typeset with KaTeX: write $…$ inline and $$…$$ for a formula on its own lines, and write a dollar sign that is not math as \\$.`,
 
+  // P-53: in the system message after `rendering`. A named block is offered
+  // for saving under its name, and a reply's named blocks as one .zip, so the
+  // person no longer copies each file out by hand.
+  files: `When you write something the person will keep as a file — a script, a module, a config, a document — put its file name after the language on the opening fence of its code block, as in \`\`\`python scripts/fetch.py, with the path relative to the project's root when there is a project. This chat offers that block for saving under that name, and every named block of a reply together as one .zip. Give each file in one complete block, and leave a snippet that is not a whole file unnamed.`,
+
   // P-43: a text or code file attached to a question, written into its message.
   attachment: `Attached file: {{name}}
 
@@ -117,6 +122,11 @@ export const TEMPLATE_META: Record<
     label: "What this chat draws",
     vars: [],
     note: "P-47 — in the system message of every request (after Settings → System prompt, before Pacing), so the model knows an svg code block is shown as a picture. No variables. Empty it to leave it out.",
+  },
+  files: {
+    label: "Files to save",
+    vars: [],
+    note: "P-53 — in the system message after What this chat draws, so the model names a code block that is a whole file (```python scripts/fetch.py) and the block can be saved under that name. No variables. Empty it to leave it out.",
   },
   attachment: {
     label: "Attached file",

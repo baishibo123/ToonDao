@@ -25,8 +25,9 @@ export interface AssembleOptions {
   /** Append the `pacing` template to the system message. Global, like the
    *  system prompt, so it reaches every policy the same way. */
   pacing?: boolean;
-  /** Append the `rendering` template: what this chat draws as pictures
-   *  (P-47). Global, like pacing; the store always sets it. */
+  /** Append the `rendering` template, what this chat draws as pictures
+   *  (P-47), and the `files` template, how a block is named to be saved
+   *  (P-53). Global, like pacing; the store always sets it. */
   rendering?: boolean;
 }
 
@@ -349,6 +350,7 @@ function withSystem(
   const parts = [
     opts.systemPrompt?.trim() ?? "",
     opts.rendering ? (templates.rendering ?? "").trim() : "",
+    opts.rendering ? (templates.files ?? "").trim() : "",
     opts.pacing ? (templates.pacing ?? "").trim() : "",
   ].filter(Boolean);
   if (parts.length === 0) return messages;

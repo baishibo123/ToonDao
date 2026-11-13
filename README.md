@@ -36,7 +36,10 @@ A reload, or a trip to another conversation and back, finds the same asides
 open, the same unsent words in each box and each pane where you left it.
 A code block, a formula or a table copies its source from its corner; a
 message's **copy** pastes as Markdown into an editor and formatted into a
-document. Scrolled up, a pane offers ↓ back to the end, with a dot while a
+document. A code block also **saves** as a file, under the name the model
+gave it (```` ```python scripts/fetch.py ````), and a reply that names two or
+more files saves them as one `.zip` with their folders; a whole reply saves
+as `.md`. Scrolled up, a pane offers ↓ back to the end, with a dot while a
 reply is still being written there.
 
 A question can carry **files** — images, PDFs, Word and PowerPoint files (read as

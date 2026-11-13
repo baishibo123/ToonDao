@@ -3,7 +3,9 @@ import { AttachmentChips } from "@/components/Attachments";
 import { nodeStoreFromMap, type ConversationNode } from "@/types";
 import { Markdown } from "@/components/Markdown";
 import { CopyButton } from "@/components/CopyButton";
+import { SaveButton } from "@/components/SaveButton";
 import { pastableHtml } from "@/lib/clipboard";
+import { baseName, namedFiles, zipFiles } from "@/lib/fileOut";
 import { Inspector } from "@/components/ContextChip";
 import { contextStart, policyLabel } from "@/lib/assembleContext";
 import { BRANCH_META, REWIND_META, branchColor } from "@/lib/policyMeta";
@@ -52,6 +54,15 @@ export const MessageView = memo(function MessageView({ node }: MessageViewProps)
     }
     return false;
   }, [rewindFrom, node.id, nodes]);
+
+  /** A finished reply's named blocks (P-53); two or more are offered as one .zip. */
+  const files = useMemo(
+    () => (node.role === "assistant" && !streaming ? namedFiles(node.content) : []),
+    [node.role, node.content, streaming],
+  );
+  /** Files are named after the conversation, as it is called when pressed. */
+  const fileBase = () =>
+    baseName(useStore.getState().conversations.find((c) => c.id === node.conversationId)?.title);
 
   const openInspector = useUI((s) => s.openInspectors.has(node.id));
   const cropHover = useUI((s) => (s.cropHover?.nodeId === node.id ? s.cropHover.charOffset : null));
@@ -207,6 +218,24 @@ export const MessageView = memo(function MessageView({ node }: MessageViewProps)
               }}
               title="Copy this message — as Markdown, or formatted where you paste it"
             />
+            {node.role === "assistant" && !streaming ? (
+              <SaveButton
+                className="btn btn--ghost btn--sm"
+                name={() => `${fileBase()}.md`}
+                data={() => node.content}
+                type="text/markdown;charset=utf-8"
+                title="Save this reply as a Markdown file"
+              />
+            ) : null}
+            {files.length >= 2 ? (
+              <SaveButton
+                className="btn btn--ghost btn--sm"
+                label={`save ${files.length} files`}
+                name={() => `${fileBase()}.zip`}
+                data={() => new Blob([zipFiles(files) as BlobPart], { type: "application/zip" })}
+                title={`Save ${files.map((f) => f.path).join(", ")} together as one .zip`}
+              />
+            ) : null}
             {node.role === "assistant" && !streaming ? (
               <button
                 type="button"

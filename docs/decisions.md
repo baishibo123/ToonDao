@@ -723,3 +723,25 @@ scroller, so it moves with its pane between columns without a wrapper. Asked
 for by the person (2026-11-11), who suggested showing it only while
 scrolling up; agreed instead: shown for as long as you are up there, since a
 button that hides when you stop scrolling is gone when you reach for it.
+
+**P-53 · A reply's files are saved, not copied out one by one.** The `files`
+template, in every system message after `rendering` (P-47), asks the model to
+put a file's name after the language on its fence — ```` ```python
+scripts/fetch.py ```` — and to leave a snippet that is not a whole file
+unnamed. A code block then has **save** beside its copy and shows its path
+where the language was; a finished reply has **save** (its Markdown, as
+`<title>.md`) and, when it names two or more files, **save N files**: one
+`.zip` that keeps their folders, a file named twice saved once with its later
+block. `namedPath()` reads the forms models write (`title="…"`, `file=…`,
+```` ```python:main.py ````, ```` ```main.py ````), and `safePath()` keeps a
+name inside the folder it is unpacked in (no root, drive or `..`). The zip is
+written by `zipFiles()` with stored entries and UTF-8 names, about a hundred
+lines and no dependency, and read back in the tests by the app's own reader
+(P-45). Everything is made in the browser and handed to its download, so the
+app writes nowhere the person did not choose, and the bridge still writes no
+files. A new template rather than a longer `rendering`: a default that
+changes does not reach a template row already stored, and a new one does.
+Adding it changes every system message once, so each conversation misses the
+cache on its next turn. Asked for by the person (2026-11-13), who chose named
+files over a plain save (A) and over writing into a project folder through
+the File System Access API (C), which stays undone.

@@ -703,17 +703,20 @@ describe("P-47 what this chat draws", () => {
     const t = new TreeFixture();
     const u = t.add("user", "draw me a cache", null);
     const msgs = assembleContext(u, t, T, { systemPrompt: "Mine.", rendering: true, pacing: true });
-    expect(msgs[0]).toEqual({ role: "system", content: `Mine.\n\n${T.rendering}\n\n${T.pacing}` });
+    expect(msgs[0]).toEqual({ role: "system", content: `Mine.\n\n${T.rendering}\n\n${T.files}\n\n${T.pacing}` });
     expect(T.rendering).toContain("svg");
+    // P-53: how a block is named to be saved, right after what this chat draws.
+    expect(T.files).toContain("```python scripts/fetch.py");
 
     const isolated = t.add("user", "", u.id, { kind: "isolated", payload: "x" }, "isolated-selection");
-    expect(assembleContext(isolated, t, T, { rendering: true })[0]).toEqual({ role: "system", content: T.rendering });
+    expect(assembleContext(isolated, t, T, { rendering: true })[0]).toEqual({ role: "system", content: `${T.rendering}\n\n${T.files}` });
   });
 
   it("is left out when its template is emptied, or not asked for", () => {
     const t = new TreeFixture();
     const u = t.add("user", "hi", null);
-    expect(assembleContext(u, t, { ...T, rendering: "  " }, { rendering: true })).toEqual([{ role: "user", content: "hi" }]);
+    expect(assembleContext(u, t, { ...T, rendering: "  ", files: "" }, { rendering: true })).toEqual([{ role: "user", content: "hi" }]);
+    expect(assembleContext(u, t, { ...T, files: "" }, { rendering: true })[0]).toEqual({ role: "system", content: T.rendering });
     expect(assembleContext(u, t, T)).toEqual([{ role: "user", content: "hi" }]);
   });
 });

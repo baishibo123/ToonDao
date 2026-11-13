@@ -11,6 +11,8 @@ import {
 import { svgPictureUrl } from "@/lib/svg";
 import { katexReady, loadKatex, typeset } from "@/lib/math";
 import { CopyButton } from "@/components/CopyButton";
+import { SaveButton } from "@/components/SaveButton";
+import { fileNameFor, namedPath } from "@/lib/fileOut";
 
 /** The Markdown being rendered, so a block can copy its own source. */
 const SourceContext = createContext("");
@@ -151,7 +153,9 @@ function Node({ node }: { node: AnnotatedNode }): ReactNode {
     case "table":
       return (
         <div className="md-copyable">
-          <TableCopy node={node} />
+          <span className="md-blocktools">
+            <TableCopy node={node} />
+          </span>
           <div className="md-table-wrap">
             <table {...attrs}>
               <thead>
@@ -206,20 +210,37 @@ function MathTex({ tex, display, attrs }: { tex: string; display: boolean; attrs
   if (!display) return formula;
   return (
     <div className="md-copyable">
-      <CopyButton text={tex} title="Copy this formula as TeX" />
+      <span className="md-blocktools">
+        <CopyButton text={tex} title="Copy this formula as TeX" />
+      </span>
       {formula}
     </div>
   );
 }
 
-type CodeNode = AnnotatedNode & { lang?: string | null; value: string };
+type CodeNode = AnnotatedNode & { lang?: string | null; meta?: string | null; value: string };
 
+/**
+ * A code block, with its copy and its save (P-53). A block the model named
+ * (```python scripts/fetch.py) shows that path where the language would be and
+ * is saved under it.
+ */
 function CodeBlock({ node, attrs }: { node: CodeNode; attrs: Record<string, string | number> }) {
+  const path = namedPath(node.lang, node.meta);
+  const name = fileNameFor(node.lang, node.meta);
+  const tag = path ?? node.lang;
   return (
     <div className="md-copyable">
-      <CopyButton text={node.value} title="Copy this code" />
+      <span className="md-blocktools">
+        <CopyButton text={node.value} title="Copy this code" />
+        <SaveButton name={name} data={() => node.value} title={`Save as ${path ?? name}`} />
+      </span>
       <pre className="md-pre" {...attrs}>
-        {node.lang ? <span className="md-code-lang">{node.lang}</span> : null}
+        {tag ? (
+          <span className={`md-code-lang${path ? " md-code-lang--file" : ""}`} title={path ?? undefined}>
+            {tag}
+          </span>
+        ) : null}
         <code className="md-code">
           <span {...{ [LEAF_ATTR]: node.__leafIndex }}>{node.value}</span>
         </code>

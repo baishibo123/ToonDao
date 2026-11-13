@@ -94,6 +94,7 @@ const TEMPLATE_IDS: TemplateId[] = [
   "title",
   "attachment",
   "rendering",
+  "files",
 ];
 
 /**
