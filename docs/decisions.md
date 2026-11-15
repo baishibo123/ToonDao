@@ -745,3 +745,17 @@ Adding it changes every system message once, so each conversation misses the
 cache on its next turn. Asked for by the person (2026-11-13), who chose named
 files over a plain save (A) and over writing into a project folder through
 the File System Access API (C), which stays undone.
+
+**P-54 · A research reply may take 15 tool steps, a project reply 25.** A
+step (Claude Code's `--max-turns`) is one model call and the tools it asked
+for, however many ran at once. The limits were 6 and 12, chosen when the
+bridge was first written and never revisited; a question checked against
+several sources (a dataset's yearly counts, read off three mirrors) ran out
+at 6 with nothing but a progress note written between two lookups, under
+the notice that the answer so far is above. The limits still stop a run
+that loops; they no longer stop one that is working. Considered, not done:
+telling the model its budget, so that near the end it answers from what it
+has — it needs the bridge's limit in the app's system message, or prompt
+text injected by the bridge, which is not a template; and a follow-up call
+without tools to sum up, which cannot see the lookups once the run has
+ended (`--no-session-persistence`).

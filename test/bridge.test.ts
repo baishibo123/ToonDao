@@ -201,7 +201,8 @@ describe("the command line", () => {
     for (const dangerous of ["Bash", "Write", "Edit", "NotebookEdit", "CronCreate", "RemoteTrigger"]) {
       expect(args.join(" ")).not.toContain(dangerous);
     }
-    expect(Number(args[args.indexOf("--max-turns") + 1])).toBeGreaterThan(1);
+    // P-54: enough rounds to check a fact against several sources.
+    expect(Number(args[args.indexOf("--max-turns") + 1])).toBeGreaterThanOrEqual(15);
   });
 
   it("gives a project read only the read-only file tools, and refuses whatever would ask (P-31)", () => {

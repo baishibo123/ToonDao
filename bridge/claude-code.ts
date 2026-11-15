@@ -331,6 +331,10 @@ export function argsFor(args: {
   ];
   // A structured answer is a StructuredOutput tool call and its result: two more turns.
   const maxTurns = (turns: number) => ["--max-turns", String(schema ? turns + 2 : turns)];
+  // A turn is one model call and the tools it asked for, however many ran at
+  // once. Research checked against several sources ran out at 6 (P-54).
+  const RESEARCH_TURNS = 15;
+  const PROJECT_TURNS = 25;
   const lookups = (args.researchTools ?? RESEARCH_TOOLS).filter((t) => RESEARCH_TOOLS.includes(t));
   if (args.readDir) {
     const research = args.toolScope === "research";
@@ -340,7 +344,7 @@ export function argsFor(args: {
       ...(research ? ["--allowedTools", ...args.allowedTools] : []),
       ...(!research || args.noConnectors ? ["--strict-mcp-config"] : []),
       "--permission-mode", "dontAsk",
-      ...maxTurns(12),
+      ...maxTurns(PROJECT_TURNS),
     ];
   }
   if (args.toolScope === "research") {
@@ -349,7 +353,7 @@ export function argsFor(args: {
       "--tools", lookups.join(","),
       "--allowedTools", ...args.allowedTools,
       ...(args.noConnectors ? ["--strict-mcp-config"] : []),
-      ...maxTurns(6),
+      ...maxTurns(RESEARCH_TURNS),
     ];
   }
   return [...base, "--tools", "", "--strict-mcp-config", ...maxTurns(1)];
