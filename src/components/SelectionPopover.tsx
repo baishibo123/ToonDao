@@ -4,6 +4,7 @@ import { useUI, type PendingGesture } from "@/store/useUI";
 import { useStartGesture } from "@/hooks/useStartGesture";
 import { BRANCH_META, LATER_META } from "@/lib/policyMeta";
 import { findParked } from "@/lib/later";
+import { plainText } from "@/lib/plainText";
 
 /**
  * The toolbar that appears on a passage: what a reader does when the text gets
@@ -106,7 +107,7 @@ export function SelectionPopover() {
 
   const sourceNode = selection ? nodes[selection.nodeId] : undefined;
   const preview = useMemo(
-    () => (selection ? selection.anchor.text.replace(/\s+/g, " ").trim() : ""),
+    () => (selection ? plainText(selection.anchor.text).replace(/\s+/g, " ").trim() : ""),
     [selection],
   );
 

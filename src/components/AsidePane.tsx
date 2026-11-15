@@ -10,6 +10,7 @@ import { branchLabel, spineLeaf } from "@/lib/outline";
 import { asideBasis, clampShare, placeOf, type PanePlace } from "@/lib/panes";
 import { focusNode } from "@/store/focusNode";
 import type { BranchKind } from "@/types";
+import { plainText } from "@/lib/plainText";
 
 /**
  * The side conversations: the innermost on the right, beside the line it left.
@@ -317,7 +318,7 @@ function describeFrame(frame: AsideFrame, nodes: NodeMap) {
 
   // A crop points at a cut line rather than a passage, so it has none to quote.
   const excerpt = flatten(
-    pending && "anchor" in pending ? pending.anchor.text : (root?.origin?.anchor?.text ?? ""),
+    plainText(pending && "anchor" in pending ? pending.anchor.text : (root?.origin?.anchor?.text ?? "")),
   );
 
   const cut =

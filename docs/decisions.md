@@ -759,3 +759,17 @@ has — it needs the bridge's limit in the app's system message, or prompt
 text injected by the bridge, which is not a template; and a follow-up call
 without tools to sum up, which cannot see the lookups once the run has
 ended (`--no-session-persistence`).
+
+**P-55 · A passage names a row by what it reads, not how it was written.**
+A branch's label is the passage it hangs off (`branchLabel()`), and a
+passage is a slice of Markdown source, so rows read `**im2col**`, `- 一层里…`
+and `$$ \text{FLO…`. `plainText()` takes the markers off for display —
+emphasis, code ticks, list and heading markers, links, math delimiters,
+`\text{…}` and common TeX symbols (`\times` → ×) — wherever a passage is
+shown as a name: the sidebar row, the aside's title and excerpt, the fork
+marker, the "Explained …" note, the Later list and the toolbar's quote. It
+works on characters, not a parse, because a passage is often cut mid-construct;
+a marker goes only where it touches a word, and underscores stay (`x_i`,
+`__init__`). What is sent to a model is still the source. Asked for by the
+person (2026-11-15), who offered rendering the label or stripping it; a
+rendered label would put KaTeX and Markdown into every row of the sidebar.

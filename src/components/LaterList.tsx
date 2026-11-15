@@ -3,6 +3,7 @@ import { useStore } from "@/store/useStore";
 import { explainParked } from "@/store/focusNode";
 import { LATER_META } from "@/lib/policyMeta";
 import { pathToRoot, turnNumbers } from "@/lib/tree";
+import { plainText } from "@/lib/plainText";
 
 /**
  * What is still owed: the open conversation's parked passages, oldest first.
@@ -52,7 +53,7 @@ export function LaterList() {
               onClick={() => explainParked(item)}
               title={`Explain it now: “${item.anchor.text}”`}
             >
-              <span className="later__text">{flatten(item.anchor.text)}</span>
+              <span className="later__text">{flatten(plainText(item.anchor.text))}</span>
               {turn ? <span className="later__where">turn {turn}</span> : null}
             </button>
             <button

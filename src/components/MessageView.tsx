@@ -18,6 +18,7 @@ import { messageDomId, useSurface } from "@/components/Surface";
 import { focusNode } from "@/store/focusNode";
 import { useStartGesture } from "@/hooks/useStartGesture";
 import { askAgainSeed } from "@/lib/draft";
+import { plainText } from "@/lib/plainText";
 
 interface MessageViewProps {
   node: ConversationNode;
@@ -138,7 +139,7 @@ export const MessageView = memo(function MessageView({ node }: MessageViewProps)
       <div className="msg__body">
         {origin?.anchor && origin.kind !== "structural-crop" && origin.anchor.text ? (
           <p className="msg__anchor-note">
-            <b>{anchorVerb(origin.kind)}</b> “{truncate(origin.anchor.text, 220)}”
+            <b>{anchorVerb(origin.kind)}</b> “{truncate(plainText(origin.anchor.text), 220)}”
           </p>
         ) : null}
 

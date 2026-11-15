@@ -1,5 +1,6 @@
 import type { BranchKind, ConversationNode, NodeId, TextAnchor } from "@/types";
 import { childrenOf, type NodeMap } from "@/lib/tree";
+import { plainText } from "@/lib/plainText";
 
 /**
  * The conversation's structure, in one place: what a turn is, what a spine is,
@@ -312,8 +313,9 @@ export function forksOf(
  * transcript are three views of one branch and must not name it three ways.
  */
 export function branchLabel(node: ConversationNode): string {
-  const anchor = flatten(node.origin?.anchor?.text ?? "");
-  const ask = flatten(node.content);
+  // Named as read, not as written: no `**` or `$` in a label.
+  const anchor = flatten(plainText(node.origin?.anchor?.text ?? ""));
+  const ask = flatten(plainText(node.content));
   if (node.origin?.kind === "structural-crop") {
     return truncate(ask || "Picked up from the cut", 64);
   }
