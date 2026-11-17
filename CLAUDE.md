@@ -35,6 +35,9 @@ Rules that hold for the life of the project. Why each one exists is in
   files go into the message through the `attachment` template. A Word or
   PowerPoint file is converted to text in the browser when it is attached
   (`src/lib/convert/`, P-45) — never by a tool or a server.
+- **Archiving is display only** (P-58). `archivedAt` and `archivedBranches`
+  decide what the sidebar lists (`visibleThreads()`), never the tree, the
+  context, the counts or a reply's fork markers.
 - **`assembledPreview` is historical.** It records what was actually sent and is
   never recomputed.
 

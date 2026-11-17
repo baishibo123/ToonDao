@@ -18,6 +18,7 @@ import {
   spineChild,
   spineLeaf,
   threadOf,
+  visibleThreads,
   type OutlineThread,
 } from "@/lib/outline";
 import { gestureOpensAside } from "@/lib/draft";
@@ -450,3 +451,30 @@ describe("P-44 rewind — the reply's line names the question that holds the thr
     expect(spineChild(mapOf(t), a1.id)?.id).toBe(q2.id);
   });
 });
+
+describe("archived branches (P-58)", () => {
+  it("leave the rows, with every row beneath them, and nothing else", () => {
+    const t = new TreeFixture();
+    const made = t.linear(1);
+    const lens = fork(t, made.at(-1)!, "concept-lens", "one", "one");
+    fork(t, lens.assistant, "isolated-selection", "two", "two");
+    fork(t, made.at(-1)!, "isolated-selection", "three", "three");
+    const outline = buildOutline(mapOf(t), t.conversationId);
+    const before = labels(outline.threads);
+
+    const shown = visibleThreads(outline.threads, new Set([lens.user.id]));
+    expect(labels(shown).map((l) => l.trim())).toEqual([before[0].trim(), "three"]);
+    // The outline itself is untouched: counts and rows come back on restore.
+    expect(labels(outline.threads)).toEqual(before);
+    expect(shown[0].totalTurns).toBe(outline.threads[0].totalTurns);
+    expect(labels(visibleThreads(outline.threads, new Set()))).toEqual(before);
+  });
+
+  it("never take away the main thread", () => {
+    const t = new TreeFixture();
+    t.linear(2);
+    const outline = buildOutline(mapOf(t), t.conversationId);
+    expect(visibleThreads(outline.threads, new Set([outline.threads[0].id]))).toHaveLength(1);
+  });
+});
+

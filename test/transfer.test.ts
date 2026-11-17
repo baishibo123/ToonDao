@@ -197,6 +197,23 @@ describe("id collisions", () => {
     }
   });
 
+  it("carries archived branches through the same remap, dropping ones not in the bundle", () => {
+    const { conversation, nodes } = richFixture();
+    const head = nodes.find((n) => n.origin?.kind === "concept-lens")!;
+    const archived = { ...conversation, archivedAt: 7, archivedBranches: [head.id, "n-missing"] };
+    const raw = JSON.stringify(
+      buildBundle({ conversations: [archived], nodes, templates: T, settings: DEFAULT_SETTINGS }),
+    );
+    const parsed = parseBundle(raw, {
+      conversations: new Set([conversation.id]),
+      nodes: new Set(nodes.map((n) => n.id)),
+    });
+    const imported = parsed.conversations[0];
+    const newHead = parsed.nodes[nodes.indexOf(head)];
+    expect(imported.archivedAt).toBe(7);
+    expect(imported.archivedBranches).toEqual([newHead.id]);
+  });
+
   it("remaps policy and origin references too, not just parent pointers", () => {
     const { conversation, nodes } = richFixture();
     const raw = JSON.stringify(

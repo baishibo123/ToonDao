@@ -239,3 +239,30 @@
 .later__item:hover .later__drop,
 .later__drop:focus-visible { opacity: 1; }
 .later__drop:hover { color: var(--danger); }
+
+/* ------------------------------------------------------------------ */
+/* A row's right-click menu (P-58)                                     */
+/* ------------------------------------------------------------------ */
+
+.rowmenu {
+  position: fixed;
+  z-index: 70;
+  min-width: 190px;
+  padding: 4px;
+  display: grid;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-pop);
+}
+.rowmenu__item {
+  text-align: left;
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+  font-size: calc(13px * var(--text-scale, 1));
+  color: var(--text);
+  white-space: nowrap;
+}
+.rowmenu__item:hover,
+.rowmenu__item:focus-visible { background: var(--surface-hover); outline: none; }
+.rowmenu__item--danger { color: var(--danger); }

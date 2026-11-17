@@ -190,15 +190,19 @@ function gestureHolds(gesture: PendingGesture | null | undefined, nodes: NodeMap
  * exists — two tabs reloaded together (a sleep, a dev server restarting) each
  * get their own back — else the one whose view was written last, which is the
  * one on screen in the last tab used. Without any, the most recently updated.
+ * Archived conversations count only as the tab's own; with nothing else left,
+ * there is none to open.
  * `conversations` is newest-updated first, as the sidebar lists them.
  */
 export function lastOpened(conversations: Conversation[], thisTab?: string | null): Conversation | undefined {
   const own = thisTab ? conversations.find((c) => c.id === thisTab) : undefined;
   if (own) return own;
+  // An archived conversation reopens only in the tab that had it open.
+  const listed = conversations.filter((c) => !c.archivedAt);
   let best: Conversation | undefined;
-  for (const c of conversations) {
+  for (const c of listed) {
     const at = c.view?.savedAt;
     if (typeof at === "number" && (!best || at > (best.view?.savedAt ?? -1))) best = c;
   }
-  return best ?? conversations[0];
+  return best ?? listed[0];
 }

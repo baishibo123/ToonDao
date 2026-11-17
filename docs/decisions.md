@@ -790,3 +790,20 @@ computer slept, when the dev server reconnects or the browser discards tabs —
 both opened the conversation used last, because the newest view is shared
 through the database. A new tab, or one where storage is refused, still opens
 the newest view. Reported by the person (2026-11-17).
+
+**P-58 · Archiving tidies the sidebar and changes nothing else.** A branch is
+archived from its row's right-click menu: its head turn's id goes into the
+conversation's optional `archivedBranches`, and `visibleThreads()` leaves that
+row and every row beneath it out of the sidebar. The tree, the context, the
+counts and a reply's fork markers are untouched, and a branch opened from a
+marker opens as before. The conversation's menu (its own row or its main
+thread's) restores every archived branch at once. A whole conversation is
+archived the same way (`archivedAt`): it moves to the archived list, reached
+from a small button beside Settings that appears only while one exists, and
+can be opened there, unarchived or deleted. Neither touches `updatedAt`, so a
+restored row returns to its place. Both travel in an export, the branch ids
+through the import's remap; a deleted branch leaves the list. Asked for by
+the person (2026-11-17), who wanted a tidier sidebar without losing anything.
+Considered: archiving only whole conversations, which cannot tidy a long
+conversation's branches; restoring one branch at a time, which the person
+did not need.

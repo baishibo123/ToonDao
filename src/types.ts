@@ -199,6 +199,17 @@ export interface Conversation {
    * exported, and never part of what is sent.
    */
   view?: ConversationView;
+  /**
+   * When the person archived the whole conversation: it leaves the sidebar's
+   * list for the archived one and is otherwise untouched (P-58).
+   */
+  archivedAt?: number;
+  /**
+   * Branches the person archived: the ids of their head turns (an outline
+   * row's id). Each hides its row and every row beneath it in the sidebar, and
+   * nothing else — not the tree, not the context, not a reply's fork markers.
+   */
+  archivedBranches?: NodeId[];
 }
 
 /** A registered project and the snapshot a conversation reads (names only; the bridge holds the folder). */

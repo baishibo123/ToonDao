@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ConfirmDelete } from "@/components/ConfirmDelete";
+import { RowMenu, menuPoint, type RowMenuItem, type RowMenuRequest } from "@/components/RowMenu";
 import { useStore } from "@/store/useStore";
 import { useUI } from "@/store/useUI";
 import { BRANCH_META } from "@/lib/policyMeta";
@@ -7,6 +8,7 @@ import {
   ancestorThreadIds,
   buildOutline,
   flattenOutline,
+  visibleThreads,
   type OutlineThread,
 } from "@/lib/outline";
 import { focusNode } from "@/store/focusNode";
@@ -24,15 +26,29 @@ import { focusNode } from "@/store/focusNode";
  * branches. Another conversation's triangle selects it first — which loads its
  * nodes — and then expands, so the gesture still does what it looks like it
  * does, just with a database read in the middle.
+ *
+ * `archived` lists the archived conversations instead of the others; either
+ * list leaves out every archived branch (P-58), which a conversation's
+ * right-click menu brings back.
  */
-export function Outline() {
+export function Outline({ archived = false }: { archived?: boolean }) {
   const listRef = useRef<HTMLDivElement>(null);
-  const conversations = useStore((s) => s.conversations);
+  const allConversations = useStore((s) => s.conversations);
+  const conversations = useMemo(
+    () => allConversations.filter((c) => Boolean(c.archivedAt) === archived),
+    [allConversations, archived],
+  );
   const conversationId = useStore((s) => s.conversationId);
   const nodes = useStore((s) => s.nodes);
   const activeNodeId = useStore((s) => s.activeNodeId);
   const selectConversation = useStore((s) => s.selectConversation);
   const deleteConversation = useStore((s) => s.deleteConversation);
+  const archiveConversation = useStore((s) => s.archiveConversation);
+  const unarchiveConversation = useStore((s) => s.unarchiveConversation);
+  const archiveBranch = useStore((s) => s.archiveBranch);
+  const restoreBranches = useStore((s) => s.restoreBranches);
+  const [menu, setMenu] = useState<RowMenuRequest | null>(null);
+  const closeMenu = useCallback(() => setMenu(null), []);
   /** The conversation whose ✕ was clicked, waiting for the person to confirm. */
   const [doomed, setDoomed] = useState<{ id: string; title: string } | null>(null);
   const cancelDelete = useCallback(() => setDoomed(null), []);
@@ -43,6 +59,12 @@ export function Outline() {
   const asides = useUI((s) => s.asides);
 
   const outline = useMemo(() => buildOutline(nodes, conversationId), [nodes, conversationId]);
+  const archivedBranches = allConversations.find((c) => c.id === conversationId)?.archivedBranches;
+  /** The rows shown: the outline without its archived branches. */
+  const shown = useMemo(
+    () => visibleThreads(outline.threads, new Set(archivedBranches ?? [])),
+    [outline.threads, archivedBranches],
+  );
   /** Branch roots open in the aside pane, so a row can say so. */
   const asideRoots = useMemo(
     () => new Set(asides.map((f) => f.rootNodeId).filter((id): id is string => Boolean(id))),
@@ -77,12 +99,12 @@ export function Outline() {
     for (const conversation of conversations) {
       rows.push({ key: `c:${conversation.id}`, conversationId: conversation.id });
       if (conversation.id !== conversationId || !isOpen(conversation.id)) continue;
-      for (const thread of flattenOutline(outline.threads, (t) => isOpen(t.id))) {
+      for (const thread of flattenOutline(shown, (t) => isOpen(t.id))) {
         rows.push({ key: `t:${thread.id}`, conversationId: conversation.id, thread });
       }
     }
     return rows;
-  }, [conversations, conversationId, outline.threads, isOpen]);
+  }, [conversations, conversationId, shown, isOpen]);
 
   /**
    * One click, one place to go — and `focusNode()` decides where that is. A row
@@ -94,6 +116,38 @@ export function Outline() {
    * that row, which is what clicking a row means everywhere else.
    */
   const goToThread = (thread: OutlineThread) => focusNode(thread.leafNodeId);
+
+  /** A conversation's menu: on its own row, and on its main thread's. */
+  const conversationMenu = (id: string, title: string): RowMenuItem[] => {
+    const record = allConversations.find((c) => c.id === id);
+    const count = record?.archivedBranches?.length ?? 0;
+    return [
+      ...(count > 0
+        ? [{ label: `Restore ${count} archived branch${count === 1 ? "" : "es"}`, onSelect: () => void restoreBranches(id) }]
+        : []),
+      record?.archivedAt
+        ? { label: "Unarchive conversation", onSelect: () => void unarchiveConversation(id) }
+        : { label: "Archive conversation", onSelect: () => void archiveConversation(id) },
+      { label: "Delete…", danger: true, onSelect: () => setDoomed({ id, title }) },
+    ];
+  };
+
+  const openMenu = (event: React.MouseEvent<HTMLElement>, items: RowMenuItem[]) => {
+    event.preventDefault();
+    const returnTo = event.currentTarget.querySelector<HTMLElement>(".row__label");
+    setMenu({ ...menuPoint(event), items, returnTo });
+  };
+
+  const onThreadMenu = (event: React.MouseEvent<HTMLElement>, thread: OutlineThread) => {
+    if (!conversationId) return;
+    const title = allConversations.find((c) => c.id === conversationId)?.title ?? "";
+    openMenu(
+      event,
+      thread.depth === 0
+        ? conversationMenu(conversationId, title)
+        : [{ label: "Archive branch", onSelect: () => void archiveBranch(conversationId, thread.id) }],
+    );
+  };
 
   const onKeyDown = (event: React.KeyboardEvent) => {
     const key = event.key;
@@ -144,6 +198,7 @@ export function Outline() {
               aria-level={1}
               aria-selected={current}
               aria-expanded={expanded}
+              onContextMenu={(e) => openMenu(e, conversationMenu(conversation.id, conversation.title))}
             >
               <button
                 type="button"
@@ -185,7 +240,7 @@ export function Outline() {
             </div>
 
             {expanded
-              ? outline.threads.map((thread) => (
+              ? shown.map((thread) => (
                   <ThreadRows
                     key={thread.id}
                     thread={thread}
@@ -195,6 +250,7 @@ export function Outline() {
                     selectedThreadId={selectedThreadId}
                     asideRoots={asideRoots}
                     onSelect={goToThread}
+                    onMenu={onThreadMenu}
                   />
                 ))
               : null}
@@ -211,6 +267,7 @@ export function Outline() {
           }}
         />
       ) : null}
+      {menu ? <RowMenu request={menu} onClose={closeMenu} /> : null}
     </div>
   );
 }
@@ -223,6 +280,7 @@ interface ThreadRowsProps {
   selectedThreadId: string | null;
   asideRoots: Set<string>;
   onSelect: (thread: OutlineThread) => void;
+  onMenu: (event: React.MouseEvent<HTMLElement>, thread: OutlineThread) => void;
 }
 
 function ThreadRows({
@@ -233,6 +291,7 @@ function ThreadRows({
   selectedThreadId,
   asideRoots,
   onSelect,
+  onMenu,
 }: ThreadRowsProps) {
   const meta = BRANCH_META[thread.kind];
   const hasKids = thread.children.length > 0;
@@ -253,6 +312,7 @@ function ThreadRows({
           ["--indent" as string]: `${(level - 2) * 13}px`,
           ["--kind" as string]: `var(${meta.cssVar})`,
         }}
+        onContextMenu={(e) => onMenu(e, thread)}
       >
         {hasKids ? (
           <button
@@ -304,6 +364,7 @@ function ThreadRows({
               selectedThreadId={selectedThreadId}
               asideRoots={asideRoots}
               onSelect={onSelect}
+              onMenu={onMenu}
             />
           ))
         : null}

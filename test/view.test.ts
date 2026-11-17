@@ -136,6 +136,13 @@ describe("the conversation a reload opens", () => {
     expect(lastOpened(list, null)?.id).toBe("viewed");
   });
 
+  it("is an archived one only in the tab that had it open", () => {
+    const list = [conv("newest"), { ...conv("viewed", 9), archivedAt: 1 }, conv("older", 3)];
+    expect(lastOpened(list)?.id).toBe("older");
+    expect(lastOpened(list, "viewed")?.id).toBe("viewed");
+    expect(lastOpened([{ ...conv("only"), archivedAt: 1 }])).toBeUndefined();
+  });
+
   it("is the newest when none was ever viewed", () => {
     expect(lastOpened([conv("newest"), conv("older")])?.id).toBe("newest");
   });

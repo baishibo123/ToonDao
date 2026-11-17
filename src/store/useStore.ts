@@ -111,6 +111,13 @@ interface AppState {
   selectConversation: (id: string) => Promise<void>;
   deleteConversation: (id: string) => Promise<void>;
   renameConversation: (id: string, title: string) => Promise<void>;
+  /** Put a whole conversation in the archived list, or take it out (P-58). */
+  archiveConversation: (id: string) => Promise<void>;
+  unarchiveConversation: (id: string) => Promise<void>;
+  /** Hide a branch's row, and the rows beneath it, from the sidebar (P-58). */
+  archiveBranch: (conversationId: string, threadId: string) => Promise<void>;
+  /** Bring back every branch archived in this conversation. */
+  restoreBranches: (conversationId: string) => Promise<void>;
   /**
    * Have the model name the current conversation from what it is about (P-34),
    * in one small request. Resolves true when the title changed.
@@ -287,10 +294,28 @@ export const useStore = create<AppState>((set, get) => ({
     });
     const remaining = get().conversations.filter((c) => c.id !== id);
     set({ conversations: remaining });
-    if (get().conversationId === id) {
-      if (remaining.length > 0) await get().selectConversation(remaining[0].id);
-      else await get().newConversation();
-    }
+    if (get().conversationId === id) await openNextListed(get, id);
+  },
+
+  // Archiving is how the sidebar shows things, not a change to them: neither
+  // touches `updatedAt`, so a restored row comes back where it was.
+  archiveConversation: async (id) => {
+    await patchConversation(set, id, { archivedAt: Date.now() });
+    if (get().conversationId === id) await openNextListed(get, id);
+  },
+
+  unarchiveConversation: async (id) => {
+    await patchConversation(set, id, { archivedAt: undefined });
+  },
+
+  archiveBranch: async (conversationId, threadId) => {
+    const current = get().conversations.find((c) => c.id === conversationId)?.archivedBranches ?? [];
+    if (current.includes(threadId)) return;
+    await patchConversation(set, conversationId, { archivedBranches: [...current, threadId] });
+  },
+
+  restoreBranches: async (conversationId) => {
+    await patchConversation(set, conversationId, { archivedBranches: undefined });
   },
 
   renameConversation: async (id, title) => {
@@ -502,6 +527,12 @@ export const useStore = create<AppState>((set, get) => ({
     if (parked?.length) {
       const kept = pruneParked(parked, idSet);
       if (kept.length !== parked.length) await saveLater(set, node.conversationId, kept);
+    }
+    // An archived branch that no longer exists has nothing to hide or restore.
+    const archived = get().conversations.find((c) => c.id === node.conversationId)?.archivedBranches;
+    if (archived?.some((a) => idSet.has(a))) {
+      const kept = archived.filter((a) => !idSet.has(a));
+      await patchConversation(set, node.conversationId, { archivedBranches: kept.length ? kept : undefined });
     }
 
     set((s) => {
@@ -900,6 +931,19 @@ async function saveLater(
     conversations: s.conversations.map((c) => (c.id === conversationId ? { ...c, later } : c)),
   }));
   await db.conversations.update(conversationId, { later });
+}
+
+/** Changes a conversation's record as it is, `updatedAt` included. */
+async function patchConversation(set: Setter, id: string, patch: Partial<Conversation>): Promise<void> {
+  set((s) => ({ conversations: s.conversations.map((c) => (c.id === id ? { ...c, ...patch } : c)) }));
+  await db.conversations.update(id, patch);
+}
+
+/** After the open conversation leaves the list: the newest one still in it, else a new one. */
+async function openNextListed(get: Getter, leaving: string): Promise<void> {
+  const next = get().conversations.find((c) => c.id !== leaving && !c.archivedAt);
+  if (next) await get().selectConversation(next.id);
+  else await get().newConversation();
 }
 
 async function persistActive(conversationId: string | null, nodeId: NodeId): Promise<void> {

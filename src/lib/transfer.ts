@@ -239,6 +239,8 @@ export function parseBundle(
         ...(project ? { project } : {}),
         ...(value.titleSource === "auto" || value.titleSource === "set" ? { titleSource: value.titleSource } : {}),
         ...(typeof value.pacing === "boolean" ? { pacing: value.pacing } : {}),
+        ...(typeof value.archivedAt === "number" ? { archivedAt: value.archivedAt } : {}),
+        ...parseArchivedBranches(value.archivedBranches, mapNode, nodesById),
       };
     });
 
@@ -471,4 +473,21 @@ export function bundleFilename(): string {
     String(now.getDate()).padStart(2, "0"),
   ].join("-");
   return `toondao-${stamp}.json`;
+}
+
+/**
+ * A conversation's archived branches (P-58), through the same remap as its
+ * nodes; one whose branch is not in the bundle is dropped.
+ */
+function parseArchivedBranches(
+  raw: unknown,
+  mapNode: (id: string) => string,
+  nodesById: Map<string, ConversationNode>,
+): { archivedBranches?: NodeId[] } {
+  if (!Array.isArray(raw)) return {};
+  const ids = raw
+    .filter((id): id is string => typeof id === "string")
+    .map(mapNode)
+    .filter((id) => nodesById.has(id));
+  return ids.length ? { archivedBranches: [...new Set(ids)] } : {};
 }

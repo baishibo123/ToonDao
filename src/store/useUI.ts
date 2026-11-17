@@ -109,6 +109,10 @@ interface UIState {
   settingsOpen: boolean;
   setSettingsOpen: (open: boolean) => void;
 
+  /** Which list the sidebar shows: the conversations, or the archived ones (P-58). */
+  sidebarList: "conversations" | "archived";
+  setSidebarList: (list: "conversations" | "archived") => void;
+
   shortcutsOpen: boolean;
   setShortcutsOpen: (open: boolean) => void;
 
@@ -204,6 +208,9 @@ export const useUI = create<UIState>((set) => ({
 
   settingsOpen: false,
   setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
+
+  sidebarList: "conversations",
+  setSidebarList: (sidebarList) => set({ sidebarList }),
 
   shortcutsOpen: false,
   setShortcutsOpen: (shortcutsOpen) => set({ shortcutsOpen }),

@@ -342,6 +342,22 @@ export function flattenOutline(
   return out;
 }
 
+/**
+ * The outline as the sidebar shows it: every archived row left out, with the
+ * rows beneath it, so archiving a branch puts away all it led to (P-58). The
+ * threads themselves are untouched — counts still include what is put away,
+ * and restoring brings each row back where it was. The main thread is the
+ * conversation itself and is never left out.
+ */
+export function visibleThreads(threads: OutlineThread[], archived: ReadonlySet<string>): OutlineThread[] {
+  if (archived.size === 0) return threads;
+  const keep = (list: OutlineThread[]): OutlineThread[] =>
+    list
+      .filter((t) => t.depth === 0 || !archived.has(t.id))
+      .map((t) => ({ ...t, children: keep(t.children) }));
+  return keep(threads);
+}
+
 /** Every ancestor row of `id`, root first — the rows that must be open to see it. */
 export function ancestorThreadIds(threads: OutlineThread[], id: string | null): string[] {
   const trail: string[] = [];

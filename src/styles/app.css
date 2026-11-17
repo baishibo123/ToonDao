@@ -1537,3 +1537,32 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   box-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
 }
 .segmented__option:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+/* The archived list: a header to leave it, and the footer's way in (P-58). */
+.sidebar__listhead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 2px 6px 6px;
+}
+.sidebar__back {
+  font-size: calc(12px * var(--text-scale, 1));
+  color: var(--text-dim);
+}
+.sidebar__back:hover { color: var(--text); }
+.sidebar__listname {
+  font-size: calc(11px * var(--text-scale, 1));
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.sidebar__footrow { display: flex; gap: 4px; }
+.sidebar__footrow > .btn--wide { flex: 1; }
+.sidebar__archived {
+  flex: none;
+  display: grid;
+  place-items: center;
+  padding: 0 10px;
+  color: var(--text-dim);
+}
+.sidebar__archived--on { color: var(--accent); background: var(--surface-hover); }
