@@ -79,7 +79,13 @@ export function useViewPersistence(): void {
       if (s.conversationId !== p.conversationId) opened(s.conversationId, p.conversationId);
     });
     const offUI = useUI.subscribe((s, p) => {
-      if (s.asides !== p.asides || s.wideAsideId !== p.wideAsideId || s.pending !== p.pending || s.drafts !== p.drafts) {
+      if (
+        s.asides !== p.asides ||
+        s.wideAsideId !== p.wideAsideId ||
+        s.pending !== p.pending ||
+        s.drafts !== p.drafts ||
+        s.collapsedRows !== p.collapsedRows
+      ) {
         schedule();
       }
     });

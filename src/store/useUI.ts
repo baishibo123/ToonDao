@@ -253,6 +253,7 @@ export const useUI = create<UIState>((set) => ({
         wideAsideId: view.wideAsideId,
         pending: view.pending,
         drafts: view.drafts,
+        collapsedRows: view.collapsedRows,
         selection: null,
         openInspectors,
         restoredScroll: { marks: view.scroll, nonce: s.restoredScroll.nonce + 1 },

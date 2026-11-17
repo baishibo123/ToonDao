@@ -773,3 +773,11 @@ a marker goes only where it touches a word, and underscores stay (`x_i`,
 `__init__`). What is sent to a model is still the source. Asked for by the
 person (2026-11-15), who offered rendering the label or stripping it; a
 rendered label would put KaTeX and Markdown into every row of the sidebar.
+
+**P-56 · A folded row stays folded.** Which outline rows are collapsed — the
+conversation's own row and any branch head — is part of its `view` (P-50,
+optional `collapsed`), written and restored with the rest, so a reload or a
+trip to another conversation no longer opens every branch again. A row whose
+branch was deleted is dropped on the way back. Asked for by the person
+(2026-11-17). Considered: one set in localStorage for every conversation,
+which sits outside the view the rule says holds what was on screen.

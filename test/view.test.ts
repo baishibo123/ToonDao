@@ -36,12 +36,19 @@ function view(over: Partial<ConversationView>): ConversationView {
 describe("writing a view", () => {
   it("leaves out a box with nothing in it", () => {
     const v = snapshotView(
-      { asides: [], wideAsideId: null, pending: null, drafts: { __draft__: EMPTY_DRAFT, "__draft__:s1": { ...EMPTY_DRAFT, text: "half a" } } },
+      {
+        asides: [],
+        wideAsideId: null,
+        pending: null,
+        drafts: { __draft__: EMPTY_DRAFT, "__draft__:s1": { ...EMPTY_DRAFT, text: "half a" } },
+        collapsedRows: new Set(["c1", "b"]),
+      },
       {},
       5,
     );
     expect(Object.keys(v.drafts)).toEqual(["__draft__:s1"]);
     expect(v.savedAt).toBe(5);
+    expect(v.collapsed).toEqual(["c1", "b"]);
   });
 });
 
@@ -94,7 +101,16 @@ describe("restoring a view", () => {
   it("never shows another conversation's asides, and survives no view at all", () => {
     const v = view({ asides: [frame("s1", "a", "b")] });
     expect(restoreView(v, nodes("a", "b"), "c2").asides).toHaveLength(0);
-    expect(restoreView(undefined, nodes("a"), "c1")).toEqual({ asides: [], wideAsideId: null, pending: null, drafts: {}, scroll: {} });
+    expect(restoreView(undefined, nodes("a"), "c1")).toEqual({
+      asides: [], wideAsideId: null, pending: null, drafts: {}, scroll: {}, collapsedRows: new Set(),
+    });
+  });
+
+  it("keeps a row folded while its branch is still there", () => {
+    const v = view({ collapsed: ["c1", "a", "gone"] });
+    expect([...restoreView(v, nodes("a"), "c1").collapsedRows]).toEqual(["c1", "a"]);
+    // A view from before rows were kept folds nothing.
+    expect(restoreView(view({}), nodes("a"), "c1").collapsedRows.size).toBe(0);
   });
 });
 

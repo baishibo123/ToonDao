@@ -45,6 +45,8 @@ export interface ConversationView {
   drafts: Record<string, ComposerDraft>;
   /** By `draftKey()`; a pane at its end is left out. */
   scroll: Record<string, ScrollMark>;
+  /** Outline rows folded shut: the conversation's own id and branch heads. */
+  collapsed?: string[];
 }
 
 /** The part of the UI a view is made from and restored into. */
@@ -53,6 +55,7 @@ export interface ViewState {
   wideAsideId: string | null;
   pending: PendingGesture | null;
   drafts: Record<string, ComposerDraft>;
+  collapsedRows: Set<string>;
 }
 
 export interface RestoredView extends ViewState {
@@ -99,6 +102,7 @@ export function snapshotView(
     pending: ui.pending,
     drafts,
     scroll: { ...scroll },
+    collapsed: [...ui.collapsedRows],
   };
 }
 
@@ -114,7 +118,9 @@ export function restoreView(
   nodes: NodeMap,
   conversationId: string,
 ): RestoredView {
-  const empty: RestoredView = { asides: [], wideAsideId: null, pending: null, drafts: {}, scroll: {} };
+  const empty: RestoredView = {
+    asides: [], wideAsideId: null, pending: null, drafts: {}, scroll: {}, collapsedRows: new Set(),
+  };
   if (!view || typeof view !== "object") return empty;
 
   const asides: AsideFrame[] = [];
@@ -151,6 +157,13 @@ export function restoreView(
     }
   }
 
+  // A folded row stays folded while its branch is still there.
+  const collapsedRows = new Set(
+    (Array.isArray(view.collapsed) ? view.collapsed : []).filter(
+      (id) => id === conversationId || Boolean(nodes[id]),
+    ),
+  );
+
   const last = asides.at(-1);
   return {
     asides,
@@ -158,6 +171,7 @@ export function restoreView(
     pending: gestureHolds(view.pending, nodes) ? view.pending : null,
     drafts,
     scroll,
+    collapsedRows,
   };
 }
 
