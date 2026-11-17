@@ -186,11 +186,15 @@ function gestureHolds(gesture: PendingGesture | null | undefined, nodes: NodeMap
 }
 
 /**
- * The conversation to open at a reload: the one whose view was written last,
- * which is the one that was on screen. Without any, the most recently updated.
+ * The conversation to open at a reload: the one this tab had open, if it still
+ * exists — two tabs reloaded together (a sleep, a dev server restarting) each
+ * get their own back — else the one whose view was written last, which is the
+ * one on screen in the last tab used. Without any, the most recently updated.
  * `conversations` is newest-updated first, as the sidebar lists them.
  */
-export function lastOpened(conversations: Conversation[]): Conversation | undefined {
+export function lastOpened(conversations: Conversation[], thisTab?: string | null): Conversation | undefined {
+  const own = thisTab ? conversations.find((c) => c.id === thisTab) : undefined;
+  if (own) return own;
   let best: Conversation | undefined;
   for (const c of conversations) {
     const at = c.view?.savedAt;

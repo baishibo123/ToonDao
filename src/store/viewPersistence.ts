@@ -15,6 +15,7 @@ import { db } from "@/db/db";
 import { useStore } from "@/store/useStore";
 import { useUI } from "@/store/useUI";
 import { restoreView, snapshotView, type ConversationView, type ScrollMark } from "@/lib/view";
+import { rememberTabConversation } from "@/lib/tabMemory";
 
 const SAVE_DELAY_MS = 300;
 
@@ -63,6 +64,7 @@ function opened(next: string | null, previous: string | null): void {
   if (previous) flush();
   scroll = {};
   if (!next) return;
+  rememberTabConversation(next);
   const { nodes, conversations } = useStore.getState();
   const view = written.get(next) ?? conversations.find((c) => c.id === next)?.view;
   const restored = restoreView(view, nodes, next);

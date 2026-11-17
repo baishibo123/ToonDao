@@ -781,3 +781,12 @@ trip to another conversation no longer opens every branch again. A row whose
 branch was deleted is dropped on the way back. Asked for by the person
 (2026-11-17). Considered: one set in localStorage for every conversation,
 which sits outside the view the rule says holds what was on screen.
+
+**P-57 · A tab reopens its own conversation.** Each tab keeps the id of the
+conversation it has open in `sessionStorage` (`src/lib/tabMemory.ts`), which
+survives that tab's reloads and belongs to it alone, and `lastOpened()` takes
+it before the newest view. Before, two tabs reloaded together — after the
+computer slept, when the dev server reconnects or the browser discards tabs —
+both opened the conversation used last, because the newest view is shared
+through the database. A new tab, or one where storage is refused, still opens
+the newest view. Reported by the person (2026-11-17).

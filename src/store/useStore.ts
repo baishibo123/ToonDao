@@ -25,6 +25,7 @@ import { rootsOf, subtreeIds, type NodeMap } from "@/lib/tree";
 import { buildOutline, spineLeaf, threadOf } from "@/lib/outline";
 import { parkPassage, pruneParked } from "@/lib/later";
 import { lastOpened } from "@/lib/view";
+import { tabConversation } from "@/lib/tabMemory";
 import { toolScopeFor, type ToolGrant } from "@/lib/toolScope";
 import { planSubmission, restartedConversation } from "@/lib/draft";
 import { branchEffort, branchModel, branchPacing } from "@/lib/model";
@@ -211,7 +212,7 @@ export const useStore = create<AppState>((set, get) => ({
       set({ conversations, templates, settings, ready: true });
 
       // The conversation on screen at the last reload, not merely the newest (P-50).
-      const open = lastOpened(conversations);
+      const open = lastOpened(conversations, tabConversation());
       if (open) {
         await get().selectConversation(open.id);
       } else {

@@ -129,6 +129,13 @@ describe("the conversation a reload opens", () => {
     expect(lastOpened([conv("newest"), conv("viewed", 9), conv("older", 3)])?.id).toBe("viewed");
   });
 
+  it("is the one this tab had open, so two tabs reloaded together keep theirs", () => {
+    const list = [conv("newest"), conv("viewed", 9), conv("mine", 3)];
+    expect(lastOpened(list, "mine")?.id).toBe("mine");
+    expect(lastOpened(list, "deleted")?.id).toBe("viewed");
+    expect(lastOpened(list, null)?.id).toBe("viewed");
+  });
+
   it("is the newest when none was ever viewed", () => {
     expect(lastOpened([conv("newest"), conv("older")])?.id).toBe("newest");
   });
