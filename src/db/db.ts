@@ -8,7 +8,7 @@ import type {
   TemplateId,
   TemplateSet,
 } from "@/types";
-import { DEFAULT_TEMPLATES } from "@/lib/templates";
+import { DEFAULT_TEMPLATES, currentTemplate } from "@/lib/templates";
 
 /**
  * IndexedDB via Dexie. Message data never touches localStorage (§7).
@@ -215,7 +215,7 @@ export async function loadTemplateSet(): Promise<TemplateSet> {
   const rows = await db.templates.toArray();
   const set = { ...DEFAULT_TEMPLATES };
   for (const row of rows) {
-    if (row.id in set) set[row.id] = row.body;
+    if (row.id in set) set[row.id] = currentTemplate(row.id, row.body);
   }
   return set;
 }

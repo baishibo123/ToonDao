@@ -6,8 +6,9 @@ import {
   lineageChain,
   policyLabel,
 } from "@/lib/assembleContext";
-import { DEFAULT_TEMPLATES } from "@/lib/templates";
-import { TreeFixture } from "./helpers";
+import { DEFAULT_TEMPLATES, RETIRED_TEMPLATES, currentTemplate } from "@/lib/templates";
+import { draftNode, planSubmission } from "@/lib/draft";
+import { TEMPLATES_UNDER_TEST, TreeFixture } from "./helpers";
 import type { TemplateSet } from "@/types";
 
 const T: TemplateSet = DEFAULT_TEMPLATES;
@@ -158,7 +159,7 @@ describe("windowed (§5.1 concept lens)", () => {
     expect(body).not.toContain("turn 3");
     expect(body).not.toContain("turn 4");
 
-    expect(body).toContain("And this is the concept I'm curious about:");
+    expect(body).toContain("This is the passage I'm asking about");
     expect(body).toContain("monotonicity");
   });
 
@@ -718,5 +719,64 @@ describe("P-47 what this chat draws", () => {
     expect(assembleContext(u, t, { ...T, rendering: "  ", files: "" }, { rendering: true })).toEqual([{ role: "user", content: "hi" }]);
     expect(assembleContext(u, t, { ...T, files: "" }, { rendering: true })[0]).toEqual({ role: "system", content: T.rendering });
     expect(assembleContext(u, t, T)).toEqual([{ role: "user", content: "hi" }]);
+  });
+});
+
+describe("Explain carries its passage and its question (P-59)", () => {
+  const passage = "SGD with warm restarts";
+  function explain(t: TreeFixture, typed: string) {
+    t.linear(3);
+    const src = t.all().at(-1)!;
+    const plan = planSubmission({
+      text: typed,
+      pending: { kind: "concept", sourceNodeId: src.id, anchor: { start: 0, end: 4, text: passage }, turns: 2 },
+      activeLeafId: src.id,
+    });
+    return draftNode(plan, t.conversationId);
+  }
+
+  it("sends the passage when a question is typed, and the question after it", () => {
+    const t = new TreeFixture();
+    const body = assembleContext(explain(t, "why restart at all?"), t, T)[0].content;
+    expect(body).toContain(passage);
+    expect(body.indexOf(passage)).toBeLessThan(body.indexOf("why restart at all?"));
+    expect(body.trimEnd().endsWith("why restart at all?")).toBe(true);
+  });
+
+  it("sends the passage once, and no empty question, when nothing is typed", () => {
+    const t = new TreeFixture();
+    const body = assembleContext(explain(t, ""), t, T)[0].content;
+    expect(body.split(passage)).toHaveLength(2);
+    expect(body).toBe(body.trimEnd());
+    expect(body).not.toContain("{{");
+  });
+
+  it("assembles a node made before P-59 exactly as it was sent then", () => {
+    const t = new TreeFixture();
+    t.linear(3);
+    const src = t.all().at(-1)!;
+    const old = t.add("user", "monotonicity", src.id, { kind: "windowed", turns: 2, upToNodeId: src.id }, "concept-lens");
+    const legacy = TEMPLATES_UNDER_TEST.concept_lens;
+    const then = legacy
+      .replace("{{context_turns}}", "User: question turn 2\n\nAssistant: answer turn 2\n\nUser: question turn 3\n\nAssistant: answer turn 3")
+      .replace("{{concept}}", "monotonicity");
+    expect(assembleContext(old, t, { ...T, concept_lens: legacy })[0].content).toBe(then);
+  });
+
+  it("keeps the question under a template that has no slot for it (A-9)", () => {
+    const t = new TreeFixture();
+    const node = explain(t, "why restart at all?");
+    const body = assembleContext(node, t, { ...T, concept_lens: TEMPLATES_UNDER_TEST.concept_lens })[0].content;
+    expect(body).toContain(passage);
+    expect(body.endsWith("\n\nwhy restart at all?")).toBe(true);
+  });
+});
+
+describe("currentTemplate (P-59)", () => {
+  it("reads an unedited earlier default as today's, and an edited one as it is", () => {
+    const retired = RETIRED_TEMPLATES.concept_lens![0];
+    expect(currentTemplate("concept_lens", retired)).toBe(DEFAULT_TEMPLATES.concept_lens);
+    expect(currentTemplate("concept_lens", `${retired} Be brief.`)).toBe(`${retired} Be brief.`);
+    expect(currentTemplate("pacing", DEFAULT_TEMPLATES.pacing)).toBe(DEFAULT_TEMPLATES.pacing);
   });
 });

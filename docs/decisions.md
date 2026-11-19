@@ -807,3 +807,22 @@ the person (2026-11-17), who wanted a tidier sidebar without losing anything.
 Considered: archiving only whole conversations, which cannot tidy a long
 conversation's branches; restoring one branch at a time, which the person
 did not need.
+
+**P-59 · Explain carries the passage and the question, each in its own slot.**
+An Explain sent with a typed question used to lose the passage it was opened
+on: `concept_lens` had one slot, `{{concept}}`, filled with the node's content,
+which is the typed question when there is one and the passage only when there
+is not — so the model got the window and the question, and had to guess what
+was being asked about. Reported by the person (2026-11-19), who mostly explains
+abbreviations that cannot be read without the turns around them. The `windowed`
+policy now keeps the passage (`passage`, optional), and the template has
+`{{passage}}` and `{{question}}`, the question last; a template with no
+`{{question}}` slot gets it appended (A-9), and `{{concept}}` still names the
+passage. A node made before this has no passage and assembles word for word as
+it was sent. An unedited earlier default reads as today's (`currentTemplate()`),
+at load and never written back, so an older build opening the same database
+still fills its own slots; an edited template is left as the person wrote it.
+Considered: marking the passage in place inside the window, which needs the
+anchor's offsets in the policy too — left for a later step. This is §5.1's
+"explain in the context of what we're doing", not Just this (§5.3, "this text
+and nothing else"), whose context-free promise is unchanged.

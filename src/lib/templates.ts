@@ -8,15 +8,19 @@ import type { TemplateId, TemplateSet } from "@/types";
  * The wording is the user's own. Preserve the register when editing defaults.
  */
 export const DEFAULT_TEMPLATES: TemplateSet = {
+  // P-59: the passage and the question are two slots, and the question comes
+  // last, so a typed question never takes the passage's place.
   concept_lens: `This is the context of our conversation:
 
 {{context_turns}}
 
-And this is the concept I'm curious about:
+This is the passage I'm asking about — it is in the last message above:
 
-{{concept}}
+{{passage}}
 
-Please take into account everything I have said throughout this interaction, and precisely address my confusion about this specific concept, for me.`,
+Please take into account the context above, and precisely address my confusion about this specific passage, for me. If it is an abbreviation or a term, first say what it stands for here.
+
+{{question}}`,
 
   structural_crop: `Here is our conversation up to the exact point where I got lost:
 
@@ -84,14 +88,42 @@ Show me the list of modules, recommend where to start and why, and ask me where 
 {{message}}`,
 };
 
+/**
+ * Earlier defaults, by template. A stored body equal to one of these was never
+ * edited, so it reads as today's default (`currentTemplate()`); an edited body
+ * is the person's own and is left alone.
+ */
+export const RETIRED_TEMPLATES: Partial<Record<TemplateId, readonly string[]>> = {
+  concept_lens: [
+    `This is the context of our conversation:
+
+{{context_turns}}
+
+And this is the concept I'm curious about:
+
+{{concept}}
+
+Please take into account everything I have said throughout this interaction, and precisely address my confusion about this specific concept, for me.`,
+  ],
+};
+
+/**
+ * A stored body as this build reads it. Read, never written back: the database
+ * keeps the earlier default, so an older build opening it still fills every
+ * slot its template names.
+ */
+export function currentTemplate(id: TemplateId, body: string): string {
+  return RETIRED_TEMPLATES[id]?.includes(body) ? DEFAULT_TEMPLATES[id] : body;
+}
+
 export const TEMPLATE_META: Record<
   TemplateId,
   { label: string; vars: string[]; note: string }
 > = {
   concept_lens: {
     label: "Concept lens",
-    vars: ["context_turns", "concept"],
-    note: "§5.1 — windowed policy. {{context_turns}} is the last N user/assistant pairs rendered as plain prose.",
+    vars: ["context_turns", "passage", "question"],
+    note: "§5.1 — windowed policy (Explain). {{context_turns}} is the last N user/assistant pairs rendered as plain prose; {{passage}} the text Explain was opened on; {{question}} what was typed, empty when nothing was. Without a {{question}} slot the question is added at the end.",
   },
   structural_crop: {
     label: "Structural crop",

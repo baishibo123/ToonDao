@@ -91,8 +91,8 @@ describe("§9.1 Concept lens context window", () => {
     expect(body).not.toContain("turn 4");
     // Wrapped in the template, with the clicked term as the concept.
     expect(body).toContain("This is the context of our conversation:");
-    expect(body).toContain("And this is the concept I'm curious about:");
-    expect(body).toContain("precisely address my confusion about this specific concept");
+    expect(body).toContain("This is the passage I'm asking about");
+    expect(body).toContain("precisely address my confusion about this specific passage");
     expect(node.content).toBe("answer");
     expect(plan.forks).toBe(true);
   });

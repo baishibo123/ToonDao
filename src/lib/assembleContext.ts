@@ -110,12 +110,17 @@ function departurePrompt(
   switch (policy.kind) {
     case "windowed": {
       const window = windowedMessages(policy.upToNodeId, policy.turns, store, templates, inner, false);
-      return own(
-        renderTemplate(templates.concept_lens, {
-          context_turns: asProse(window),
-          concept: node.content,
-        }),
-      );
+      const { passage, question } = explainSlots(node, policy);
+      const body = renderTemplate(templates.concept_lens, {
+        context_turns: asProse(window),
+        passage,
+        question,
+        // A template written before P-59 names the passage `concept`.
+        concept: passage,
+      }).trimEnd();
+      // A-9: a template with no slot for the question still sends it.
+      const asked = question && !hasSlot(templates.concept_lens, "question") ? `${body}\n\n${question}` : body;
+      return own(asked);
     }
 
     case "truncated": {
@@ -297,6 +302,24 @@ export function asProse(messages: ChatMessage[]): string {
   return messages
     .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`)
     .join("\n\n");
+}
+
+/**
+ * What an Explain is about, and what was asked about it (P-59). The passage
+ * comes from the policy; a node made before P-59 has none, and its content
+ * stood for the passage, so it assembles word for word as it did then.
+ */
+export function explainSlots(
+  node: ConversationNode,
+  policy: Extract<ContextPolicy, { kind: "windowed" }>,
+): { passage: string; question: string } {
+  const passage = policy.passage ?? node.content;
+  const asked = node.content.trim();
+  return { passage, question: asked === passage.trim() ? "" : asked };
+}
+
+function hasSlot(body: string, name: string): boolean {
+  return new RegExp(`\\{\\{\\s*${name}\\s*\\}\\}`).test(body);
 }
 
 /**

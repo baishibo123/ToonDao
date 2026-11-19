@@ -121,7 +121,8 @@ export function TemplateEditor() {
 
 const SAMPLES: Record<string, string> = {
   context_turns: "User: why does the gradient vanish?\n\nAssistant: because each layer multiplies by a factor below one.",
-  concept: "`vanishing gradient`",
+  passage: "each layer multiplies by a factor below one",
+  question: "why below one, and not just small?",
   truncated_context:
     "User: explain the proof\n\nAssistant: We start from the lemma. The second step is where",
   selection: "the map is not the territory",

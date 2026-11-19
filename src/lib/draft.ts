@@ -108,7 +108,9 @@ export function planSubmission(args: {
         forks: true,
       };
 
-    // §5.1 — a narrow window plus the concept template.
+    // §5.1 — a narrow window plus the concept template. The passage travels
+    // in the policy, beside the ask, so a typed question never displaces it
+    // (P-59).
     case "concept":
       return {
         parentId: pending.sourceNodeId,
@@ -116,6 +118,7 @@ export function planSubmission(args: {
           kind: "windowed",
           turns: pending.turns,
           upToNodeId: pending.sourceNodeId,
+          passage: pending.anchor.text,
         },
         origin: {
           kind: "concept-lens",

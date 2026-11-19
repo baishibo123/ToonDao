@@ -110,9 +110,9 @@ describe("§5.1 concept lens — forks, narrow window", () => {
     turns: 3,
   };
 
-  it("windows to the source node with the chosen turn count", () => {
+  it("windows to the source node with the chosen turn count, carrying the passage (P-59)", () => {
     const plan = planSubmission({ text: "", pending, activeLeafId: "leaf" });
-    expect(plan.policy).toEqual({ kind: "windowed", turns: 3, upToNodeId: "src" });
+    expect(plan.policy).toEqual({ kind: "windowed", turns: 3, upToNodeId: "src", passage: "Reingold Tilford" });
     expect(plan.parentId).toBe("src");
     expect(plan.forks).toBe(true);
   });

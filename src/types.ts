@@ -98,7 +98,14 @@ export interface TextAnchor {
 
 export type ContextPolicy =
   | { kind: "full-ancestry" }
-  | { kind: "windowed"; turns: number; upToNodeId: NodeId }
+  | {
+      kind: "windowed";
+      turns: number;
+      upToNodeId: NodeId;
+      /** The passage Explain was opened on (P-59). Absent on nodes made
+       *  before P-59, whose content is the passage when nothing was typed. */
+      passage?: string;
+    }
   | { kind: "truncated"; upToNodeId: NodeId; charOffset: number }
   | { kind: "isolated"; payload: string }
   | {

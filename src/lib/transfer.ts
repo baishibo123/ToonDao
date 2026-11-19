@@ -429,6 +429,7 @@ function parsePolicy(
         kind: "windowed",
         turns: numberOr(value.turns, 2),
         upToNodeId: mapNode(String(value.upToNodeId ?? "")),
+        ...(typeof value.passage === "string" ? { passage: value.passage } : {}),
       };
     case "truncated":
       return {

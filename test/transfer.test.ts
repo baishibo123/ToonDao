@@ -32,7 +32,7 @@ function richFixture() {
 
   const lens = t.add(
     "user", "monotonicity", src.id,
-    { kind: "windowed", turns: 2, upToNodeId: src.id }, "concept-lens",
+    { kind: "windowed", turns: 2, upToNodeId: src.id, passage: "answer" }, "concept-lens",
   );
   lens.origin!.anchor = { start: 3, end: 9, text: "answer", blockPath: "0" };
   t.add("assistant", "about monotonicity", lens.id);
